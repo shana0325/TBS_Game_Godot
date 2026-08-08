@@ -10,13 +10,12 @@
 
 目标是从旧 Python/pygame 项目迁移架构，但代码完全使用 Godot/GDScript 重新编写。
 
-当前已完成的不是可玩游戏，而是：
+当前已是一个**可完整游玩的战棋游戏**（Godot 4.7 重构完成）：
 
-- Godot 工程骨架
-- JSON 数据加载
-- 核心实体（Tile / Grid / Unit / Skill / Buff / Equipment）
-- 战斗逻辑基础层（移动、伤害、回合、效果、事件）
-- 可无头启动的主菜单占位场景
+- 完整流程：主菜单 → 选关 → 部署 → 战斗 → 结算
+- 战斗：双战场、移动/攻击/技能、回合制、敌方 AI、胜负判定
+- 成长：属性/技能/装备三子页、胜利奖励经验写回编成
+- 素材：像素小人贴图 + 中文字体
 
 最近一次验证结果：
 
@@ -139,41 +138,21 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - `scripts/battle/combat/combat_system.gd`：跨战场攻击规则——同战场 Chebyshev 距离，跨战场按逻辑列差（忽略 Y 轴）。
 - `scripts/core/unit.gd`：新增 `moved` 状态，单回合限制"移动一次 + 攻击/技能一次"（可先移动后攻击）。
 
-## 6. 尚未实现 / 下一阶段优先级
+## 6. 项目状态：重构完成（2026-08-08）
 
-已完成（M1+M2）：
+> 阶段一（Python 原版）与阶段二（Godot 重构）的既定目标已全部达成，本阶段告一段落。
+> 不再维护 M5/M6 的待办步骤清单；后续开发按新的需求随时进行。
 
-- M1 可玩闭环：可交互的战斗场景（网格渲染、单位显示、点击选择/移动、行动菜单、普通攻击、技能、日志、结束回合、敌方 AI、胜负判定）。
-- 行动规则：单回合移动一次 + 攻击/技能一次，先移动后攻击，待机结束行动。
-- Buff 回合 tick：切换回合时旧阵营 tick_end、新阵营 tick_start（毒/燃烧/回血/晕眩真实生效）。
-- M2 双战场：左右 4×3 子战场 + 中间 2 列 gap，单位不可跨战场移动，跨战场攻击按逻辑列差忽略 Y 轴。
-
-当前 EffectSystem 只实现了：
-
-- `damage`
-- `heal`
-- `buff`
-
-但 `skills.json` 里已经配置了更高级的技能数据，例如：
-
-- `summon`（召唤）
-- `revive`（复活）
-
-因此这些 effect 类型需要新增 `SummonEffect` / `ReviveEffect` 后才能真正使用。
-
-下一步建议按顺序做（对应 REPLICATION.md 路线图 M5/M6）：
-
-1. **M5/M6 系统完善与内容扩展**：summon/revive effect、Aura/Counter 触发完善、A* 路径、AOE、多关卡、战斗日志增强、存档。
-
-> 已取消：i18n（仅中文版）。
-
-## 6.1 已完成里程碑（2026-08-08 会话）
+已完成里程碑：
 
 - **M1 可玩闭环**：战斗交互（选中/移动/攻击/技能/回合/胜负）、行动规则（单回合移动一次+攻击一次）、Buff 回合 tick。
 - **M2 双战场**：左右 4×3 + gap 2，跨战场攻击按逻辑列差忽略 Y 轴。
 - **M3 完整流程**：主菜单 → 选关 → 部署 → 战斗 → 结算（全部鼠标可点，GameSession 传递状态）。
-- **M4 成长/装备**：属性/技能/装备三子页 + 右侧整体属性总览 + 战斗内单位信息面板 + 胜利奖励经验写回 roster。
+- **M4 成长/装备**：属性/技能/装备三子页 + 右侧整体属性总览 + 战斗内单位信息面板 + 胜利奖励经验（+100/存活单位）写回 roster。
+- **多关卡**：`battle_01`（草原 2v3）、`battle_02`（森林 2v4），选关自动扫描。
 - **素材**：像素小人贴图（hero/knight/goblin/orc）、霞鹜文楷中文字体、GDScript 像素小人生成器（逐像素对齐原版）。
+
+> 已取消：i18n（仅中文版）。
 
 ## 7. 给新对话的恢复步骤
 
@@ -196,7 +175,7 @@ Test-Path 'D:\Shana Program\文档\TBS_Game_Godot\project.godot'
 & 'D:\Shana Program\Godot\Godot_v4.7.1-stable_win64_console.exe' --headless --path 'D:\Shana Program\文档\TBS_Game_Godot' --quit-after 10 'res://scenes/battle_screen.tscn'
 ```
 
-确认无报错后，从第 6 节“下一步建议”开始继续。
+确认无报错后，项目状态见第 6 节；后续开发按新需求进行。
 
 > 注意：项目现位于 `D:\Shana Program\文档\TBS_Game_Godot`（已克隆自 `shana0325/TBS_Game_Godot`）。
 
