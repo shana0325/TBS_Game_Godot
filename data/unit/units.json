@@ -1,0 +1,38 @@
+﻿{
+  "Hero": {
+    "hp": 22,
+    "atk": 7,
+    "defense": 5,
+    "move": 4,
+    "range_min": 1,
+    "range_max": 2,
+    "skills": []
+  },
+  "Knight": {
+    "hp": 20,
+    "atk": 6,
+    "defense": 4,
+    "move": 4,
+    "range_min": 1,
+    "range_max": 1,
+    "skills": ["Power Strike"]
+  },
+  "Goblin": {
+    "hp": 14,
+    "atk": 4,
+    "defense": 1,
+    "move": 4,
+    "range_min": 1,
+    "range_max": 1,
+    "skills": []
+  },
+  "Orc": {
+    "hp": 18,
+    "atk": 5,
+    "defense": 2,
+    "move": 3,
+    "range_min": 1,
+    "range_max": 1,
+    "skills": []
+  }
+}

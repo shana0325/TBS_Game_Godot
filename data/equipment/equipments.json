@@ -1,0 +1,45 @@
+﻿{
+  "iron_sword": {
+    "name": "Iron Sword",
+    "slot": "weapon",
+    "modifiers": {
+      "attack": 2
+    },
+    "granted_skills": []
+  },
+  "bronze_spear": {
+    "name": "Bronze Spear",
+    "slot": "weapon",
+    "modifiers": {
+      "attack": 1,
+      "defense": 1
+    },
+    "granted_skills": [
+      "Counter Stance"
+    ]
+  },
+  "wooden_shield": {
+    "name": "Wooden Shield",
+    "slot": "offhand",
+    "modifiers": {
+      "defense": 2
+    },
+    "granted_skills": []
+  },
+  "swift_boots": {
+    "name": "Swift Boots",
+    "slot": "accessory",
+    "modifiers": {
+      "move": 1
+    },
+    "granted_skills": []
+  },
+  "toxic_charm": {
+    "name": "Toxic Charm",
+    "slot": "accessory",
+    "modifiers": {},
+    "granted_skills": [
+      "Poison Strike"
+    ]
+  }
+}

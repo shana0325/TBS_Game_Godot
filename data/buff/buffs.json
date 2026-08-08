@@ -1,0 +1,69 @@
+﻿{
+  "poison": {
+    "name": "poison",
+    "duration": 3,
+    "tick_damage": 5,
+    "tick_phase": "turn_start",
+    "modifiers": {}
+  },
+  "burn": {
+    "name": "burn",
+    "duration": 2,
+    "tick_damage": 4,
+    "tick_phase": "turn_end",
+    "modifiers": {}
+  },
+  "regen": {
+    "name": "regen",
+    "duration": 3,
+    "tick_heal": 5,
+    "tick_phase": "turn_start",
+    "modifiers": {}
+  },
+  "attack_up": {
+    "name": "attack_up",
+    "duration": 2,
+    "modifiers": {
+      "attack": 3
+    }
+  },
+  "counter": {
+    "name": "counter",
+    "duration": 2,
+    "counter": true,
+    "modifiers": {}
+  },
+  "attack_aura": {
+    "name": "attack_aura",
+    "duration": -1,
+    "aura_range": 2,
+    "modifiers": {
+      "attack": 2
+    }
+  },
+  "lifesteal": {
+    "name": "lifesteal",
+    "duration": 2,
+    "trigger": "on_hit",
+    "heal_percent": 0.3,
+    "modifiers": {}
+  },
+  "stun": {
+    "name": "stun",
+    "duration": 1,
+    "control": "stun",
+    "modifiers": {}
+  },
+  "silence": {
+    "name": "silence",
+    "duration": 2,
+    "control": "silence",
+    "modifiers": {}
+  },
+  "shield": {
+    "name": "shield",
+    "duration": 2,
+    "shield": 20,
+    "modifiers": {}
+  }
+}

@@ -1,0 +1,21 @@
+; Engine configuration file.
+; 中文注释：Godot 4.7 TBS 原型工程配置。
+
+config_version=5
+
+[application]
+
+config/name="TBS Game Godot"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+GameDatabase="*res://scripts/core/game_database.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"

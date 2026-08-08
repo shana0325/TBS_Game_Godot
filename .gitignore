@@ -1,0 +1,6 @@
+# Godot 自动生成缓存
+.godot/
+
+# 临时文件
+*.tmp
+*.log
