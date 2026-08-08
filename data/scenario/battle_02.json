@@ -1,0 +1,45 @@
+{
+  "name": "森林遭遇战",
+  "side_width": 4,
+  "height": 3,
+  "gap_width": 2,
+  "deployment_zone": [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [0, 1],
+    [1, 1],
+    [2, 1],
+    [0, 2],
+    [1, 2],
+    [2, 2]
+  ],
+  "player_units": [
+    {
+      "roster_index": 0,
+      "pos": [1, 1]
+    },
+    {
+      "roster_index": 1,
+      "pos": [2, 1]
+    }
+  ],
+  "enemy_units": [
+    {
+      "type": "Goblin",
+      "pos": [8, 0]
+    },
+    {
+      "type": "Goblin",
+      "pos": [7, 1]
+    },
+    {
+      "type": "Orc",
+      "pos": [9, 1]
+    },
+    {
+      "type": "Orc",
+      "pos": [8, 2]
+    }
+  ]
+}
