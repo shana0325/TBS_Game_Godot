@@ -32,6 +32,7 @@ static func create_from_config(
 	game_db = null
 ) -> Unit:
 	var unit := Unit.new()
+	unit.unit_id = str(roster_data.get("id", ""))
 	unit.unit_type = unit_type
 	unit.display_name = unit_type
 	unit.camp = camp

@@ -434,12 +434,24 @@ func _check_battle_end() -> void:
 	end_turn_button.disabled = true
 	_show_action_menu(false)
 	_show_skill_menu(false)
+	if manager.winner == TurnManager.PLAYER_CAMP:
+		_apply_victory_rewards()
 	GameSession.record_result(manager.winner)
 	victory_label.visible = true
 	victory_label.text = "胜利！" if manager.winner == TurnManager.PLAYER_CAMP else "失败…"
 	add_log(victory_label.text)
 	await get_tree().create_timer(1.2).timeout
 	get_tree().change_scene_to_file("res://scenes/result_screen.tscn")
+
+# 胜利后发放经验并写回 roster，记录经验/升级到日志与结算摘要。
+func _apply_victory_rewards() -> void:
+	var reports: Array = manager.grant_victory_exp(100)
+	GameSession.victory_rewards = reports
+	for report in reports:
+		var label: String = report.get("unit_type", "")
+		add_log("%s 获得 %d 经验" % [label, int(report.get("exp_gained", 0))])
+		if int(report.get("levels_gained", 0)) > 0:
+			add_log("%s 升级到 %d 级！" % [label, int(report.get("level", 1))])
 
 func _update_turn_label() -> void:
 	var camp := "玩家" if manager.turn_manager.current_camp == TurnManager.PLAYER_CAMP else "敌方"

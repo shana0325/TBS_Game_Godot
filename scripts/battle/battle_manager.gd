@@ -218,3 +218,32 @@ func _check_winner() -> void:
 		winner = TurnManager.ENEMY_CAMP
 	elif enemies == 0:
 		winner = TurnManager.PLAYER_CAMP
+
+# 胜利奖励：给所有存活玩家单位加经验并写回 roster，返回 {unit_type, exp_gained, levels_gained} 列表。
+func grant_victory_exp(reward: int = 100) -> Array:
+	var reports: Array = []
+	if winner != TurnManager.PLAYER_CAMP:
+		return reports
+	for unit in units:
+		if not (unit is Unit) or not unit.alive or unit.camp != TurnManager.PLAYER_CAMP:
+			continue
+		if unit.unit_id == "":
+			continue
+		var rd := _find_roster_unit(unit.unit_id)
+		if rd.is_empty():
+			continue
+		var result := ProgressManager.add_exp(rd, reward)
+		reports.append({
+			"unit_type": unit.unit_type,
+			"exp_gained": int(result.get("exp_gained", 0)),
+			"levels_gained": int(result.get("levels_gained", 0)),
+			"level": int(rd.get("level", 1))
+		})
+	ProgressManager.save_roster()
+	return reports
+
+func _find_roster_unit(unit_id: String) -> Dictionary:
+	for rd in GameDatabase.player_roster.get("units", []):
+		if str(rd.get("id", "")) == unit_id:
+			return rd
+	return {}
