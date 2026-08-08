@@ -14,6 +14,7 @@ var exp: int = 0
 var hp: int = 0
 var max_hp: int = 0
 var acted: bool = false
+var moved: bool = false
 var alive: bool = true
 var allocated_stats: Dictionary = {}
 var skills: Array = []

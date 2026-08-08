@@ -38,6 +38,7 @@ func reset_acted() -> void:
 	for unit in units:
 		if unit is Unit and unit.alive:
 			unit.acted = false
+			unit.moved = false
 
 func get_turn_label() -> String:
 	var label := "Player"

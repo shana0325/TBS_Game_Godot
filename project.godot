@@ -1,5 +1,10 @@
 ; Engine configuration file.
-; 中文注释：Godot 4.7 TBS 原型工程配置。
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -12,10 +17,10 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 [autoload]
 
 GameDatabase="*res://scripts/core/game_database.gd"
+GameSession="*res://scripts/core/game_session.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
