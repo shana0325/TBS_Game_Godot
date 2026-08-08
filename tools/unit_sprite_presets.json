@@ -1,0 +1,51 @@
+﻿{
+  "hero": {
+    "size": 32,
+    "palette": {
+      "outline": [26, 34, 44],
+      "skin": [238, 205, 170],
+      "primary": [74, 128, 222],
+      "secondary": [226, 196, 88],
+      "accent": [164, 73, 60]
+    },
+    "base": "human",
+    "features": ["cape", "headband", "sword"]
+  },
+  "knight": {
+    "size": 32,
+    "palette": {
+      "outline": [24, 31, 41],
+      "skin": [220, 195, 160],
+      "primary": [118, 138, 164],
+      "secondary": [82, 99, 122],
+      "accent": [196, 164, 94]
+    },
+    "base": "human",
+    "features": ["helmet", "shield", "spear"]
+  },
+  "goblin": {
+    "size": 32,
+    "palette": {
+      "outline": [25, 32, 20],
+      "skin": [114, 166, 87],
+      "primary": [92, 121, 63],
+      "secondary": [150, 105, 62],
+      "accent": [214, 200, 126]
+    },
+    "base": "goblin",
+    "features": ["ears", "dagger"]
+  },
+  "orc": {
+    "size": 32,
+    "palette": {
+      "outline": [27, 29, 22],
+      "skin": [96, 148, 92],
+      "primary": [124, 82, 62],
+      "secondary": [86, 110, 64],
+      "accent": [214, 204, 152]
+    },
+    "base": "orc",
+    "features": ["tusks", "axe", "shoulders"]
+  },
+
+}
