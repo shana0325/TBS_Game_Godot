@@ -62,6 +62,12 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 				_apply_mark(target, effect, game)
 			"lifesteal":
 				_apply_lifesteal(target, effect, game)
+			"teleport":
+				_apply_teleport(user, target, effect, game)
+			"percentage_damage":
+				report["damage"] += _apply_percentage_damage(user, target, effect, game)
+			"chain_damage":
+				report["damage"] += _apply_chain_damage(user, target, effect, game)
 			_:
 				push_warning("未知技能效果类型: %s" % effect_type)
 	return report
@@ -275,3 +281,124 @@ static func _apply_lifesteal(target: Unit, config: Dictionary, game) -> void:
 	target.add_buff(buff)
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 获得 %s" % [target.get_display_name(), buff.name])
+
+# 位移：按 mode/dir/distance 移动自己或目标。
+# mode: self(移自己) / target(移目标)。dir: target(朝目标) / away(远离) / self(拉向自己)。
+# distance: 格数（0=贴脸，-1=瞬移到目标位置，N=指定距离）。
+static func _apply_teleport(user: Unit, target: Unit, config: Dictionary, game) -> void:
+	if user == null or target == null:
+		return
+	var battle = game
+	if battle == null or not battle.has_method("move_unit_to"):
+		return
+	var mode := str(config.get("mode", "target"))
+	var dir := str(config.get("dir", "target"))
+	var distance := int(config.get("distance", 1))
+	var subject: Unit = user if mode == "self" else target
+	var anchor: Unit = target if mode == "self" else user
+	# 起点与方向向量
+	var start := subject.pos
+	var target_pos := anchor.pos
+	var delta := target_pos - start
+	if distance == -1:
+		# 瞬移到对方位置（直接换位）
+		battle.move_unit_to(subject, target_pos)
+		return
+	# 计算方向单位向量（曼哈顿：取差值较大的轴为主方向）
+	var step := Vector2i(0, 0)
+	if delta != Vector2i.ZERO:
+		if absi(delta.x) >= absi(delta.y):
+			step = Vector2i(sign(delta.x), 0)
+		else:
+			step = Vector2i(0, sign(delta.y))
+	var move_vec := Vector2i.ZERO
+	match dir:
+		"away":
+			move_vec = -step
+		"self":
+			# 拉向自己：被移动单位朝 anchor(user) 移动，即沿主方向 step
+			move_vec = step
+		_:
+			move_vec = step
+	# 计算目标格
+	var cell := start
+	if distance == 0:
+		# 突脸/拉贴脸：移动到 anchor 相邻格（贴脸）
+		var adjacent := anchor.pos - step
+		if _is_cell_walkable(battle, adjacent):
+			cell = adjacent
+	else:
+		for i in range(distance):
+			var next_cell := cell + move_vec
+			if not _is_cell_walkable(battle, next_cell):
+				break
+			cell = next_cell
+	if cell != start:
+		battle.move_unit_to(subject, cell)
+		if battle.has_method("add_log"):
+			game.add_log("%s 被位移到 %s" % [subject.get_display_name(), str(cell)])
+
+# 检查格子可走（地图内/可通行/未被占用）。
+static func _is_cell_walkable(battle, cell: Vector2i) -> bool:
+	if battle == null or not battle.has_method("move_unit_to"):
+		return false
+	if not battle.grid.in_bounds(cell.x, cell.y):
+		return false
+	if not battle.grid.get_tile(cell.x, cell.y).passable:
+		return false
+	if battle.get_unit_at(cell) != null:
+		return false
+	return true
+
+# 百分比伤害：按目标生命上限百分比造成伤害（无视攻击/防御）。
+static func _apply_percentage_damage(user: Unit, target: Unit, config: Dictionary, game) -> int:
+	if target == null or not target.alive:
+		return 0
+	var percent := float(config.get("percent", 0.1))
+	var max_damage := int(config.get("max", 999999))
+	var damage := mini(roundi(target.max_hp * percent), max_damage)
+	damage = maxi(1, damage)
+	target.take_damage(damage, game)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 受到 %d 点百分比伤害" % [target.get_display_name(), damage])
+	return damage
+
+# 连锁伤害：对目标造成伤害后，向附近敌人连锁 N 次，每次伤害递减。
+static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, game) -> int:
+	if user == null or target == null:
+		return 0
+	var battle = game
+	if battle == null:
+		return 0
+	var power := float(config.get("power", 1.0))
+	var chain := int(config.get("chain", 2))
+	var chain_range := int(config.get("chain_range", 2))
+	var total := 0
+	var current_target: Unit = target
+	var hit: Array = [target]
+	for i in range(chain):
+		if current_target == null or not current_target.alive:
+			break
+		var damage := DamageCalculator.calculate_skill_damage(user, current_target, power, 0)
+		current_target.take_damage(damage, game)
+		total += damage
+		if game != null and game.has_method("add_log"):
+			game.add_log("%s 连锁攻击 %s 造成 %d 点伤害" % [user.get_display_name(), current_target.get_display_name(), damage])
+		# 找下一个未被命中且最近的敌人
+		var next_unit: Unit = null
+		var best := 999999
+		for unit in battle.units:
+			if not (unit is Unit) or not unit.alive or unit == user:
+				continue
+			if unit.camp == user.camp:
+				continue
+			if hit.has(unit):
+				continue
+			var d := Grid.manhattan_distance(current_target.pos, unit.pos)
+			if d <= chain_range and d < best:
+				best = d
+				next_unit = unit
+		current_target = next_unit
+		if current_target != null:
+			hit.append(current_target)
+	return total

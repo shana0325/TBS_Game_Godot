@@ -119,6 +119,23 @@ func move_unit(unit: Unit, cell: Vector2i) -> bool:
 		event_system.dispatch(BattleEvent.new(EventTypes.ON_MOVE, unit, null, {"to": cell}))
 	return true
 
+# 强制位移（位移类技能用）：无视移动力把单位移到指定格。
+# 目标格必须在地图内、可通行且未被占用。返回是否成功。
+func move_unit_to(unit: Unit, cell: Vector2i) -> bool:
+	if unit == null or not unit.alive:
+		return false
+	if not grid.in_bounds(cell.x, cell.y):
+		return false
+	if not grid.get_tile(cell.x, cell.y).passable:
+		return false
+	var occupant := get_unit_at(cell)
+	if occupant != null and occupant != unit:
+		return false
+	unit.move_to(cell)
+	if event_system != null:
+		event_system.dispatch(BattleEvent.new(EventTypes.ON_MOVE, unit, null, {"to": cell}))
+	return true
+
 func get_attack_targets(attacker: Unit) -> Array:
 	var result: Array = []
 	if attacker == null or not attacker.alive or attacker.acted:

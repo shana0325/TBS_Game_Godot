@@ -2,7 +2,7 @@
 	"units": [
 		{
 			"allocated_stats": {
-				"attack": 10,
+				"attack": 10.0,
 				"defense": 1.0
 			},
 			"equipment": {
@@ -14,7 +14,7 @@
 				"Blood Rush",
 				"Counter Stance"
 			],
-			"exp": 300,
+			"exp": 0,
 			"extra_skills": [],
 			"id": "hero_001",
 			"learned_skills": [
@@ -23,9 +23,9 @@
 				"Counter Stance",
 				"Concussion Blow"
 			],
-			"level": 4.0,
-			"skill_points": 3.0,
-			"stat_points": 0,
+			"level": 5,
+			"skill_points": 4,
+			"stat_points": 2,
 			"type": "Hero"
 		},
 		{
