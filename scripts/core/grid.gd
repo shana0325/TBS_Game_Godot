@@ -65,6 +65,10 @@ func _to_logical_x(x: int) -> int:
 		return x - gap_width
 	return x
 
+# 曼哈顿距离：横向步数 + 纵向步数（自走棋主战场的射程判定标准）。
+static func manhattan_distance(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
+
 func set_terrain(pos: Vector2i, move_cost: int = 1, defense_bonus: int = 0, passable: bool = true) -> void:
 	var tile := get_tile(pos.x, pos.y)
 	if tile != null:

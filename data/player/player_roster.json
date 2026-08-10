@@ -2,7 +2,7 @@
 	"units": [
 		{
 			"allocated_stats": {
-				"attack": 6,
+				"attack": 6.0,
 				"defense": 1.0
 			},
 			"equipment": {
@@ -15,7 +15,7 @@
 				"Blood Rush",
 				"Counter Stance"
 			],
-			"exp": 100,
+			"exp": 200,
 			"extra_skills": [],
 			"id": "hero_001",
 			"learned_skills": [
@@ -24,9 +24,9 @@
 				"Counter Stance",
 				"Concussion Blow"
 			],
-			"level": 2.0,
-			"skill_points": 1.0,
-			"stat_points": 0,
+			"level": 4.0,
+			"skill_points": 3.0,
+			"stat_points": 4.0,
 			"type": "Hero"
 		},
 		{
@@ -40,7 +40,7 @@
 				"weapon": "bronze_spear"
 			},
 			"equipped_skills": [],
-			"exp": 100,
+			"exp": 100.0,
 			"extra_skills": [],
 			"id": "knight_001",
 			"learned_skills": [

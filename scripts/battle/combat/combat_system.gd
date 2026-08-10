@@ -1,5 +1,5 @@
 # 战斗系统：CombatSystem 负责普通攻击执行、事件分发和基础射程判断。
-# 射程规则：同战场用 Chebyshev 距离；跨战场时忽略 Y 轴，按逻辑列差计算（对应原版双战场规则）。
+# 射程规则：单战场 10x10，距离统一用曼哈顿距离（横向+纵向）。
 class_name CombatSystem
 extends RefCounted
 
@@ -32,11 +32,6 @@ func is_in_range(attacker: Unit, defender: Unit) -> bool:
 	var distance := _get_combat_distance(attacker, defender.pos)
 	return distance >= attacker.get_range_min() and distance <= attacker.get_range_max()
 
-# 计算攻击者到目标格子的战斗距离：同战场 Chebyshev；跨战场逻辑列差（忽略 Y）。
+# 计算攻击者到目标格子的战斗距离：曼哈顿距离（横向+纵向）。
 func _get_combat_distance(attacker: Unit, target_pos: Vector2i) -> int:
-	if grid != null and grid.is_dual():
-		var attacker_side := grid.get_side_for_position(attacker.pos.x, attacker.pos.y)
-		var target_side := grid.get_side_for_position(target_pos.x, target_pos.y)
-		if attacker_side != "" and target_side != "" and attacker_side != target_side:
-			return grid.cross_grid_distance(attacker.pos.x, target_pos.x)
-	return maxi(abs(attacker.pos.x - target_pos.x), abs(attacker.pos.y - target_pos.y))
+	return Grid.manhattan_distance(attacker.pos, target_pos)

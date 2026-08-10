@@ -7,6 +7,8 @@ var scenario_id: String = ""
 var grid: Grid
 var deployment_zone: Array = []
 var roster_units: Array = []
+var mod_unit_types: Array = []
+var selectable_units: Array = []
 var placements: Dictionary = {}
 var cell_to_slot: Dictionary = {}
 var selected_slot: int = -1
@@ -23,18 +25,38 @@ var slot_buttons: Array = []
 func _ready() -> void:
 	scenario_id = GameSession.current_scenario
 	var scenario := _load_scenario()
-	grid = Grid.new()
-	if int(scenario.get("side_width", 0)) > 0:
-		grid.setup_dual(
-			int(scenario.get("side_width", 4)),
-			int(scenario.get("height", 3)),
-			int(scenario.get("gap_width", 2))
-		)
-	else:
-		grid = Grid.new(int(scenario.get("width", 10)), int(scenario.get("height", 8)))
+	grid = Grid.new(int(scenario.get("width", 10)), int(scenario.get("height", 10)))
 	deployment_zone = _parse_cells(scenario.get("deployment_zone", []))
 	roster_units = GameDatabase.player_roster.get("units", [])
+	mod_unit_types = _collect_mod_unit_types()
+	_build_selectable_units()
 	_build_ui(scenario)
+
+# 收集所有可用单位类型：player_roster 的 type + mod 添加的单位 type（去重）。
+func _collect_mod_unit_types() -> Array:
+	var roster_types: Array = []
+	for rd in roster_units:
+		roster_types.append(str(rd.get("type", "")))
+	var result: Array = []
+	for unit_type in GameDatabase.units.keys():
+		if not roster_types.has(str(unit_type)):
+			result.append(str(unit_type))
+	result.sort()
+	return result
+
+# 构建可选单位列表：每项 { "type", "roster_index" }。roster 单位在前，mod 单位在后。
+func _build_selectable_units() -> void:
+	selectable_units.clear()
+	for i in roster_units.size():
+		selectable_units.append({
+			"type": str(roster_units[i].get("type", "Hero")),
+			"roster_index": i
+		})
+	for unit_type in mod_unit_types:
+		selectable_units.append({
+			"type": unit_type,
+			"roster_index": -1
+		})
 
 func _load_scenario() -> Dictionary:
 	var path := "res://data/scenario/%s.json" % scenario_id
@@ -102,13 +124,18 @@ func _build_ui(scenario: Dictionary) -> void:
 	margin.add_theme_constant_override("margin_bottom", 12)
 	roster_container = VBoxContainer.new()
 	roster_container.add_theme_constant_override("separation", 8)
-	margin.add_child(roster_container)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(210, 480)
+	scroll.add_child(roster_container)
+	margin.add_child(scroll)
 	roster_panel.add_child(margin)
 	add_child(roster_panel)
-	for i in roster_units.size():
+	for i in selectable_units.size():
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(190, 42)
-		btn.text = "%d. %s" % [i + 1, str(roster_units[i].get("type", "Unit"))]
+		var label: String = str(selectable_units[i].get("type", "Unit"))
+		var is_mod: bool = int(selectable_units[i].get("roster_index", -1)) < 0
+		btn.text = "%d. %s%s" % [i + 1, label, "  [MOD]" if is_mod else ""]
 		btn.pressed.connect(_on_slot_clicked.bind(i))
 		roster_container.add_child(btn)
 		slot_buttons.append(btn)
@@ -149,6 +176,9 @@ func _on_clicked(cell: Vector2i) -> void:
 		return
 	if not deployment_zone.has(cell):
 		return
+	if not placements.has(selected_slot) and placements.size() >= deployment_zone.size():
+		state_label.text = "部署区已满，先移除已部署单位"
+		return
 	_place_slot(selected_slot, cell)
 
 func _on_slot_clicked(index: int) -> void:
@@ -174,12 +204,15 @@ func _refresh_units() -> void:
 		unit_views.erase(u)
 	preview_player_units.clear()
 	for slot in placements:
-		var rd: Dictionary = roster_units[slot]
-		var unit_type := str(rd.get("type", "Hero"))
+		var unit_type := str(selectable_units[slot].get("type", "Hero"))
 		var config: Dictionary = GameDatabase.get_unit(unit_type)
 		if config.is_empty():
 			continue
 		var pos: Vector2i = placements[slot]
+		var rd: Dictionary = {}
+		var index := int(selectable_units[slot].get("roster_index", -1))
+		if index >= 0 and index < roster_units.size():
+			rd = roster_units[index]
 		var unit := Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, pos, config, rd, GameDatabase)
 		preview_player_units.append(unit)
 		_create_unit_view(unit)
@@ -189,27 +222,35 @@ func _refresh_units() -> void:
 
 func _refresh_state() -> void:
 	var placed := placements.size()
-	var total := roster_units.size()
+	var total := selectable_units.size()
+	var zone_size := deployment_zone.size()
 	for i in slot_buttons.size():
 		var btn: Button = slot_buttons[i]
 		if placements.has(i):
-			btn.text = "%d. %s  [已部署]" % [i + 1, str(roster_units[i].get("type", "Unit"))]
+			btn.text = "%d. %s  [已部署]" % [i + 1, str(selectable_units[i].get("type", "Unit"))]
 		else:
-			btn.text = "%d. %s  [未部署]" % [i + 1, str(roster_units[i].get("type", "Unit"))]
+			btn.text = "%d. %s  [未部署]" % [i + 1, str(selectable_units[i].get("type", "Unit"))]
 		if i == selected_slot:
 			btn.modulate = Color(1.2, 1.2, 0.5)
 		else:
 			btn.modulate = Color.WHITE
-	if placed >= total:
-		state_label.text = "已部署 %d / %d  可以开始战斗" % [placed, total]
+	if placed == 0:
+		state_label.text = "请选择单位部署到蓝色区域（至少 1 个，最多 %d 个）" % zone_size
 	elif selected_slot < 0:
-		state_label.text = "已部署 %d / %d  点击单位后点击蓝色区域放置" % [placed, total]
+		state_label.text = "已部署 %d 个  点击单位后点击蓝色区域调整位置" % placed
 	else:
-		state_label.text = "已部署 %d / %d  请将单位放入蓝色区域（可反复点击调整位置）" % [placed, total]
-	start_button.disabled = placed != total
+		state_label.text = "已部署 %d 个  请将单位放入蓝色区域（可反复点击调整位置）" % placed
+	start_button.disabled = placed == 0
 
 func _on_start_pressed() -> void:
-	GameSession.set_deployed_positions(placements)
+	var deployed: Array = []
+	for slot in placements:
+		deployed.append({
+			"type": str(selectable_units[slot].get("type", "Hero")),
+			"roster_index": int(selectable_units[slot].get("roster_index", -1)),
+			"pos": placements[slot]
+		})
+	GameSession.set_deployed_units(deployed)
 	get_tree().change_scene_to_file("res://scenes/battle_screen.tscn")
 
 func _go_back() -> void:

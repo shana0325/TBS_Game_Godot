@@ -17,6 +17,8 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 [autoload]
 
 GameDatabase="*res://scripts/core/game_database.gd"
+ModLoader="*res://scripts/core/mod_loader.gd"
+ArtManager="*res://scripts/core/art_manager.gd"
 GameSession="*res://scripts/core/game_session.gd"
 
 [display]

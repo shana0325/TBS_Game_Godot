@@ -1,0 +1,15 @@
+{
+  "SampleHero": {
+    "display_name": "示例英雄",
+    "hp": 24,
+    "atk": 8,
+    "defense": 5,
+    "move": 1,
+    "range_min": 1,
+    "range_max": 1,
+    "turn_interval": 4.0,
+    "skills": [
+      "Power Strike"
+    ]
+  }
+}

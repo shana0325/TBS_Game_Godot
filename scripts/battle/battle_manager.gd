@@ -11,25 +11,17 @@ var event_system: EventSystem
 var combat_system: CombatSystem
 var game = null
 var scenario_id: String = ""
-var deployed_positions: Dictionary = {}
+var deployed_units: Array = []
 var winner: String = ""
 
-func _init(p_scenario_id: String = "battle_01", p_game = null, p_deployed_positions: Dictionary = {}) -> void:
+func _init(p_scenario_id: String = "battle_01", p_game = null, p_deployed_units: Array = []) -> void:
 	scenario_id = p_scenario_id
 	game = p_game
-	deployed_positions = p_deployed_positions
+	deployed_units = p_deployed_units
 
 func setup() -> void:
 	var scenario := _load_scenario()
-	if int(scenario.get("side_width", 0)) > 0:
-		grid = Grid.new()
-		grid.setup_dual(
-			int(scenario.get("side_width", 4)),
-			int(scenario.get("height", 3)),
-			int(scenario.get("gap_width", 2))
-		)
-	else:
-		grid = Grid.new(int(scenario.get("width", 10)), int(scenario.get("height", 8)))
+	grid = Grid.new(int(scenario.get("width", 10)), int(scenario.get("height", 10)))
 	_spawn_player_units(scenario)
 	_spawn_enemy_units(scenario)
 	turn_manager = TurnManager.new(units)
@@ -51,6 +43,10 @@ func _load_scenario() -> Dictionary:
 
 func _spawn_player_units(scenario: Dictionary) -> void:
 	var roster_units: Array = GameDatabase.player_roster.get("units", [])
+	# 优先使用部署结果（可含 mod 单位）；否则回退到关卡默认编成。
+	if not deployed_units.is_empty():
+		_spawn_from_deployed(roster_units)
+		return
 	for entry in scenario.get("player_units", []):
 		var index := int(entry.get("roster_index", -1))
 		if index < 0 or index >= roster_units.size():
@@ -61,9 +57,22 @@ func _spawn_player_units(scenario: Dictionary) -> void:
 		if config.is_empty():
 			continue
 		var pos := Vector2i(int(entry.pos[0]), int(entry.pos[1]))
-		if deployed_positions.has(index):
-			var dp = deployed_positions[index]
-			pos = Vector2i(int(dp[0]), int(dp[1]))
+		units.append(Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, pos, config, rd, GameDatabase))
+
+# 从部署列表生成玩家单位：roster_index>=0 用编成成长数据，否则用单位模板（mod 角色）。
+func _spawn_from_deployed(roster_units: Array) -> void:
+	for entry in deployed_units:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var unit_type := str(entry.get("type", "Hero"))
+		var config: Dictionary = GameDatabase.get_unit(unit_type)
+		if config.is_empty():
+			continue
+		var index := int(entry.get("roster_index", -1))
+		var rd: Dictionary = {}
+		if index >= 0 and index < roster_units.size():
+			rd = roster_units[index]
+		var pos: Vector2i = entry.get("pos", Vector2i(0, 0))
 		units.append(Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, pos, config, rd, GameDatabase))
 
 func _spawn_enemy_units(scenario: Dictionary) -> void:
@@ -128,7 +137,6 @@ func perform_attack(attacker: Unit, defender: Unit) -> void:
 	if not can_attack(attacker, defender):
 		return
 	combat_system.perform_attack(attacker, defender)
-	turn_manager.mark_acted(attacker)
 	_check_winner()
 
 func is_damage_skill(skill: Skill) -> bool:
@@ -162,7 +170,6 @@ func cast_skill(user: Unit, skill: Skill, target: Unit) -> void:
 	if not can_cast_skill(user, skill, target):
 		return
 	skill.execute(user, target, game)
-	turn_manager.mark_acted(user)
 	if event_system != null:
 		event_system.dispatch(BattleEvent.new(EventTypes.ON_SKILL_CAST, user, target, {"skill": skill.name}))
 	_check_winner()
@@ -178,32 +185,69 @@ func get_nearest_target(unit: Unit) -> Unit:
 				nearest = other
 	return nearest
 
-# 战斗距离：同战场 Chebyshev；跨战场逻辑列差（忽略 Y），与 CombatSystem 保持一致。
+# 战斗距离：曼哈顿距离（横向+纵向），与 CombatSystem 保持一致。
 func _get_combat_distance(from: Unit, to_pos: Vector2i) -> int:
-	if grid != null and grid.is_dual():
-		var from_side := grid.get_side_for_position(from.pos.x, from.pos.y)
-		var to_side := grid.get_side_for_position(to_pos.x, to_pos.y)
-		if from_side != "" and to_side != "" and from_side != to_side:
-			return grid.cross_grid_distance(from.pos.x, to_pos.x)
-	return maxi(abs(from.pos.x - to_pos.x), abs(from.pos.y - to_pos.y))
+	return Grid.manhattan_distance(from.pos, to_pos)
 
 func wait(unit: Unit) -> void:
-	if unit != null:
-		turn_manager.mark_acted(unit)
+	pass
 
-# 切换回合，并对旧阵营执行回合结束 tick、对新阵营执行回合开始 tick。
-func next_turn() -> void:
-	if turn_manager == null:
-		return
-	var prev_camp := turn_manager.current_camp
-	turn_manager.next_turn()
-	for unit in units:
-		if unit is Unit and unit.alive and unit.camp == prev_camp:
-			unit.tick_turn_end(game)
-	for unit in units:
-		if unit is Unit and unit.alive and unit.camp == turn_manager.current_camp:
-			unit.tick_turn_start(game)
-	_check_winner()
+# 初始化战斗：启动每个单位的独立行动计时器。
+func setup_battle() -> void:
+	if turn_manager != null:
+		turn_manager.setup()
+
+# 自走棋主驱动：每帧推进时间，处理所有到点单位的自动行动。
+# 返回本帧发生的事件列表（供 UI 播放动画/日志）。
+func tick(delta: float) -> Array:
+	if turn_manager == null or winner != "":
+		return []
+	var due_units: Array = turn_manager.tick(delta)
+	var events: Array = []
+	for unit in due_units:
+		if not unit.alive:
+			continue
+		# 行动开始 tick
+		unit.tick_turn_start(game)
+		var prev_pos: Vector2i = unit.pos
+		var acted := _auto_act(unit)
+		if acted:
+			events.append({
+				"unit": unit,
+				"action": acted.get("action", ""),
+				"target": acted.get("target", null),
+				"to": acted.get("to", null),
+				"from": prev_pos
+			})
+		unit.tick_turn_end(game)
+		_check_winner()
+		if winner != "":
+			break
+	return events
+
+# 单位自动行动：射程内有敌人则攻击；否则移动（可能因嘲讽被引导），移动后再尝试攻击。
+func _auto_act(unit: Unit) -> Dictionary:
+	if not unit.alive:
+		return {}
+	# 射程内是否有敌人
+	var targets := get_attack_targets(unit)
+	if targets.size() > 0:
+		var target: Unit = targets[0]
+		perform_attack(unit, target)
+		return {"action": "attack", "target": target}
+	# 无目标：移动（含嘲讽引导），移动后再次尝试攻击
+	var decision := EnemyAI.get_decision(self, unit)
+	if decision.action == "move":
+		var to: Vector2i = decision.to
+		move_unit(unit, to)
+		# 移动后再尝试攻击
+		var new_targets := get_attack_targets(unit)
+		if new_targets.size() > 0:
+			var target2: Unit = new_targets[0]
+			perform_attack(unit, target2)
+			return {"action": "move_attack", "target": target2, "to": to}
+		return {"action": "move", "to": to}
+	return {"action": "wait"}
 
 func _check_winner() -> void:
 	var players := 0

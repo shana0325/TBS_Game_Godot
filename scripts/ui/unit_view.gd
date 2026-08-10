@@ -4,30 +4,59 @@ extends Node2D
 
 var unit: Unit
 var tile_size := 64
+var action: String = "idle"
 var sprite_texture: Texture2D = null
+var is_moving: bool = false
 
 const SPRITE_SIZE := 32.0
 
 func setup(p_unit: Unit, p_tile_size: int) -> void:
 	unit = p_unit
 	tile_size = p_tile_size
-	sprite_texture = _load_sprite(p_unit.unit_type)
+	_load_sprite()
 	position = _cell_to_local(unit.pos)
 
-# 按单位类型加载 assets/units/ 下的像素小人（小写文件名）。
-func _load_sprite(unit_type: String) -> Texture2D:
-	var file_name := unit_type.to_lower() + ".png"
-	var path := "res://assets/units/%s" % file_name
-	if ResourceLoader.exists(path):
-		return load(path)
-	return null
+# 通过 ArtManager 加载动作贴图（idle 默认；mod 素材优先，回退到内置）。
+func _load_sprite() -> void:
+	if unit == null:
+		return
+	sprite_texture = ArtManager.get_unit_sprite(unit.unit_type, action)
+
+# 切换动作贴图并重绘（attack/hurt/death/skill/idle）。
+func set_action(new_action: String) -> void:
+	if action == new_action:
+		return
+	action = new_action
+	_load_sprite()
+	queue_redraw()
 
 func _cell_to_local(cell: Vector2i) -> Vector2:
 	return Vector2(cell.x * tile_size + tile_size / 2.0, cell.y * tile_size + tile_size / 2.0)
 
 func refresh() -> void:
-	position = _cell_to_local(unit.pos)
+	# 移动动画进行中不强制设位置，避免打断补间
+	if not is_moving:
+		position = _cell_to_local(unit.pos)
 	queue_redraw()
+
+# 开始移动动画（逐格补间），动画期间逻辑位置不干扰显示位置。
+func animate_move(path: Array, step_time: float) -> Tween:
+	is_moving = true
+	var tween := create_tween()
+	var first := true
+	for tile in path:
+		if not (tile is Tile):
+			continue
+		if first:
+			first = false
+			continue
+		tween.tween_property(self, "position", _cell_to_local(tile.get_position()), step_time)
+	tween.finished.connect(func():
+		is_moving = false
+		position = _cell_to_local(unit.pos)
+		queue_redraw()
+	)
+	return tween
 
 func _draw() -> void:
 	if unit == null or not unit.alive:

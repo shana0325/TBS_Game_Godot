@@ -11,6 +11,7 @@ var role_buttons: Array = []
 var tab_buttons: Array = []
 var content_panel: VBoxContainer
 var overview_label: Label
+var overview_portrait: TextureRect
 var status_label: Label
 
 func _ready() -> void:
@@ -37,11 +38,19 @@ func _build_overview_panel() -> void:
 	margin.add_theme_constant_override("margin_right", 16)
 	margin.add_theme_constant_override("margin_top", 12)
 	margin.add_theme_constant_override("margin_bottom", 12)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	overview_portrait = TextureRect.new()
+	overview_portrait.custom_minimum_size = Vector2(160, 160)
+	overview_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	overview_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	box.add_child(overview_portrait)
 	overview_label = Label.new()
 	overview_label.add_theme_font_size_override("font_size", 20)
 	overview_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	overview_label.custom_minimum_size = Vector2(480, 440)
-	margin.add_child(overview_label)
+	overview_label.custom_minimum_size = Vector2(460, 280)
+	box.add_child(overview_label)
+	margin.add_child(box)
 	panel.add_child(margin)
 	add_child(panel)
 
@@ -127,6 +136,9 @@ func _refresh() -> void:
 
 # 刷新右侧整体属性总览。
 func _refresh_overview(unit: Dictionary) -> void:
+	var portrait := ArtManager.get_portrait(str(unit.get("type", "")))
+	overview_portrait.texture = portrait
+	overview_portrait.visible = portrait != null
 	var total := _get_total_stats(unit)
 	var equipment: Dictionary = unit.get("equipment", {})
 	var slot_labels := {"weapon": "武器", "offhand": "副手", "accessory": "饰品"}

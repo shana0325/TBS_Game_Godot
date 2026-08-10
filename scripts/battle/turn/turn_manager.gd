@@ -1,38 +1,40 @@
-# 回合管理：TurnManager 管理当前阵营、行动状态和回合切换。
+# 回合管理（自走棋·时间驱动）：每个单位有独立的行动计时器。
+# tick(delta) 统一推进：达到该单位 turn_interval 时触发其行动，返回该单位，否则返回 null。
+# 同一时刻多个单位到点则按顺序逐个返回（由 BattleManager 逐个结算）。
 class_name TurnManager
 extends RefCounted
 
 const PLAYER_CAMP := "player"
 const ENEMY_CAMP := "enemy"
 
-var current_camp: String = PLAYER_CAMP
 var units: Array = []
 var turn_number: int = 1
+var battle_time: float = 0.0
+var pending: Array = []
 
 func _init(all_units: Array = []) -> void:
 	units = all_units
 
-func get_active_units() -> Array:
-	var result: Array = []
+# 每帧推进，返回本次应行动的单位列表（可能为多个）。
+func tick(delta: float) -> Array:
+	battle_time += delta
+	var acted: Array = []
 	for unit in units:
-		if unit is Unit and unit.alive and unit.camp == current_camp and not unit.acted:
-			result.append(unit)
-	return result
+		if not (unit is Unit) or not unit.alive:
+			continue
+		unit.acted = false
+		unit.moved = false
+		unit.turn_timer += delta
+		if unit.turn_timer >= unit.turn_interval:
+			unit.turn_timer -= unit.turn_interval
+			acted.append(unit)
+	return acted
 
-func mark_acted(unit: Unit) -> void:
-	if unit != null:
-		unit.acted = true
-
-func is_turn_over() -> bool:
-	return get_active_units().is_empty()
-
-func next_turn() -> void:
-	if current_camp == PLAYER_CAMP:
-		current_camp = ENEMY_CAMP
-	else:
-		current_camp = PLAYER_CAMP
-		turn_number += 1
-	reset_acted()
+# 初始化所有单位的计时器（行动顺序由速度/随机决定：初始计时器按 turn_interval 随机偏移避免齐射）。
+func setup() -> void:
+	for unit in units:
+		if unit is Unit:
+			unit.turn_timer = randf() * unit.turn_interval
 
 func reset_acted() -> void:
 	for unit in units:
@@ -41,7 +43,4 @@ func reset_acted() -> void:
 			unit.moved = false
 
 func get_turn_label() -> String:
-	var label := "Player"
-	if current_camp == ENEMY_CAMP:
-		label = "Enemy"
-	return "Turn %d - %s" % [turn_number, label]
+	return "时间 %.1fs  回合 %d" % [battle_time, turn_number]
