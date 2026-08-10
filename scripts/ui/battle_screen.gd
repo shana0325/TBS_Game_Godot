@@ -1,11 +1,11 @@
-# 战斗界面（自走棋·自动战斗）：渲染网格与单位，实时驱动 BattleManager.tick，
+﻿# 战斗界面（自走棋·自动战斗）：渲染网格与单位，实时驱动 BattleManager.tick，
 # 播放行动动画/日志，判定胜负后进入结算。
 extends Control
 
-const TILE_SIZE := 64
 const ANIM_SPEED := 1.0
 const MOVE_STEP_TIME := 0.18
 
+var tile_size: int = 64
 var manager: BattleManager
 var unit_views: Dictionary = {}
 var _tween_running: int = 0
@@ -24,8 +24,9 @@ func _ready() -> void:
 	manager = BattleManager.new(GameSession.current_scenario, self, GameSession.deployed_units)
 	manager.setup()
 	manager.setup_battle()
+	tile_size = BattleLayout.compute_tile_size(manager.grid.width, manager.grid.height, get_viewport_rect().size)
 	_position_battle_view()
-	grid_view.setup(manager.grid, TILE_SIZE)
+	grid_view.setup(manager.grid, tile_size)
 	for unit in manager.units:
 		_create_unit_view(unit)
 	_build_info_panel()
@@ -62,14 +63,12 @@ func add_log(text: String) -> void:
 # --- 界面搭建 ---
 func _position_battle_view() -> void:
 	var view: Node2D = $BattleView
-	var board_w := manager.grid.width * TILE_SIZE
-	var board_h := manager.grid.height * TILE_SIZE
 	var vp := get_viewport_rect().size
-	view.position = Vector2((vp.x - board_w) / 2.0, (vp.y - board_h) / 2.0 - 10.0)
+	view.position = BattleLayout.board_position(manager.grid.width, manager.grid.height, tile_size, vp)
 
 func _create_unit_view(unit: Unit) -> void:
 	var uv := UnitView.new()
-	uv.setup(unit, TILE_SIZE)
+	uv.setup(unit, tile_size)
 	units_layer.add_child(uv)
 	unit_views[unit] = uv
 
@@ -153,10 +152,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
 	var local := ($BattleView as Node2D).to_local(screen_pos)
-	return Vector2i(floori(local.x / TILE_SIZE), floori(local.y / TILE_SIZE))
+	return Vector2i(floori(local.x / tile_size), floori(local.y / tile_size))
 
 func _cell_to_local(cell: Vector2i) -> Vector2:
-	return Vector2(cell.x * TILE_SIZE + TILE_SIZE / 2.0, cell.y * TILE_SIZE + TILE_SIZE / 2.0)
+	return Vector2(cell.x * tile_size + tile_size / 2.0, cell.y * tile_size + tile_size / 2.0)
 
 # --- 事件处理 ---
 func _handle_event(ev: Dictionary) -> void:
@@ -199,11 +198,13 @@ func _play_attack_animation(unit_view: Node2D, target: Unit) -> void:
 	var to := target_view.position
 	var dir := (to - from).normalized() * 14.0
 	uv.is_moving = true
+	uv.set_action("attack")
 	var tween := uv.create_tween()
 	tween.tween_property(uv, "position", from + dir, 0.1 / ANIM_SPEED)
 	tween.tween_property(uv, "position", from, 0.14 / ANIM_SPEED)
 	tween.finished.connect(func():
 		uv.is_moving = false
+		uv.set_action("stand")
 		uv.refresh()
 	)
 
@@ -221,7 +222,9 @@ func _animate_unit_move(unit_view: Node2D, from_cell: Vector2i, to_cell: Vector2
 		path = Pathfinder.find_path(manager.grid, start, goal)
 	if path.size() <= 1:
 		return
-	uv.animate_move(path, MOVE_STEP_TIME / ANIM_SPEED)
+	uv.set_action("move")
+	var tween := uv.animate_move(path, MOVE_STEP_TIME / ANIM_SPEED)
+	tween.finished.connect(func(): uv.set_action("stand"))
 
 # --- 刷新与结果 ---
 func _refresh_units() -> void:

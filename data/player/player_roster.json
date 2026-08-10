@@ -23,9 +23,9 @@
 				"Counter Stance",
 				"Concussion Blow"
 			],
-			"level": 5.0,
-			"skill_points": 4.0,
-			"stat_points": 2.0,
+			"level": 6,
+			"skill_points": 5,
+			"stat_points": 4,
 			"type": "Hero"
 		},
 		{

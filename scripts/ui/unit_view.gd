@@ -4,11 +4,12 @@ extends Node2D
 
 var unit: Unit
 var tile_size := 64
-var action: String = "idle"
+var action: String = "stand"
 var sprite_texture: Texture2D = null
 var is_moving: bool = false
 
-const SPRITE_SIZE := 32.0
+# 目标显示尺寸：战斗小人缩放到格子的这个比例。
+const SPRITE_TARGET_RATIO := 0.72
 
 func setup(p_unit: Unit, p_tile_size: int) -> void:
 	unit = p_unit
@@ -16,13 +17,13 @@ func setup(p_unit: Unit, p_tile_size: int) -> void:
 	_load_sprite()
 	position = _cell_to_local(unit.pos)
 
-# 通过 ArtManager 加载动作贴图（idle 默认；mod 素材优先，回退到内置）。
+# 通过 ArtManager 加载动作贴图（stand 默认；mod 素材优先，回退到内置）。
 func _load_sprite() -> void:
 	if unit == null:
 		return
 	sprite_texture = ArtManager.get_unit_sprite(unit.unit_type, action)
 
-# 切换动作贴图并重绘（attack/hurt/death/skill/idle）。
+# 切换动作贴图并重绘（stand/move/attack/death/skill）。
 func set_action(new_action: String) -> void:
 	if action == new_action:
 		return
@@ -61,27 +62,23 @@ func animate_move(path: Array, step_time: float) -> Tween:
 func _draw() -> void:
 	if unit == null or not unit.alive:
 		return
-	var half := tile_size * 0.34
-	var body_rect := Rect2(-half, -half, half * 2, half * 2)
-	# 阵营底色与描边，作为像素小人的背景底板
-	var body_color := Color(0.25, 0.55, 0.95) if unit.camp == TurnManager.PLAYER_CAMP else Color(0.92, 0.35, 0.35)
-	draw_rect(body_rect, body_color)
-	draw_rect(body_rect, Color(0.10, 0.10, 0.12), false, 2.0)
-	# 像素小人居中绘制，缩放适配格子
+	# 单位贴图填满整个格子（无纯色底板）
 	if sprite_texture != null:
-		var scale := (tile_size * 0.8) / SPRITE_SIZE
-		var draw_size := Vector2(SPRITE_SIZE * scale, SPRITE_SIZE * scale)
-		var draw_pos := Vector2(-draw_size.x / 2.0, -draw_size.y / 2.0 + 6.0)
-		draw_texture_rect(sprite_texture, Rect2(draw_pos, draw_size), false)
-	if unit.acted:
-		draw_rect(body_rect, Color(0.0, 0.0, 0.0, 0.35))
-	draw_string(ThemeDB.fallback_font, Vector2(-40, -half - 8), unit.get_display_name(), \
-		HORIZONTAL_ALIGNMENT_CENTER, 80, 14, Color.WHITE)
+		var draw_rect_size := Vector2(tile_size, tile_size)
+		var draw_pos := Vector2(-draw_rect_size.x / 2.0, -draw_rect_size.y / 2.0)
+		# acted 时变暗
+		var mod := Color(1, 1, 1, 0.6) if unit.acted else Color(1, 1, 1, 1)
+		draw_texture_rect(sprite_texture, Rect2(draw_pos, draw_rect_size), false, mod)
+	# 顶部名称
+	var name_pos := Vector2(-tile_size / 2.0, -tile_size / 2.0 - 4.0)
+	draw_string(ThemeDB.fallback_font, name_pos, unit.get_display_name(), \
+		HORIZONTAL_ALIGNMENT_CENTER, tile_size, 14, Color.WHITE)
+	# 底部血条
 	var bar_width := tile_size - 6
 	var bar_height := 6
-	var bar_pos := Vector2(-bar_width / 2.0, half + 6)
+	var bar_pos := Vector2(-bar_width / 2.0, tile_size / 2.0 - 8.0)
 	var hp_ratio := float(unit.hp) / float(unit.max_hp)
 	draw_rect(Rect2(bar_pos, Vector2(bar_width, bar_height)), Color(0.10, 0.10, 0.12))
 	draw_rect(Rect2(bar_pos, Vector2(bar_width * hp_ratio, bar_height)), Color(0.25, 0.85, 0.35))
-	draw_string(ThemeDB.fallback_font, Vector2(-40, half + 26), "%d/%d" % [unit.hp, unit.max_hp], \
+	draw_string(ThemeDB.fallback_font, Vector2(-40, tile_size / 2.0 + 12.0), "%d/%d" % [unit.hp, unit.max_hp], \
 		HORIZONTAL_ALIGNMENT_CENTER, 80, 12, Color.WHITE)

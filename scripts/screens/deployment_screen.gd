@@ -1,7 +1,7 @@
-# 部署屏幕：展示关卡地图与部署区，点击编成槽位后在部署区内放置单位，全部就绪后可开始战斗。
+﻿# 部署屏幕：展示关卡地图与部署区，点击编成槽位后在部署区内放置单位，全部就绪后可开始战斗。
 extends Control
 
-const TILE_SIZE := 64
+var tile_size: int = 64
 
 var scenario_id: String = ""
 var grid: Grid
@@ -25,7 +25,8 @@ var slot_buttons: Array = []
 func _ready() -> void:
 	scenario_id = GameSession.current_scenario
 	var scenario := _load_scenario()
-	grid = Grid.new(int(scenario.get("width", 10)), int(scenario.get("height", 10)))
+	grid = Grid.new(int(scenario.get("width", 12)), int(scenario.get("height", 6)))
+	tile_size = BattleLayout.compute_tile_size(grid.width, grid.height, get_viewport_rect().size, 0.7)
 	deployment_zone = _parse_cells(scenario.get("deployment_zone", []))
 	roster_units = GameDatabase.player_roster.get("units", [])
 	mod_unit_types = _collect_mod_unit_types()
@@ -89,15 +90,13 @@ func _build_ui(scenario: Dictionary) -> void:
 	back_btn.pressed.connect(_go_back)
 	add_child(back_btn)
 
-	# 战场视图：居中放置
+	# 战场视图：居中放置（底部留出编成面板空间）
 	grid_view = Node2D.new()
-	var board_w := grid.width * TILE_SIZE
-	var board_h := grid.height * TILE_SIZE
 	var vp := get_viewport_rect().size
-	grid_view.position = Vector2((vp.x - board_w) / 2.0, (vp.y - board_h) / 2.0 - 60.0)
+	grid_view.position = BattleLayout.board_position(grid.width, grid.height, tile_size, Vector2(vp.x, vp.y - 140))
 	var gv := preload("res://scripts/ui/grid_view.gd").new()
 	grid_view.add_child(gv)
-	grid_view.get_child(0).setup(grid, TILE_SIZE)
+	grid_view.get_child(0).setup(grid, tile_size)
 	add_child(grid_view)
 
 	units_layer = Node2D.new()
@@ -157,13 +156,13 @@ func _build_ui(scenario: Dictionary) -> void:
 
 func _create_unit_view(unit: Unit) -> void:
 	var uv := preload("res://scripts/ui/unit_view.gd").new()
-	uv.setup(unit, TILE_SIZE)
+	uv.setup(unit, tile_size)
 	units_layer.add_child(uv)
 	unit_views[unit] = uv
 
 func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
 	var local := (grid_view as Node2D).to_local(screen_pos)
-	return Vector2i(floori(local.x / TILE_SIZE), floori(local.y / TILE_SIZE))
+	return Vector2i(floori(local.x / tile_size), floori(local.y / tile_size))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:

@@ -1,32 +1,44 @@
-# 素材管理器：按单位类型与动作查询贴图，查找顺序为 mod 素材目录（res://mods → user://mods）→ 内置 assets/units。
-# 动作图命名约定：idle/attack/hurt/death/skill.png，只有 idle 时其余动作回退到 idle；立绘为 portrait.png。
+# 素材管理器：按单位类型与动作查询贴图。
+# 动作名：stand(站立)/move(移动)/attack(攻击)/death(死亡)/skill(技能)/portrait(立绘)。
+# 查找顺序：mod 素材目录（res://mods → user://mods）→ 内置 assets/units/<Type>/<action>.png
+#          → 内置单文件 assets/units/<type>.png（回退，仅站立）。缺省动作回退到站立。
 extends Node
 
 const BUILTIN_DIR := "res://assets/units/"
 
-# 获取单位战斗小人贴图。action: idle/attack/hurt/death/skill。
-func get_unit_sprite(unit_type: String, action: String = "idle") -> Texture2D:
+# 获取单位战斗小人贴图。action: stand/move/attack/death/skill。
+func get_unit_sprite(unit_type: String, action: String = "stand") -> Texture2D:
 	var path: String = _find_sprite_path(unit_type, action)
-	if path == "" and action != "idle":
-		path = _find_sprite_path(unit_type, "idle")
+	if path == "" and action != "stand":
+		path = _find_sprite_path(unit_type, "stand")
 	if path != "":
 		return load(path)
 	return null
 
 # 获取单位立绘贴图。
 func get_portrait(unit_type: String) -> Texture2D:
-	return get_unit_sprite(unit_type, "portrait")
+	var path: String = _find_sprite_path(unit_type, "portrait")
+	if path != "":
+		return load(path)
+	return null
 
 # 按查找顺序返回首个存在的贴图路径。
 func _find_sprite_path(unit_type: String, action: String) -> String:
+	# 1. mod 素材目录
 	for root in ["res://mods", "user://mods"]:
 		for mod_dir in _list_subdirs(root):
 			var path: String = str(mod_dir) + "/art/units/%s/%s.png" % [unit_type, action]
 			if FileAccess.file_exists(path):
 				return path
-	var builtin := BUILTIN_DIR + unit_type.to_lower() + ".png"
-	if action == "idle" and FileAccess.file_exists(builtin):
-		return builtin
+	# 2. 内置动作目录 assets/units/<Type>/<action>.png
+	var action_dir := BUILTIN_DIR + unit_type + "/" + action + ".png"
+	if FileAccess.file_exists(action_dir):
+		return action_dir
+	# 3. 内置单文件回退（仅站立）
+	if action == "stand":
+		var single := BUILTIN_DIR + unit_type.to_lower() + ".png"
+		if FileAccess.file_exists(single):
+			return single
 	return ""
 
 func _list_subdirs(root: String) -> Array:
