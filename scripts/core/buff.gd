@@ -14,6 +14,11 @@ var trigger: String = ""
 var counter: bool = false
 var aura_range: int = 0
 var heal_percent: float = 0.0
+var immunity: Array = []
+var reflect_percent: float = 0.0
+var reduce_percent: float = 0.0
+var ignore_defense: bool = false
+var is_mark: bool = false
 var raw_data: Dictionary = {}
 
 static func from_data(data: Dictionary) -> Buff:
@@ -30,6 +35,11 @@ static func from_data(data: Dictionary) -> Buff:
 	buff.counter = bool(data.get("counter", false))
 	buff.aura_range = int(data.get("aura_range", 0))
 	buff.heal_percent = float(data.get("heal_percent", 0.0))
+	buff.immunity = data.get("immunity", [])
+	buff.reflect_percent = float(data.get("reflect_percent", 0.0))
+	buff.reduce_percent = float(data.get("reduce_percent", 0.0))
+	buff.ignore_defense = bool(data.get("ignore_defense", false))
+	buff.is_mark = bool(data.get("is_mark", false))
 	buff.raw_data = data
 	return buff
 

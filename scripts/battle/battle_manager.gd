@@ -138,7 +138,14 @@ func perform_attack(attacker: Unit, defender: Unit) -> void:
 		return
 	# 攻击前触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_START, {"actor": attacker, "user": attacker, "target": defender})
-	combat_system.perform_attack(attacker, defender)
+	var damage := combat_system.perform_attack(attacker, defender)
+	# 反射：防御方有反射 buff 时，把部分伤害反射回攻击者
+	if defender.alive and defender.get_reflect_percent() > 0.0 and damage > 0:
+		var reflect_damage := roundi(damage * defender.get_reflect_percent())
+		if reflect_damage > 0:
+			attacker.take_damage(reflect_damage, game)
+			if game != null and game.has_method("add_log"):
+				game.add_log("%s 反射 %d 点伤害给 %s" % [defender.get_display_name(), reflect_damage, attacker.get_display_name()])
 	# 攻击时触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK, {"actor": attacker, "user": attacker, "target": defender})
 	# 受击触发
@@ -203,6 +210,35 @@ func _get_combat_distance(from: Unit, to_pos: Vector2i) -> int:
 
 func wait(unit: Unit) -> void:
 	pass
+
+# 在指定位置附近召唤一个新单位（召唤类技能用）。返回生成的单位或 null。
+func spawn_unit(unit_type: String, camp: String, near_pos: Vector2i) -> Unit:
+	var config: Dictionary = GameDatabase.get_unit(unit_type)
+	if config.is_empty():
+		return null
+	var spawn_pos := _find_empty_adjacent(near_pos)
+	if spawn_pos.x < 0:
+		return null
+	var unit := Unit.create_from_config(unit_type, camp, spawn_pos, config)
+	units.append(unit)
+	unit.turn_timer = 0.0
+	return unit
+
+# 找 near_pos 附近最近的空格。
+func _find_empty_adjacent(near_pos: Vector2i) -> Vector2i:
+	for radius in range(0, 3):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if absi(dx) != radius and absi(dy) != radius and radius > 0:
+					continue
+				var cell := near_pos + Vector2i(dx, dy)
+				if not grid.in_bounds(cell.x, cell.y):
+					continue
+				if not grid.get_tile(cell.x, cell.y).passable:
+					continue
+				if get_unit_at(cell) == null:
+					return cell
+	return Vector2i(-1, -1)
 
 # 初始化战斗：启动每个单位的独立行动计时器。
 func setup_battle() -> void:

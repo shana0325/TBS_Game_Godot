@@ -2,20 +2,19 @@
 	"units": [
 		{
 			"allocated_stats": {
-				"attack": 6.0,
+				"attack": 10,
 				"defense": 1.0
 			},
 			"equipment": {
 				"accessory": "toxic_charm",
-				"offhand": "wooden_shield",
-				"weapon": "iron_sword"
+				"weapon": "bronze_spear"
 			},
 			"equipped_skills": [
 				"Guard Shield",
 				"Blood Rush",
 				"Counter Stance"
 			],
-			"exp": 200,
+			"exp": 300,
 			"extra_skills": [],
 			"id": "hero_001",
 			"learned_skills": [
@@ -26,7 +25,7 @@
 			],
 			"level": 4.0,
 			"skill_points": 3.0,
-			"stat_points": 4.0,
+			"stat_points": 0,
 			"type": "Hero"
 		},
 		{

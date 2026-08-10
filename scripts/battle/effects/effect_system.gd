@@ -46,6 +46,22 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 					report["revived"] = true
 			"dispel":
 				_apply_dispel(target, effect, game)
+			"summon":
+				_apply_summon(user, effect, game)
+			"taunt":
+				_apply_status_buff(target, effect, game, "taunt")
+			"immunity":
+				_apply_immunity(target, effect, game)
+			"reflect":
+				_apply_reflect(target, effect, game)
+			"protect":
+				_apply_protect(target, effect, game)
+			"ignore":
+				_apply_ignore(target, effect, game)
+			"mark":
+				_apply_mark(target, effect, game)
+			"lifesteal":
+				_apply_lifesteal(target, effect, game)
 			_:
 				push_warning("未知技能效果类型: %s" % effect_type)
 	return report
@@ -134,3 +150,128 @@ static func _apply_dispel(target: Unit, config: Dictionary, game) -> void:
 	target.buffs = kept
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 的效果被驱散" % target.get_display_name())
+
+# 召唤：在目标（或自身）附近生成一个单位，存活 duration 回合。
+static func _apply_summon(user: Unit, config: Dictionary, game) -> void:
+	if user == null:
+		return
+	var unit_type := str(config.get("unit_type", "Goblin"))
+	var config_data: Dictionary = GameDatabase.get_unit(unit_type)
+	if config_data.is_empty():
+		push_warning("召唤未知单位: %s" % unit_type)
+		return
+	# 在目标旁找空位（简化：复用 game 的 BattleManager 添加单位）
+	var battle = game
+	if battle != null and battle.has_method("spawn_unit"):
+		battle.spawn_unit(unit_type, user.camp, user.pos)
+		if game.has_method("add_log"):
+			game.add_log("%s 召唤了 %s" % [user.get_display_name(), unit_type])
+	else:
+		if game != null and game.has_method("add_log"):
+			game.add_log("%s 尝试召唤 %s（缺少 spawn_unit）" % [user.get_display_name(), unit_type])
+
+# 状态型 Buff（挑衅等 control 类）。
+static func _apply_status_buff(target: Unit, config: Dictionary, game, control: String) -> void:
+	if target == null:
+		return
+	var data := {
+		"name": str(config.get("name", control)),
+		"duration": int(config.get("duration", 1)),
+		"control": control,
+		"is_beneficial": bool(config.get("is_beneficial", false)),
+	}
+	var buff := Buff.from_data(data)
+	target.add_buff(buff)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %s 效果" % [target.get_display_name(), buff.name])
+
+# 免疫：免疫指定状态（stun/silence/poison 等，* 表示全部负面）。
+static func _apply_immunity(target: Unit, config: Dictionary, game) -> void:
+	if target == null:
+		return
+	var data := {
+		"name": str(config.get("name", "免疫")),
+		"duration": int(config.get("duration", 2)),
+		"immunity": config.get("states", []),
+		"is_beneficial": true,
+	}
+	var buff := Buff.from_data(data)
+	target.add_buff(buff)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %s" % [target.get_display_name(), buff.name])
+
+# 反射：受到伤害时按比例反射给攻击者。
+static func _apply_reflect(target: Unit, config: Dictionary, game) -> void:
+	if target == null:
+		return
+	var data := {
+		"name": str(config.get("name", "反射")),
+		"duration": int(config.get("duration", 2)),
+		"reflect_percent": float(config.get("percent", 0.3)),
+		"is_beneficial": true,
+	}
+	var buff := Buff.from_data(data)
+	target.add_buff(buff)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %s" % [target.get_display_name(), buff.name])
+
+# 减伤（防护罩）：受到伤害降低指定比例。
+static func _apply_protect(target: Unit, config: Dictionary, game) -> void:
+	if target == null:
+		return
+	var data := {
+		"name": str(config.get("name", "防护罩")),
+		"duration": int(config.get("duration", 2)),
+		"reduce_percent": float(config.get("reduction", 0.3)),
+		"is_beneficial": true,
+	}
+	var buff := Buff.from_data(data)
+	target.add_buff(buff)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %s" % [target.get_display_name(), buff.name])
+
+# 无视：攻击时无视目标防御/护盾。
+static func _apply_ignore(target: Unit, config: Dictionary, game) -> void:
+	if target == null:
+		return
+	var data := {
+		"name": str(config.get("name", "无视")),
+		"duration": int(config.get("duration", 1)),
+		"ignore_defense": true,
+		"is_beneficial": true,
+	}
+	var buff := Buff.from_data(data)
+	target.add_buff(buff)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %s" % [target.get_display_name(), buff.name])
+
+# 标记：给目标打上标记，供其他技能作条件。
+static func _apply_mark(target: Unit, config: Dictionary, game) -> void:
+	if target == null:
+		return
+	var data := {
+		"name": str(config.get("name", "标识")),
+		"duration": int(config.get("duration", 2)),
+		"is_mark": true,
+		"is_beneficial": false,
+	}
+	var buff := Buff.from_data(data)
+	target.add_buff(buff)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 被标记" % target.get_display_name())
+
+# 吸血：造成伤害时按比例恢复生命。
+static func _apply_lifesteal(target: Unit, config: Dictionary, game) -> void:
+	if target == null:
+		return
+	var data := {
+		"name": str(config.get("name", "吸血")),
+		"duration": int(config.get("duration", 2)),
+		"trigger": "on_hit",
+		"heal_percent": float(config.get("percent", 0.3)),
+		"is_beneficial": true,
+	}
+	var buff := Buff.from_data(data)
+	target.add_buff(buff)
+	if game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %s" % [target.get_display_name(), buff.name])

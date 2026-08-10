@@ -155,6 +155,44 @@ func has_counter() -> bool:
 			return true
 	return false
 
+func has_taunt() -> bool:
+	return _has_control("taunt")
+
+# 反射比例（取各反射 buff 之和）。
+func get_reflect_percent() -> float:
+	var total := 0.0
+	for buff in buffs:
+		total += buff.reflect_percent
+	return total
+
+# 减伤比例（防护罩）。
+func get_reduce_percent() -> float:
+	var total := 0.0
+	for buff in buffs:
+		total += buff.reduce_percent
+	return total
+
+# 是否免疫指定状态/类型。
+func is_immune(kind: String) -> bool:
+	for buff in buffs:
+		if buff.immunity.has("*") or buff.immunity.has(kind):
+			return true
+	return false
+
+# 是否无视防御（直接伤害视角：命中时忽略目标防御）。
+func has_ignore_defense() -> bool:
+	for buff in buffs:
+		if buff.ignore_defense:
+			return true
+	return false
+
+# 是否被标记。
+func has_mark() -> bool:
+	for buff in buffs:
+		if buff.is_mark:
+			return true
+	return false
+
 func add_skill(skill: Skill) -> void:
 	if skill != null and not has_skill(skill.name):
 		skills.append(skill)
