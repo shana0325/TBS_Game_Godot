@@ -1,69 +1,79 @@
 ﻿{
   "poison": {
-    "name": "poison",
+    "name": "中毒",
     "duration": 3,
     "tick_damage": 5,
     "tick_phase": "turn_start",
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": false
   },
   "burn": {
-    "name": "burn",
+    "name": "灼烧",
     "duration": 2,
     "tick_damage": 4,
     "tick_phase": "turn_end",
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": false
   },
   "regen": {
-    "name": "regen",
+    "name": "再生",
     "duration": 3,
     "tick_heal": 5,
     "tick_phase": "turn_start",
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": true
   },
   "attack_up": {
-    "name": "attack_up",
+    "name": "攻击强化",
     "duration": 2,
     "modifiers": {
       "attack": 3
-    }
+    },
+    "is_beneficial": true
   },
   "counter": {
-    "name": "counter",
+    "name": "反击",
     "duration": 2,
     "counter": true,
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": true
   },
   "attack_aura": {
-    "name": "attack_aura",
+    "name": "战旗光环",
     "duration": -1,
     "aura_range": 2,
     "modifiers": {
       "attack": 2
-    }
+    },
+    "is_beneficial": true
   },
   "lifesteal": {
-    "name": "lifesteal",
+    "name": "吸血",
     "duration": 2,
     "trigger": "on_hit",
     "heal_percent": 0.3,
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": true
   },
   "stun": {
-    "name": "stun",
+    "name": "眩晕",
     "duration": 1,
     "control": "stun",
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": false
   },
   "silence": {
-    "name": "silence",
+    "name": "沉默",
     "duration": 2,
     "control": "silence",
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": false
   },
   "shield": {
-    "name": "shield",
+    "name": "护罩",
     "duration": 2,
     "shield": 20,
-    "modifiers": {}
+    "modifiers": {},
+    "is_beneficial": true
   }
 }

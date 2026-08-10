@@ -1,6 +1,6 @@
 ﻿{
   "iron_sword": {
-    "name": "Iron Sword",
+    "name": "铁剑",
     "slot": "weapon",
     "modifiers": {
       "attack": 2
@@ -8,7 +8,7 @@
     "granted_skills": []
   },
   "bronze_spear": {
-    "name": "Bronze Spear",
+    "name": "青铜长矛",
     "slot": "weapon",
     "modifiers": {
       "attack": 1,
@@ -19,7 +19,7 @@
     ]
   },
   "wooden_shield": {
-    "name": "Wooden Shield",
+    "name": "木盾",
     "slot": "offhand",
     "modifiers": {
       "defense": 2
@@ -27,7 +27,7 @@
     "granted_skills": []
   },
   "swift_boots": {
-    "name": "Swift Boots",
+    "name": "疾风之靴",
     "slot": "accessory",
     "modifiers": {
       "move": 1
@@ -35,7 +35,7 @@
     "granted_skills": []
   },
   "toxic_charm": {
-    "name": "Toxic Charm",
+    "name": "剧毒护符",
     "slot": "accessory",
     "modifiers": {},
     "granted_skills": [

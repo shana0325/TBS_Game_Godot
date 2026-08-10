@@ -136,7 +136,19 @@ func can_attack(attacker: Unit, defender: Unit) -> bool:
 func perform_attack(attacker: Unit, defender: Unit) -> void:
 	if not can_attack(attacker, defender):
 		return
+	# 攻击前触发
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_START, {"actor": attacker, "user": attacker, "target": defender})
 	combat_system.perform_attack(attacker, defender)
+	# 攻击时触发
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK, {"actor": attacker, "user": attacker, "target": defender})
+	# 受击触发
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_BE_ATTACKED, {"actor": defender, "user": defender, "target": attacker})
+	# 击杀/死亡触发
+	if not defender.alive:
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_KILL, {"actor": attacker, "user": attacker, "target": defender})
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_DEATH, {"actor": defender, "user": defender, "target": attacker})
+	# 攻击后触发（附带技能伤害阶段）
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_END, {"actor": attacker, "user": attacker, "target": defender})
 	_check_winner()
 
 func is_damage_skill(skill: Skill) -> bool:
@@ -169,7 +181,7 @@ func can_cast_skill(user: Unit, skill: Skill, target: Unit) -> bool:
 func cast_skill(user: Unit, skill: Skill, target: Unit) -> void:
 	if not can_cast_skill(user, skill, target):
 		return
-	skill.execute(user, target, game)
+	skill.execute(user, [target], game)
 	if event_system != null:
 		event_system.dispatch(BattleEvent.new(EventTypes.ON_SKILL_CAST, user, target, {"skill": skill.name}))
 	_check_winner()
@@ -209,6 +221,7 @@ func tick(delta: float) -> Array:
 			continue
 		# 行动开始 tick
 		unit.tick_turn_start(game)
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_START, {"actor": unit, "user": unit})
 		var prev_pos: Vector2i = unit.pos
 		var acted := _auto_act(unit)
 		if acted:
@@ -220,10 +233,19 @@ func tick(delta: float) -> Array:
 				"from": prev_pos
 			})
 		unit.tick_turn_end(game)
+		# 行动结束触发 + 冷却推进
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_END, {"user": unit})
+		_tick_skill_cooldowns(unit)
 		_check_winner()
 		if winner != "":
 			break
 	return events
+
+# 推进单位技能冷却。
+func _tick_skill_cooldowns(unit: Unit) -> void:
+	for skill in unit.skills:
+		if skill is Skill:
+			skill.tick_cooldown()
 
 # 单位自动行动：射程内有敌人则攻击；否则移动（可能因嘲讽被引导），移动后再尝试攻击。
 func _auto_act(unit: Unit) -> Dictionary:
