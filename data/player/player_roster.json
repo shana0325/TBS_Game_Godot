@@ -14,7 +14,7 @@
 				"Blood Rush",
 				"Counter Stance"
 			],
-			"exp": 0,
+			"exp": 100,
 			"extra_skills": [],
 			"id": "hero_001",
 			"learned_skills": [
@@ -23,9 +23,9 @@
 				"Counter Stance",
 				"Concussion Blow"
 			],
-			"level": 5,
-			"skill_points": 4,
-			"stat_points": 2,
+			"level": 5.0,
+			"skill_points": 4.0,
+			"stat_points": 2.0,
 			"type": "Hero"
 		},
 		{

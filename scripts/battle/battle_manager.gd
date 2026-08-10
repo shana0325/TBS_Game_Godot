@@ -165,12 +165,20 @@ func perform_attack(attacker: Unit, defender: Unit) -> void:
 				game.add_log("%s 反射 %d 点伤害给 %s" % [defender.get_display_name(), reflect_damage, attacker.get_display_name()])
 	# 攻击时触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK, {"actor": attacker, "user": attacker, "target": defender})
+	# 造成伤害后触发（吸血类）
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_HIT, {"actor": attacker, "user": attacker, "target": defender})
 	# 受击触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_BE_ATTACKED, {"actor": defender, "user": defender, "target": attacker})
+	# 受到伤害触发
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TAKEN_DAMAGE, {"actor": defender, "user": defender, "target": attacker})
 	# 击杀/死亡触发
 	if not defender.alive:
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_KILL, {"actor": attacker, "user": attacker, "target": defender})
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_DEATH, {"actor": defender, "user": defender, "target": attacker})
+		# 队友死亡触发（复活类技能）：给死亡单位的同阵营存活单位触发
+		for ally in units:
+			if ally is Unit and ally.alive and ally.camp == defender.camp and ally != defender:
+				SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ALLY_DEATH, {"actor": ally, "user": ally, "target": defender})
 	# 攻击后触发（附带技能伤害阶段）
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_END, {"actor": attacker, "user": attacker, "target": defender})
 	_check_winner()
@@ -257,10 +265,22 @@ func _find_empty_adjacent(near_pos: Vector2i) -> Vector2i:
 					return cell
 	return Vector2i(-1, -1)
 
-# 初始化战斗：启动每个单位的独立行动计时器。
+# 初始化战斗：启动每个单位的独立行动计时器，并触发战斗开始/回合开始技能。
 func setup_battle() -> void:
 	if turn_manager != null:
 		turn_manager.setup()
+	# on_battle_start：所有单位各触发一次
+	for unit in units:
+		if unit is Unit and unit.alive:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_BATTLE_START, {"actor": unit, "user": unit})
+	# passive：常驻被动技能在战斗开始即生效
+	for unit in units:
+		if unit is Unit and unit.alive:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.PASSIVE, {"actor": unit, "user": unit})
+	# on_round_start：所有单位各触发一次（战斗首个回合）
+	for unit in units:
+		if unit is Unit and unit.alive:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ROUND_START, {"actor": unit, "user": unit})
 
 # 自走棋主驱动：每帧推进时间，处理所有到点单位的自动行动。
 # 返回本帧发生的事件列表（供 UI 播放动画/日志）。

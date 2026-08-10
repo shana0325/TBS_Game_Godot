@@ -90,21 +90,22 @@ B 受击后 ── on_be_attacked（受到攻击后触发）→ 用于反击/免
 
 技能通过 `trigger` 字段声明何时自动释放。全部为事件驱动。
 
-| trigger 值 | 含义 | 触发方 |
-|---|---|---|
-| `on_battle_start` | 战斗开始时 | 所有单位 |
-| `on_turn_start` | 该单位行动开始时 | 当前行动单位 |
-| `on_attack_start` | 该单位即将攻击前 | 攻击者 |
-| `on_attack` | 该单位攻击时（与命中同步） | 攻击者 |
-| `on_attack_end` | 该单位攻击完全结束后 | 攻击者 |
-| `on_hit` | 该单位造成伤害后 | 攻击者 |
-| `on_be_attacked` | 该单位受到攻击后 | 被攻击者 |
-| `on_taken_damage` | 该单位受到伤害结算后 | 被攻击者 |
-| `on_kill` | 该单位击杀敌人后 | 攻击者 |
-| `on_death` | 该单位死亡时 | 阵亡者 |
-| `on_turn_end` | 该单位行动结束时 | 当前行动单位 |
-| `on_round_start` | 每一轮开始 | 所有单位 |
-| `passive` | 常驻被动（无条件持续生效） | 拥有者 |
+| trigger 值 | 含义 | 触发方 | 实现状态 |
+|---|---|---|---|
+| `on_battle_start` | 战斗开始时 | 所有单位 | ✅ |
+| `on_turn_start` | 该单位行动开始时 | 当前行动单位 | ✅ |
+| `on_attack_start` | 该单位即将攻击前 | 攻击者 | ✅ |
+| `on_attack` | 该单位攻击时（与命中同步） | 攻击者 | ✅ |
+| `on_attack_end` | 该单位攻击完全结束后 | 攻击者 | ✅ |
+| `on_hit` | 该单位造成伤害后 | 攻击者 | ✅ |
+| `on_be_attacked` | 该单位受到攻击后 | 被攻击者 | ✅ |
+| `on_taken_damage` | 该单位受到伤害结算后 | 被攻击者 | ✅ |
+| `on_kill` | 该单位击杀敌人后 | 攻击者 | ✅ |
+| `on_death` | 该单位死亡时 | 阵亡者 | ✅ |
+| `on_ally_death` | 友军死亡时 | 同阵营存活单位 | ✅ |
+| `on_turn_end` | 该单位行动结束时 | 当前行动单位 | ✅ |
+| `on_round_start` | 战斗首回合开始 | 所有单位 | ✅（仅首回合） |
+| `passive` | 常驻被动（无条件持续生效） | 拥有者 | ✅（战斗开始即生效） |
 
 **技能触发规则**
 - 一个单位每个时机只能触发一次对应技能（除非配置 `repeat`）。
@@ -417,24 +418,43 @@ static func apply(context: EffectContext) -> Dictionary
 
 ---
 
-## 9. 自走棋机制对接（后续改动）
+## 9. 自走棋机制对接（当前实现状态）
 
-当前战斗是手动选择技能。后续改为自走棋时：
+已改为自走棋模式（时间驱动独立回合，技能按事件流自动触发）：
 
-1. **移除技能选择菜单**，改为"行动自动触发"。
-2. 战斗流程改为事件驱动（第 2 节的攻击事件流），单位按速度/阵营顺序行动。
-3. `battle_manager.gd` 增加事件分发：在每个攻击阶段广播对应 trigger，扫描所有单位技能匹配触发。
-4. 现有 effect 处理器无需改动，只是调用时机从"手动施放"变为"事件自动触发"。
+1. ✅ 移除技能选择菜单，行动自动触发。
+2. ✅ 战斗流程为事件驱动（第 2 节的攻击事件流），单位按各自 `turn_interval` 独立行动。
+3. ✅ `battle_manager.gd` 在每个攻击/行动阶段调用 `SkillTriggerSystem.dispatch`，扫描单位技能匹配触发。
+4. ✅ 现有 effect 处理器无需改动，调用时机从"手动施放"变为"事件自动触发"。
 
-此文档的所有设计（trigger/condition/target/effects）均为自走棋而设计，无需推翻重来。
+**当前实际实现清单**：
+
+- ✅ 时间驱动回合：`TurnManager.tick(delta)`，每单位独立 `turn_interval`
+- ✅ 自动行动：攻击范围内有敌人则攻击，否则移动（1 移动力）再尝试攻击
+- ✅ 技能触发系统：`SkillTriggerSystem.dispatch(battle, trigger, context)`，支持 14 个触发时机
+- ✅ 技能结构：`trigger`/`condition`/`cooldown`/`priority`/`min_range`/`max_range`/`effects`
+- ✅ 效果类型（已实现 19 类）：
+  - 即时：`damage`/`heal`/`revive`/`dispel`/`summon`/`mark`/`teleport`（位移家族）
+  - 伤害变体：`percentage_damage`/`chain_damage`
+  - 状态：`buff`/`dot`/`shield`/`stat_mod`/`taunt`/`immunity`/`reflect`/`protect`/`ignore`/`lifesteal`
+- ✅ 位移家族：`teleport`（mode self/target × dir target/away/self × distance，支持突脸/拉人/击退/闪现/后撤）
+- ✅ 目标系统：`self`/`target`/`enemy`/`ally`/`all_enemies`/`all_allies`（按射程/全体解析）
+- ✅ 条件系统：`hp_percent`/`has_buff`/`target_has_buff` 等基础条件
+
+**尚未实现（按需补充）**：
+- ⬜ AOE 范围形状（`shape`：cross/line/around/square）——当前目标解析支持全体但范围形状未落地
+- ⬜ 暴击系统（`crit_rate`/`crit_damage`）
+- ⬜ `random_enemy`/`area` 目标类型
+- ⬜ 更多触发条件（`round`/`range`/`is_boss` 等）
 
 ---
 
 ## 10. 待确认问题（已确认项）
 
-- [x] `teleport` 位移保留，作为后续"击退/闪现/后撤/突脸/拉人"扩展基础。
-- [x] 不做元素类型表，先纯物理伤害；后续通过 `ignore_defense` 做"直接伤害"。
+- [x] `teleport` 位移保留，已实现位移家族（突脸/拉人/击退/闪现/后撤）。
+- [x] 不做元素类型表，先纯物理伤害；已通过 `ignore_defense` 实现"直接伤害"雏形。
 - [x] 抵消附带伤害暂不实现（后续做复杂机制时再引入）。
 - [x] 需要暴击；不考虑命中率，必定命中。
 - [ ] 暴击率/暴击伤害默认值（建议 crit_rate 5%、crit_damage 150%，待定）。
-- [ ] 位移在自走棋中是否受"移动点数"限制。
+- [ ] 位移在自走棋中是否受"移动点数"限制（当前位移无视移动力）。
+- [ ] AOE 范围形状（cross/line/around/square）是否实现。
