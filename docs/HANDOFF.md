@@ -1,21 +1,22 @@
 ﻿# TBS_Game_Godot 交接文档
 
-> 交接时间：2026-08-08
+> 交接时间：2026-08-10
 > 项目路径：`D:\Shana Program\文档\TBS_Game_Godot`
 > 参考项目：`D:\PycharmProjects\TBS_Game`（旧 Python/pygame 版，仅作设计参考，不混用代码）
+> 参考素材：`E:\SteamLibrary\steamapps\common\Brave Nine`（棕色尘埃单机版，用于提取技能体系与中文文本）
 
 ## 1. 当前项目是什么
 
-这是一个使用 **Godot 4.7 + GDScript** 重新实现的 2D 回合制战棋原型。
+这是一个使用 **Godot 4.7 + GDScript** 实现的 **自走棋式战棋游戏**。
 
-目标是从旧 Python/pygame 项目迁移架构，但代码完全使用 Godot/GDScript 重新编写。
+核心玩法已从"手动回合制战棋"改为**自走棋（auto-battler）**：
 
-当前已是一个**可完整游玩的战棋游戏**（Godot 4.7 重构完成）：
-
-- 完整流程：主菜单 → 选关 → 部署 → 战斗 → 结算
-- 战斗：双战场、移动/攻击/技能、回合制、敌方 AI、胜负判定
+- **时间驱动独立回合**：每个单位有独立的 `turn_interval`（秒），到点自动行动
+- **自动战斗**：射程内有敌人→攻击；无→移动再尝试攻击，直到一方全灭
+- **事件触发技能**：技能按触发时机（攻击前/攻击时/受击/行动/击杀等）自动施放，非手动选择
+- 完整流程：主菜单 → 选关 → 部署 → 自动战斗 → 结算
 - 成长：属性/技能/装备三子页、胜利奖励经验写回编成
-- 素材：像素小人贴图 + 中文字体
+- 素材：动作图（站立/移动/攻击/死亡）+ 中文字体 + 可扩展 mod 系统
 
 最近一次验证结果：
 
@@ -124,35 +125,41 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - `scripts/screens/progression_screen.gd`：成长界面，两段式（先选角色再成长），属性/技能/装备三个子页；右侧整体属性总览面板（含装备修正）实时刷新。
 - `scenes/progression_screen.tscn`：成长界面场景；主菜单新增"队伍编成"入口。
 - 战斗内单位信息面板（`battle_screen.gd`）：点击任意单位在左上角显示其属性/装备/技能/Buff。
-- `scripts/ui/battle_screen.gd`：战斗界面控制器，处理点击选择/移动/行动菜单/技能目标，驱动 BattleManager 与敌方 AI。
-- `scripts/ui/grid_view.gd`：网格渲染，绘制地板、边框与移动/攻击/目标/悬停高亮。
-- `scripts/ui/unit_view.gd`：单位渲染，按阵营绘制方块、名称、等级、血条，支持移动补间。
-- `scenes/battle_screen.tscn`：战斗场景，包含网格、单位层、日志面板、回合标签、结束回合按钮。
-- `data/scenario/battle_01.json`：第一个关卡（双战场 4+2+4×3，2 玩家单位 vs 3 敌方单位）。
+- `scripts/ui/battle_screen.gd`：战斗界面（自走棋自动战斗），`_process` 驱动 `manager.tick`，播放行动动画/日志，判定胜负。
+- `scripts/ui/grid_view.gd`：网格渲染，绘制地板、边框与高亮（当前自动战斗下移动/攻击高亮已不用，保留悬停/选中）。
+- `scripts/ui/unit_view.gd`：单位渲染，动作贴图（stand/move/attack/death）填满格子，名称/血条，acted 变暗。
+- `scripts/ui/battle_layout.gd`：根据视口与行列数计算自适应格子大小并居中战场。
+- `scenes/battle_screen.tscn`：战斗场景（网格、单位层、日志面板、回合标签）。
+- `data/scenario/battle_01.json`：关卡（12×6，2 玩家 vs 3 敌方，玩家部署左半区 x0-5）。
 
-### 战斗流程（本轮新增）
+### 战斗系统（自走棋）
 
-- `scripts/battle/battle_manager.gd`：纯逻辑战斗状态机，负责战局创建（读关卡与编成）、移动范围、攻击、技能、回合与胜负判定；新增 `next_turn()` 在切换回合时执行 Buff 回合 tick。
-- `scripts/battle/enemy_ai.gd`：敌方简单 AI，射程内有玩家就攻击，否则朝最近的玩家移动。
-- `scripts/core/grid.gd`：支持双战场（`setup_dual`：左右子战场 + 中间不可通行 gap），提供 `get_side_for_position` / `cross_grid_distance`。
-- `scripts/battle/combat/combat_system.gd`：跨战场攻击规则——同战场 Chebyshev 距离，跨战场按逻辑列差（忽略 Y 轴）。
-- `scripts/core/unit.gd`：新增 `moved` 状态，单回合限制"移动一次 + 攻击/技能一次"（可先移动后攻击）。
+- `scripts/battle/battle_manager.gd`：纯逻辑战斗状态机，`tick(delta)` 驱动时间推进；`_auto_act` 处理单位自动行动（攻击/移动）；`perform_attack` 分发技能触发时机与反射；`spawn_unit`/`move_unit_to` 供技能调用。
+- `scripts/battle/turn/turn_manager.gd`：时间驱动独立回合，每单位 `turn_interval` + `turn_timer`，`tick(delta)` 统一推进。
+- `scripts/battle/enemy_ai.gd`：敌方 AI（含嘲讽引导目标）。
+- `scripts/battle/skills/skill_trigger_system.gd`：技能触发系统，14 个触发时机按事件流自动施放（含条件/冷却/目标解析）。
+- `scripts/battle/effects/effect_system.gd`：注册表驱动效果分发，已实现 19 类 effect。
+- `scripts/battle/combat/combat_system.gd` / `damage_calculator.gd`：攻击执行与伤害计算（曼哈顿距离射程，支持无视防御/减伤/反射）。
+- `scripts/core/grid.gd`：10×10（或按关卡 12×6）单战场，曼哈顿距离；`setup_dual`/跨战场逻辑已弃用但保留兼容。
+- `scripts/core/unit.gd`：`turn_interval`/`turn_timer`、`moved` 状态、状态查询（taunt/immune/reflect/ignore 等）。
 
-## 6. 项目状态：重构完成（2026-08-08）
+## 6. 项目状态：自走棋改造（2026-08-10）
 
-> 阶段一（Python 原版）与阶段二（Godot 重构）的既定目标已全部达成，本阶段告一段落。
-> 不再维护 M5/M6 的待办步骤清单；后续开发按新的需求随时进行。
+> 已完成从"手动回合制战棋"到"自走棋（auto-battler）"的改造，本阶段告一段落。
+> 后续开发按新需求进行。
 
-已完成里程碑：
+已完成里程碑（M1-M4 重构期 → 自走棋期）：
 
-- **M1 可玩闭环**：战斗交互（选中/移动/攻击/技能/回合/胜负）、行动规则（单回合移动一次+攻击一次）、Buff 回合 tick。
-- **M2 双战场**：左右 4×3 + gap 2，跨战场攻击按逻辑列差忽略 Y 轴。
-- **M3 完整流程**：主菜单 → 选关 → 部署 → 战斗 → 结算（全部鼠标可点，GameSession 传递状态）。
-- **M4 成长/装备**：属性/技能/装备三子页 + 右侧整体属性总览 + 战斗内单位信息面板 + 胜利奖励经验（+100/存活单位）写回 roster。
-- **多关卡**：`battle_01`（草原 2v3）、`battle_02`（森林 2v4），选关自动扫描。
-- **素材**：像素小人贴图（hero/knight/goblin/orc）、霞鹜文楷中文字体、GDScript 像素小人生成器（逐像素对齐原版）。
+- **M1-M4（重构期，2026-08-08）**：可玩闭环、双战场、完整流程（主菜单→选关→部署→战斗→结算）、成长/装备、多关卡、像素素材、mod 系统。
+- **自走棋核心**：时间驱动独立回合（每单位 `turn_interval`）、自动攻击/移动（1 移动力）、胜负判定。
+- **战场规格**：单战场 12×6，曼哈顿距离射程，格子随视口自适应放大，单位动作图填满格子。
+- **技能触发系统**：14 个触发时机（battle_start/turn_start/attack_start/attack/attack_end/hit/be_attacked/taken_damage/kill/death/ally_death/turn_end/round_start/passive）+ 条件/冷却/目标解析。
+- **效果类型库（19 类）**：damage/heal/revive/dispel/summon/mark/teleport（位移家族）/percentage_damage/chain_damage/buff/dot/shield/stat_mod/taunt/immunity/reflect/protect/ignore/lifesteal。
+- **技能本地化**：全部技能/Buff/装备中文名（参照棕色尘埃效果类别）。
+- **素材**：hero 四等分动作图（站立/移动/攻击/死亡）、中文字体、像素小人生成器。
+- **mod 系统**：目录扫描加载 + 角色素材约定目录（详见 docs/MOD_GUIDE.md）。
 
-> 已取消：i18n（仅中文版）。
+> 已取消：i18n（仅中文版）。文档见 `docs/skills/SKILL_SYSTEM.md`（含触发时机/效果实现状态与待办）。
 
 ## 7. 给新对话的恢复步骤
 
@@ -176,6 +183,15 @@ Test-Path 'D:\Shana Program\文档\TBS_Game_Godot\project.godot'
 ```
 
 确认无报错后，项目状态见第 6 节；后续开发按新需求进行。
+
+自走棋功能验证要点（GUI 手动）：
+
+1. 主菜单 → 选关 → 部署 → 战斗，双方单位按各自 `turn_interval` 自动行动。
+2. 观察动作图切换（站立/移动/攻击）、日志技能触发、中文技能名。
+3. 胜负判定后自动进入结算（胜利发放经验）。
+4. 点击单位查看信息面板（含技能/Buff/装备）。
+
+技能/效果设计规范见 `docs/skills/SKILL_SYSTEM.md`；mod 角色制作见 `docs/MOD_GUIDE.md`。
 
 > 注意：项目现位于 `D:\Shana Program\文档\TBS_Game_Godot`（已克隆自 `shana0325/TBS_Game_Godot`）。
 
