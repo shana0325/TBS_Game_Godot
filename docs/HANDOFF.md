@@ -22,7 +22,7 @@
 
 ```text
 Godot Engine v4.7.1
-GameDatabase loaded: units=4 skills=12 buffs=10 equipments=5
+GameDatabase loaded: units=4 skills=12 buffs=10 equipments=5 relics=5
 ```
 
 ## 2. 如何运行
@@ -44,6 +44,14 @@ res://scenes/main.tscn
 ```powershell
 & 'D:\Shana Program\Godot\Godot_v4.7.1-stable_win64_console.exe' --headless --path 'D:\Shana Program\文档\TBS_Game_Godot' --quit
 ```
+
+### 网页版（GitHub Pages）
+
+- 在线地址：<https://shana0325.github.io/TBS_Game_Godot/>
+- 发布方式：一键脚本 `tools/deploy_web.ps1`（无头导出 Web 构建 → 独立 worktree 整体重建 gh-pages 分支并强推 → 清理；主分支工作区不受影响）。
+- 每次想更新网页版：改完 main 后直接重跑该脚本即可，无需手动管理分支。
+- 约束：Web 导出预设 `export_presets.cfg` 必须保持 `variant/thread_support=false`（GitHub Pages 无法设置 COOP/COEP 头，线程版会因 SharedArrayBuffer 不可用而无法启动）；Pages 源分支为 gh-pages 根目录。
+- 进度保存：编成数据写 `user://`（网页上自动落到浏览器 IndexedDB），首次运行由内建 JSON 播种（`GameDatabase._sync_user_roster`）。
 
 ## 3. 当前架构
 
@@ -73,6 +81,7 @@ data/unit/units.json                 # 单位模板（含 innate_skill 固有技
 data/skill/skills.json               # 技能与 effect 列表（common=true 通用技能；无标记为固有/专用）
 data/buff/buffs.json                 # Buff 配置
 data/equipment/equipments.json       # 装备配置
+data/relic/relics.json               # 遗物配置（爬塔局内成长）
 data/player/player_roster.json       # 玩家编成、成长、技能、装备、permanent_mods 永久强化
 ```
 
@@ -179,6 +188,18 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 - 复杂技能：继承 `CodeSkill` 覆写钩子，并在 `skill_code_registry.gd` 集中注册一行（id + 脚本路径）。
 - GameDatabase 启动时把代码技能并入全局技能表，战斗/编成/信息面板统一可见。
 - 新增 `class_name` 后需运行一次 `--import` 刷新全局类缓存。
+
+### 爬塔模式（阶段一，2026-08-11 新增）
+
+设计方向见 `docs/爬塔模式设计方向.md`；本阶段为最小闭环：
+
+- **入口**：主菜单新增"爬塔模式"（与快速对战并存）；沿用当前编成自动部署。
+- **会话**：`GameSession` 新增 `mode / tower_floor / run_relics / run_blessings` 与 `scenario_override`（运行时覆盖关卡字典）。
+- **层生成**：`TowerGenerator` 按层生成敌人（普通/精英(每3层)/Boss(每5层)，类型 Goblin→Orc 进阶，敌人按层配技能成长）。
+- **奖励**：胜利进入 `reward_screen` 三选一（通用技能/装备/祝福/遗物，`RewardGenerator` 生成与应用）；技能/装备奖励写回编成。
+- **遗物系统**：`data/relic/relics.json` 首期 5 个（战神徽章/急速披风/鲜血吊坠/不灭徽记/荆棘之心）；`RelicSystem` 战斗开始应用（stat_percent / turn_speed / 永久反射 Buff），事件钩子 on_kill 回血、on_first_death 复活（每场一次）。Unit 新增 `percent_mods`（百分比属性）、Buff 新增 `permanent` 标记（不衰减）。
+
+已知边界：不灭徽记复活仅挂"攻击致死"路径（DOT/技能间接致死暂不触发）；商店/事件/31+ 无限层未做。
 
 > 已取消：i18n（仅中文版）。文档见 `docs/skills/SKILL_SYSTEM.md`（含触发时机/效果实现状态与待办）。
 

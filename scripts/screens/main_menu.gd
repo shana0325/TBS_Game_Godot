@@ -1,4 +1,4 @@
-# 主菜单：显示数据加载结果，提供开始游戏（进入选关）、队伍编成与退出入口。
+# 主菜单：显示数据加载结果，提供开始游戏（进入选关/模式选择）、队伍编成与退出入口。
 extends Control
 
 @onready var status_label: Label = $StatusLabel

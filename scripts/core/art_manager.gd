@@ -28,18 +28,25 @@ func _find_sprite_path(unit_type: String, action: String) -> String:
 	for root in ["res://mods", "user://mods"]:
 		for mod_dir in _list_subdirs(root):
 			var path: String = str(mod_dir) + "/art/units/%s/%s.png" % [unit_type, action]
-			if FileAccess.file_exists(path):
+			if _res_exists(path):
 				return path
 	# 2. 内置动作目录 assets/units/<Type>/<action>.png
 	var action_dir := BUILTIN_DIR + unit_type + "/" + action + ".png"
-	if FileAccess.file_exists(action_dir):
+	if _res_exists(action_dir):
 		return action_dir
 	# 3. 内置单文件回退（仅站立）
 	if action == "stand":
 		var single := BUILTIN_DIR + unit_type.to_lower() + ".png"
-		if FileAccess.file_exists(single):
+		if _res_exists(single):
 			return single
 	return ""
+
+# 资源存在性检查：优先 ResourceLoader（兼容导出包内的导入资源重映射，
+# 如网页版/PCK 中源贴图以 remap 形式存在、FileAccess 看不到），回退 FileAccess。
+func _res_exists(path: String) -> bool:
+	if ResourceLoader.exists(path):
+		return true
+	return FileAccess.file_exists(path)
 
 func _list_subdirs(root: String) -> Array:
 	var result: Array = []

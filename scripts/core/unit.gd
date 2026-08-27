@@ -20,6 +20,7 @@ var turn_interval: float = 4.0
 var turn_timer: float = 0.0
 var allocated_stats: Dictionary = {}
 var permanent_mods: Dictionary = {}
+var percent_mods: Dictionary = {}
 var skills: Array = []
 var buffs: Array = []
 var equipment: Dictionary = {}
@@ -68,6 +69,9 @@ func get_stat(stat: String) -> int:
 		value += int(equip.modifiers.get(stat, 0))
 	for buff in buffs:
 		value += buff.get_stat_modifier(stat)
+	var percent := float(percent_mods.get(stat, 0.0))
+	if percent > 0.0:
+		value += roundi(value * percent)
 	return value
 
 func get_attack() -> int:

@@ -11,13 +11,16 @@ var event_system: EventSystem
 var combat_system: CombatSystem
 var game = null
 var scenario_id: String = ""
+var scenario_override: Dictionary = {}
 var deployed_units: Array = []
 var winner: String = ""
+var relic_revive_used: bool = false
 
-func _init(p_scenario_id: String = "battle_01", p_game = null, p_deployed_units: Array = []) -> void:
+func _init(p_scenario_id: String = "battle_01", p_game = null, p_deployed_units: Array = [], p_scenario_override: Dictionary = {}) -> void:
 	scenario_id = p_scenario_id
 	game = p_game
 	deployed_units = p_deployed_units
+	scenario_override = p_scenario_override
 
 func setup() -> void:
 	var scenario := _load_scenario()
@@ -29,6 +32,9 @@ func setup() -> void:
 	combat_system = CombatSystem.new(game, event_system, grid)
 
 func _load_scenario() -> Dictionary:
+	# 优先使用运行时覆盖的场景（爬塔分层生成），否则读关卡文件
+	if not scenario_override.is_empty():
+		return scenario_override
 	var path := "res://data/scenario/%s.json" % scenario_id
 	if not FileAccess.file_exists(path):
 		push_error("缺少关卡文件: %s" % path)
@@ -82,7 +88,9 @@ func _spawn_enemy_units(scenario: Dictionary) -> void:
 		if config.is_empty():
 			continue
 		var pos := Vector2i(int(entry.pos[0]), int(entry.pos[1]))
-		units.append(Unit.create_from_config(unit_type, TurnManager.ENEMY_CAMP, pos, config))
+		# 敌人技能走"装备技能"通道（塔层生成器按层配技能）
+		var roster_data: Dictionary = {"equipped_skills": entry.get("skills", [])}
+		units.append(Unit.create_from_config(unit_type, TurnManager.ENEMY_CAMP, pos, config, roster_data))
 
 func get_unit_at(cell: Vector2i) -> Unit:
 	for unit in units:
@@ -174,11 +182,15 @@ func perform_attack(attacker: Unit, defender: Unit) -> void:
 	# 击杀/死亡触发
 	if not defender.alive:
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_KILL, {"actor": attacker, "user": attacker, "target": defender})
+		# 遗物触发：击杀回血（鲜血吊坠）
+		RelicSystem.on_kill(self, attacker, game)
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_DEATH, {"actor": defender, "user": defender, "target": attacker})
 		# 队友死亡触发（复活类技能）：给死亡单位的同阵营存活单位触发
 		for ally in units:
 			if ally is Unit and ally.alive and ally.camp == defender.camp and ally != defender:
 				SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ALLY_DEATH, {"actor": ally, "user": ally, "target": defender})
+		# 遗物触发：首次死亡复活（不灭徽记）
+		RelicSystem.on_death(self, defender, game)
 	# 攻击后触发（附带技能伤害阶段）
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_END, {"actor": attacker, "user": attacker, "target": defender})
 	_check_winner()
@@ -265,8 +277,10 @@ func _find_empty_adjacent(near_pos: Vector2i) -> Vector2i:
 					return cell
 	return Vector2i(-1, -1)
 
-# 初始化战斗：启动每个单位的独立行动计时器，并触发战斗开始/回合开始技能。
+# 初始化战斗：应用遗物/祝福效果，启动每个单位的独立行动计时器，并触发战斗开始技能。
 func setup_battle() -> void:
+	# 爬塔局内成长（遗物/祝福）先应用到玩家单位
+	RelicSystem.apply_run_bonuses(self)
 	if turn_manager != null:
 		turn_manager.setup()
 	# on_battle_start：所有单位各触发一次

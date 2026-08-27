@@ -42,5 +42,6 @@ func reset_acted() -> void:
 			unit.acted = false
 			unit.moved = false
 
+# 顶部标签：自走棋为时间驱动，无"回合"概念，仅显示战斗用时。
 func get_turn_label() -> String:
-	return "时间 %.1fs  回合 %d" % [battle_time, turn_number]
+	return "战斗时间 %.1fs" % battle_time

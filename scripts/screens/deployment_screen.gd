@@ -1,4 +1,4 @@
-﻿# 部署屏幕：展示关卡地图与部署区，点击编成槽位后在部署区内放置单位，全部就绪后可开始战斗。
+# 部署屏幕：展示关卡地图与部署区，点击编成槽位后在部署区内放置单位，全部就绪后可开始战斗。
 extends Control
 
 var tile_size: int = 64
@@ -32,6 +32,9 @@ func _ready() -> void:
 	mod_unit_types = _collect_mod_unit_types()
 	_build_selectable_units()
 	_build_ui(scenario)
+	_prefill_placements()
+	_refresh_units()
+	_refresh_state()
 
 # 收集所有可用单位类型：player_roster 的 type + mod 添加的单位 type（去重）。
 func _collect_mod_unit_types() -> Array:
@@ -60,6 +63,9 @@ func _build_selectable_units() -> void:
 		})
 
 func _load_scenario() -> Dictionary:
+	# 爬塔（或运行时覆盖）场景优先
+	if not GameSession.scenario_override.is_empty():
+		return GameSession.scenario_override
 	var path := "res://data/scenario/%s.json" % scenario_id
 	if not FileAccess.file_exists(path):
 		return {}
@@ -70,6 +76,25 @@ func _load_scenario() -> Dictionary:
 	if typeof(parsed) == TYPE_DICTIONARY:
 		return parsed
 	return {}
+
+# 爬塔：预填上一层的出战单位（未调整过部署时即默认编成放置）。
+func _prefill_placements() -> void:
+	if GameSession.mode != GameSession.MODE_TOWER or GameSession.tower_deployed.is_empty():
+		return
+	for entry in GameSession.tower_deployed:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var pos: Vector2i = entry.get("pos", Vector2i(-1, -1))
+		if pos.x < 0:
+			continue
+		var ridx := int(entry.get("roster_index", -1))
+		for i in selectable_units.size():
+			if int(selectable_units[i].get("roster_index", -1)) == ridx \
+					and str(selectable_units[i].get("type", "")) == str(entry.get("type", "")):
+				if not placements.has(i) and deployment_zone.has(pos):
+					placements[i] = pos
+					cell_to_slot[pos] = i
+				break
 
 func _parse_cells(raw: Array) -> Array:
 	var result: Array = []
@@ -89,6 +114,14 @@ func _build_ui(scenario: Dictionary) -> void:
 	back_btn.position = Vector2(20, 60)
 	back_btn.pressed.connect(_go_back)
 	add_child(back_btn)
+
+	if GameSession.mode == GameSession.MODE_TOWER:
+		var hint := Label.new()
+		hint.text = "爬塔：胜利选完奖励会回到部署，可调整后继续（或返回选关挑战其他模式）"
+		hint.add_theme_font_size_override("font_size", 15)
+		hint.position = Vector2(20, 630)
+		hint.custom_minimum_size = Vector2(900, 30)
+		add_child(hint)
 
 	# 战场视图：居中放置（底部留出编成面板空间）
 	grid_view = Node2D.new()
@@ -249,7 +282,10 @@ func _on_start_pressed() -> void:
 			"roster_index": int(selectable_units[slot].get("roster_index", -1)),
 			"pos": placements[slot]
 		})
-	GameSession.set_deployed_units(deployed)
+	if GameSession.mode == GameSession.MODE_TOWER:
+		GameSession.start_tower_battle(deployed)
+	else:
+		GameSession.set_deployed_units(deployed)
 	get_tree().change_scene_to_file("res://scenes/battle_screen.tscn")
 
 func _go_back() -> void:

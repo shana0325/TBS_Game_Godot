@@ -1,10 +1,15 @@
-# 数据加载入口：统一加载 units / skills / buffs / equipments / player_roster。
+# 数据加载入口：统一加载 units / skills / buffs / equipments / relics / player_roster。
 extends Node
+
+# 编成进度保存路径（user://）：桌面与网页通用。
+# 网页版 res:// 只读，进度必须写到 user://（浏览器映射为 IndexedDB）。
+const ROSTER_SAVE_PATH := "user://player_roster.json"
 
 var units: Dictionary = {}
 var skills: Dictionary = {}
 var buffs: Dictionary = {}
 var equipments: Dictionary = {}
+var relics: Dictionary = {}
 var player_roster: Dictionary = {}
 
 const DATA_PATHS := {
@@ -12,6 +17,7 @@ const DATA_PATHS := {
 	"skills": "res://data/skill/skills.json",
 	"buffs": "res://data/buff/buffs.json",
 	"equipments": "res://data/equipment/equipments.json",
+	"relics": "res://data/relic/relics.json",
 	"player_roster": "res://data/player/player_roster.json",
 }
 
@@ -20,11 +26,24 @@ func _ready() -> void:
 	skills = _load_json(DATA_PATHS.skills)
 	buffs = _load_json(DATA_PATHS.buffs)
 	equipments = _load_json(DATA_PATHS.equipments)
+	relics = _load_json(DATA_PATHS.relics)
 	player_roster = _load_json(DATA_PATHS.player_roster)
 	_merge_code_skills()
-	print("GameDatabase loaded: units=%d skills=%d buffs=%d equipments=%d" % [
-		units.size(), skills.size(), buffs.size(), equipments.size()
+	_sync_user_roster()
+	print("GameDatabase loaded: units=%d skills=%d buffs=%d equipments=%d relics=%d" % [
+		units.size(), skills.size(), buffs.size(), equipments.size(), relics.size()
 	])
+
+# 编成进度优先读取 user://；首次运行时把内置编成种子写入 user:// 供后续保存。
+func _sync_user_roster() -> void:
+	if FileAccess.file_exists(ROSTER_SAVE_PATH):
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string(ROSTER_SAVE_PATH))
+		if typeof(parsed) == TYPE_DICTIONARY:
+			player_roster = parsed
+			return
+	var file := FileAccess.open(ROSTER_SAVE_PATH, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(player_roster, "\t"))
 
 # 合并代码技能（技能代码轨）：把注册文件中的技能并入全局技能表，
 # 战斗与界面统一通过 get_skill 访问，与 JSON 技能无差别。
@@ -68,6 +87,9 @@ func get_buff(buff_id: String) -> Dictionary:
 
 func get_equipment(equipment_id: String) -> Dictionary:
 	return equipments.get(equipment_id, {})
+
+func get_relic(relic_id: String) -> Dictionary:
+	return relics.get(relic_id, {})
 
 func get_player_units() -> Array:
 	return player_roster.get("units", [])

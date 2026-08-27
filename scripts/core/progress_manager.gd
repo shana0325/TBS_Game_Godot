@@ -3,7 +3,7 @@
 class_name ProgressManager
 extends RefCounted
 
-const ROSTER_PATH := "res://data/player/player_roster.json"
+const ROSTER_PATH := "user://player_roster.json"
 const VALID_SLOTS := ["weapon", "offhand", "accessory"]
 const POINTABLE_STATS := ["attack", "defense", "move", "hp"]
 
@@ -66,6 +66,18 @@ static func unequip_skill(unit: Dictionary, skill_id: String) -> bool:
 	if not equipped.has(skill_id):
 		return false
 	equipped.erase(skill_id)
+	return true
+
+# 免费获得技能（爬塔奖励用）：不消耗技能点，直接学习并装备。
+static func grant_skill_free(unit: Dictionary, skill_id: String) -> bool:
+	if skill_id.strip_edges().is_empty():
+		return false
+	var learned := _list(unit, "learned_skills")
+	if not learned.has(skill_id):
+		learned.append(skill_id)
+	var equipped := _list(unit, "equipped_skills")
+	if not equipped.has(skill_id):
+		equipped.append(skill_id)
 	return true
 
 # 将装备放入指定槽位（校验槽位匹配），返回是否成功。

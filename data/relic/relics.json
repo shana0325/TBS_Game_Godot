@@ -1,0 +1,42 @@
+{
+  "war_badge": {
+    "name": "战神徽章",
+    "desc": "全体攻击 +15%",
+    "rarity": 1,
+    "effects": [
+      { "type": "stat_percent", "stat": "attack", "percent": 0.15 }
+    ]
+  },
+  "swift_cloak": {
+    "name": "急速披风",
+    "desc": "全体行动速度 +10%",
+    "rarity": 1,
+    "effects": [
+      { "type": "turn_speed", "percent": 0.10 }
+    ]
+  },
+  "blood_pendant": {
+    "name": "鲜血吊坠",
+    "desc": "击杀敌人时恢复 10% 生命",
+    "rarity": 2,
+    "triggers": [
+      { "event": "on_kill", "heal_percent": 0.10 }
+    ]
+  },
+  "undying_emblem": {
+    "name": "不灭徽记",
+    "desc": "首次死亡后复活一次（满血）",
+    "rarity": 2,
+    "triggers": [
+      { "event": "on_first_death", "revive": true }
+    ]
+  },
+  "thorn_heart": {
+    "name": "荆棘之心",
+    "desc": "受到伤害时反射 30%（反射比例可叠加）",
+    "rarity": 1,
+    "effects": [
+      { "type": "reflect", "percent": 0.30 }
+    ]
+  }
+}

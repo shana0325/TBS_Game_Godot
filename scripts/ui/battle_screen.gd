@@ -21,7 +21,7 @@ var info_label: Label
 var info_portrait: TextureRect
 
 func _ready() -> void:
-	manager = BattleManager.new(GameSession.current_scenario, self, GameSession.deployed_units)
+	manager = BattleManager.new(GameSession.current_scenario, self, GameSession.deployed_units, GameSession.scenario_override)
 	manager.setup()
 	manager.setup_battle()
 	tile_size = BattleLayout.compute_tile_size(manager.grid.width, manager.grid.height, get_viewport_rect().size)
@@ -31,6 +31,8 @@ func _ready() -> void:
 		_create_unit_view(unit)
 	_build_info_panel()
 	_update_turn_label()
+	if GameSession.mode == GameSession.MODE_TOWER:
+		add_log("＝%s＝" % GameSession.get_floor_label())
 	add_log("战斗开始！地图 %dx%d，我方 %d 单位，敌方 %d 单位" % [
 		manager.grid.width, manager.grid.height,
 		_count_alive(TurnManager.PLAYER_CAMP), _count_alive(TurnManager.ENEMY_CAMP)
@@ -272,11 +274,19 @@ func _check_battle_end() -> void:
 	if manager.winner == TurnManager.PLAYER_CAMP:
 		_apply_victory_rewards()
 	GameSession.record_result(manager.winner)
+	var is_tower_win: bool = GameSession.mode == GameSession.MODE_TOWER and manager.winner == TurnManager.PLAYER_CAMP
+	if GameSession.mode == GameSession.MODE_TOWER and not is_tower_win:
+		# 塔模式失败：结束本局
+		GameSession.end_tower_run()
 	victory_label.visible = true
-	victory_label.text = "胜利！" if manager.winner == TurnManager.PLAYER_CAMP else "失败…"
+	victory_label.text = ("%s 通关！" % GameSession.get_floor_label()) if is_tower_win \
+		else ("胜利！" if manager.winner == TurnManager.PLAYER_CAMP else "失败…")
 	add_log(victory_label.text)
 	await get_tree().create_timer(1.5).timeout
-	get_tree().change_scene_to_file("res://scenes/result_screen.tscn")
+	if is_tower_win:
+		get_tree().change_scene_to_file("res://scenes/reward_screen.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/result_screen.tscn")
 
 # 胜利后发放经验并写回 roster，记录经验/升级到日志与结算摘要。
 func _apply_victory_rewards() -> void:
@@ -291,4 +301,7 @@ func _apply_victory_rewards() -> void:
 func _update_turn_label() -> void:
 	if manager == null or manager.turn_manager == null:
 		return
-	turn_label.text = manager.turn_manager.get_turn_label()
+	var text: String = manager.turn_manager.get_turn_label()
+	if GameSession.mode == GameSession.MODE_TOWER:
+		text += " ｜ %s" % GameSession.get_floor_label()
+	turn_label.text = text

@@ -4,3 +4,6 @@
 # 临时文件
 *.tmp
 *.log
+
+# Web 导出构建产物（仅进入 gh-pages 分支）
+web_build/

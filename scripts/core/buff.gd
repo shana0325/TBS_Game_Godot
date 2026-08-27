@@ -19,6 +19,7 @@ var reflect_percent: float = 0.0
 var reduce_percent: float = 0.0
 var ignore_defense: bool = false
 var is_mark: bool = false
+var permanent: bool = false
 var raw_data: Dictionary = {}
 
 static func from_data(data: Dictionary) -> Buff:
@@ -40,6 +41,7 @@ static func from_data(data: Dictionary) -> Buff:
 	buff.reduce_percent = float(data.get("reduce_percent", 0.0))
 	buff.ignore_defense = bool(data.get("ignore_defense", false))
 	buff.is_mark = bool(data.get("is_mark", false))
+	buff.permanent = bool(data.get("permanent", false))
 	buff.raw_data = data
 	return buff
 
@@ -53,7 +55,8 @@ func on_turn_start(unit, game) -> void:
 func on_turn_end(unit, game) -> void:
 	if tick_phase == "turn_end":
 		_apply_tick(unit, game)
-	duration -= 1
+	if not permanent:
+		duration -= 1
 
 func on_trigger(unit, event, game) -> void:
 	# 触发型 Buff 的统一入口，当前先支持吸血示例。
@@ -66,6 +69,8 @@ func on_trigger(unit, event, game) -> void:
 				game.add_log("%s 通过 %s 恢复 %d 点生命" % [unit.get_display_name(), name, heal])
 
 func is_expired() -> bool:
+	if permanent:
+		return false
 	return duration <= 0
 
 func _apply_tick(unit, game) -> void:
