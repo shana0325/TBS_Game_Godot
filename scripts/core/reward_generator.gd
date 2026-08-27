@@ -9,7 +9,10 @@ const BLESSINGS := [
 	{"name": "急速祝福", "desc": "全体行动速度 +8%", "effects": [{"type": "turn_speed", "percent": 0.08}]},
 ]
 
-# 生成 3 个互不重复的选项。
+# 奖励选项数量：布局支持横向滚动，未来可直接改为 4 或 5。
+const REWARD_OPTION_COUNT := 3
+
+	# 生成指定数量的互不重复选项。
 static func generate_options() -> Array:
 	var candidates: Array = []
 	# 通用技能（队伍尚未拥有）
@@ -39,7 +42,7 @@ static func generate_options() -> Array:
 		candidates.append({"type": "relic", "id": relic_id,
 			"label": str(data.get("name", relic_id)), "desc": str(data.get("desc", "遗物"))})
 	candidates.shuffle()
-	return candidates.slice(0, 3)
+	return candidates.slice(0, REWARD_OPTION_COUNT)
 
 # 应用选中的奖励。
 static func apply_option(option: Dictionary) -> void:

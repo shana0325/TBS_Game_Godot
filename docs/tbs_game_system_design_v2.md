@@ -86,6 +86,7 @@ docs/       设计/交接/技能规范/mod 指南
 
 ### 5.5 伤害与减伤
 - 基础伤害按攻防差结算（下限 1），技能按 `power` 倍率；
+- 暴击：攻击/技能独立判定，暴击率 `crit_rate`、暴击伤害 `crit_damage`（默认 5%/150%，Orc 10%/160%），在减伤后应用倍率，日志标注"暴击！"；
 - 支持：无视防御（ignore/ignore_defense）、减伤（protect/reduce_percent）、护盾吸收（shield）、反射（reflect_percent）。
 
 ### 5.6 胜负
@@ -196,7 +197,6 @@ docs/       设计/交接/技能规范/mod 指南
 ## 12. 待办与演进方向
 
 - AOE 范围形状（cross/line/around/square）目标解析未落地
-- 暴击系统（crit_rate / crit_damage）
 - 更多触发条件（round / range / is_boss）与更丰富目标类型（random_enemy / area）
 - 更多真实技能组合与角色固有技能设计
 - 效果注册表驱动化（替换 match 分发）

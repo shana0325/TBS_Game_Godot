@@ -27,7 +27,7 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 			"damage":
 				report["damage"] += _apply_damage(user, target, effect, game)
 			"heal":
-				report["heal"] += _apply_heal(target, effect, game)
+				report["heal"] += _apply_heal(user, target, effect, game)
 			"buff":
 				var buff := _apply_buff(target, effect, game)
 				if buff != null:
@@ -81,19 +81,23 @@ static func _apply_damage(user: Unit, target: Unit, config: Dictionary, game) ->
 		return 0
 	var power := float(config.get("power", 1.0))
 	var terrain_bonus := int(config.get("terrain_bonus", 0))
-	var damage := DamageCalculator.calculate_skill_damage(user, target, power, terrain_bonus)
-	target.take_damage(damage, game)
+	var calc := DamageCalculator.calculate_skill_damage(user, target, power, terrain_bonus)
+	var damage: int = calc.get("damage", 0)
+	var crit: bool = calc.get("crit", false)
+	var result := target.take_damage(damage, game)
+	user.damage_dealt += int(result.get("hp_lost", 0))
 	if game != null and game.has_method("add_log"):
-		game.add_log("%s 对 %s 造成 %d 点伤害" % [user.get_display_name(), target.get_display_name(), damage])
+		var prefix := "暴击！" if crit else ""
+		game.add_log("%s 对 %s%s 造成 %d 点伤害" % [user.get_display_name(), target.get_display_name(), prefix, damage])
 	return damage
 
-static func _apply_heal(target: Unit, config: Dictionary, game) -> int:
+static func _apply_heal(user: Unit, target: Unit, config: Dictionary, game) -> int:
 	if target == null or not target.alive:
 		return 0
 	var amount := int(config.get("amount", 0))
 	if amount <= 0:
 		amount = 0
-	var healed := target.heal(amount)
+	var healed := target.heal(amount, user)
 	if healed > 0 and game != null and game.has_method("add_log"):
 		game.add_log("%s 恢复 %d 点生命" % [target.get_display_name(), healed])
 	return healed
@@ -360,7 +364,9 @@ static func _apply_percentage_damage(user: Unit, target: Unit, config: Dictionar
 	var max_damage := int(config.get("max", 999999))
 	var damage := mini(roundi(target.max_hp * percent), max_damage)
 	damage = maxi(1, damage)
-	target.take_damage(damage, game)
+	var result := target.take_damage(damage, game)
+	if user != null:
+		user.damage_dealt += int(result.get("hp_lost", 0))
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 受到 %d 点百分比伤害" % [target.get_display_name(), damage])
 	return damage
@@ -381,11 +387,15 @@ static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, ga
 	for i in range(chain):
 		if current_target == null or not current_target.alive:
 			break
-		var damage := DamageCalculator.calculate_skill_damage(user, current_target, power, 0)
-		current_target.take_damage(damage, game)
+		var calc := DamageCalculator.calculate_skill_damage(user, current_target, power, 0)
+		var damage: int = calc.get("damage", 0)
+		var crit: bool = calc.get("crit", false)
+		var hop_result := current_target.take_damage(damage, game)
+		user.damage_dealt += int(hop_result.get("hp_lost", 0))
 		total += damage
 		if game != null and game.has_method("add_log"):
-			game.add_log("%s 连锁攻击 %s 造成 %d 点伤害" % [user.get_display_name(), current_target.get_display_name(), damage])
+			var prefix := "暴击！" if crit else ""
+			game.add_log("%s 连锁攻击 %s%s 造成 %d 点伤害" % [user.get_display_name(), current_target.get_display_name(), prefix, damage])
 		# 找下一个未被命中且最近的敌人
 		var next_unit: Unit = null
 		var best := 999999

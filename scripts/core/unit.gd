@@ -83,6 +83,12 @@ func get_defense() -> int:
 func get_move_points() -> int:
 	return get_stat("move")
 
+func get_crit_rate() -> int:
+	return get_stat("crit_rate")
+
+func get_crit_damage() -> int:
+	return get_stat("crit_damage")
+
 func get_range_min() -> int:
 	return int(config.get("range_min", 1))
 
@@ -97,6 +103,11 @@ func is_dead() -> bool:
 
 func move_to(new_pos: Vector2i) -> void:
 	pos = new_pos
+
+# --- 战斗统计（伤害输出/治疗产出/承伤，供战后统计界面） ---
+var damage_dealt: int = 0
+var healing_done: int = 0
+var damage_taken: int = 0
 
 func take_damage(amount: int, game = null) -> Dictionary:
 	var result := {
@@ -119,18 +130,24 @@ func take_damage(amount: int, game = null) -> Dictionary:
 	hp -= hp_lost
 	result["shield_absorbed"] = shield_absorbed
 	result["hp_lost"] = hp_lost
+	# 承伤统计：实际扣血 + 护盾吸收
+	damage_taken += hp_lost + shield_absorbed
 	if hp <= 0:
 		hp = 0
 		alive = false
 		result["lethal"] = true
 	return result
 
-func heal(amount: int) -> int:
+# 治疗：可指定来源（计入来源单位的治疗产出）；缺省按自疗计。
+func heal(amount: int, source: Unit = null) -> int:
 	if not alive or amount <= 0:
 		return 0
 	var old_hp := hp
 	hp = mini(max_hp, hp + amount)
-	return hp - old_hp
+	var healed := hp - old_hp
+	var heal_src := source if source != null else self
+	heal_src.healing_done += healed
+	return healed
 
 func add_buff(buff: Buff) -> void:
 	if buff != null:

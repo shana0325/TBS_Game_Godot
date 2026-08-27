@@ -85,6 +85,14 @@ func _build_top_bar() -> void:
 	back_btn.pressed.connect(_go_back)
 	add_child(back_btn)
 
+	var start_btn := Button.new()
+	start_btn.name = "StartGameButton"
+	start_btn.text = "保存并开始游戏"
+	start_btn.custom_minimum_size = Vector2(220, 44)
+	start_btn.position = Vector2(get_viewport_rect().size.x - 280.0, 70.0)
+	start_btn.pressed.connect(_start_game)
+	add_child(start_btn)
+
 	# 角色选择按钮（横向排列）
 	for i in roster.size():
 		var btn := Button.new()
@@ -163,6 +171,9 @@ func _refresh_overview(unit: Dictionary) -> void:
 	lines.append("攻击: %d   防御: %d   移动: %d" % [
 		int(total.get("attack", 0)), int(total.get("defense", 0)), int(total.get("move", 0))
 	])
+	lines.append("暴击率: %d%%   暴击伤害: %d%%" % [
+		int(total.get("crit_rate", 0)), int(total.get("crit_damage", 0))
+	])
 	lines.append("")
 	lines.append("装备:")
 	if equipment.size() == 0:
@@ -192,17 +203,20 @@ func _build_stats_tab(unit: Dictionary) -> void:
 	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
 	var perm_mods: Dictionary = unit.get("permanent_mods", {})
-	var labels := {"attack": "攻击", "defense": "防御", "move": "移动", "hp": "生命"}
-	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp"}
+	var labels := {"attack": "攻击", "defense": "防御", "move": "移动", "hp": "生命",
+		"crit_rate": "暴击率", "crit_damage": "暴击伤害"}
+	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp",
+		"crit_rate": "crit_rate", "crit_damage": "crit_damage"}
 	for stat in ProgressManager.POINTABLE_STATS:
 		var base := int(config.get(base_keys[stat], 0))
 		var alloc := int(allocated.get(stat, 0))
 		var equip := int(equip_mods.get(stat, 0))
 		var perm := int(perm_mods.get(stat, 0))
 		var total := base + alloc + equip + perm
+		var unit_text := "%d%%" % total if stat == "crit_rate" or stat == "crit_damage" else str(total)
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(340, 40)
-		btn.text = "%s: %d  (基础%d +加点%d +装备%d +永久%d)  [加点]" % [labels[stat], total, base, alloc, equip, perm]
+		btn.text = "%s: %s  (基础%d +加点%d +装备%d +永久%d)  [加点]" % [labels[stat], unit_text, base, alloc, equip, perm]
 		btn.pressed.connect(_on_add_stat.bind(stat))
 		content_panel.add_child(btn)
 
@@ -225,7 +239,8 @@ func _get_total_stats(unit: Dictionary) -> Dictionary:
 	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
 	var perm_mods: Dictionary = unit.get("permanent_mods", {})
-	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp"}
+	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp",
+		"crit_rate": "crit_rate", "crit_damage": "crit_damage"}
 	var result: Dictionary = {}
 	for stat in ProgressManager.POINTABLE_STATS:
 		result[stat] = int(config.get(base_keys[stat], 0)) \
@@ -521,3 +536,7 @@ func _on_unequip(slot: String) -> void:
 func _go_back() -> void:
 	ProgressManager.save_roster()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+func _start_game() -> void:
+	ProgressManager.save_roster()
+	get_tree().change_scene_to_file("res://scenes/level_select.tscn")

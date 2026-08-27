@@ -64,7 +64,7 @@ func on_trigger(unit, event, game) -> void:
 		var damage := int(event.data.get("damage", 0))
 		var heal := roundi(damage * heal_percent)
 		if heal > 0:
-			unit.heal(heal)
+			unit.heal(heal, unit)
 			if game != null and game.has_method("add_log"):
 				game.add_log("%s 通过 %s 恢复 %d 点生命" % [unit.get_display_name(), name, heal])
 
@@ -79,6 +79,6 @@ func _apply_tick(unit, game) -> void:
 		if game != null and game.has_method("add_log"):
 			game.add_log("%s 受到 %s 的 %d 点持续伤害" % [unit.get_display_name(), name, tick_damage])
 	if tick_heal > 0:
-		var healed: int = unit.heal(tick_heal)
+		var healed: int = unit.heal(tick_heal, unit)
 		if healed > 0 and game != null and game.has_method("add_log"):
 			game.add_log("%s 通过 %s 恢复 %d 点生命" % [unit.get_display_name(), name, healed])

@@ -158,17 +158,22 @@ func can_attack(attacker: Unit, defender: Unit) -> bool:
 	return attacker != null and defender != null and defender.alive and not attacker.acted \
 		and attacker.camp != defender.camp and combat_system.is_in_range(attacker, defender)
 
-func perform_attack(attacker: Unit, defender: Unit) -> void:
+# 执行一次攻击，返回 { "damage": int, "crit": bool }（供 UI 飙字等使用）。
+func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
+	var empty := {"damage": 0, "crit": false}
 	if not can_attack(attacker, defender):
-		return
+		return empty
 	# 攻击前触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_START, {"actor": attacker, "user": attacker, "target": defender})
-	var damage := combat_system.perform_attack(attacker, defender)
+	var result := combat_system.perform_attack(attacker, defender)
+	var damage: int = result.get("damage", 0)
+	var crit: bool = result.get("crit", false)
 	# 反射：防御方有反射 buff 时，把部分伤害反射回攻击者
 	if defender.alive and defender.get_reflect_percent() > 0.0 and damage > 0:
 		var reflect_damage := roundi(damage * defender.get_reflect_percent())
 		if reflect_damage > 0:
-			attacker.take_damage(reflect_damage, game)
+			var reflect_result := attacker.take_damage(reflect_damage, game)
+			defender.damage_dealt += int(reflect_result.get("hp_lost", 0))
 			if game != null and game.has_method("add_log"):
 				game.add_log("%s 反射 %d 点伤害给 %s" % [defender.get_display_name(), reflect_damage, attacker.get_display_name()])
 	# 攻击时触发
@@ -194,6 +199,7 @@ func perform_attack(attacker: Unit, defender: Unit) -> void:
 	# 攻击后触发（附带技能伤害阶段）
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_END, {"actor": attacker, "user": attacker, "target": defender})
 	_check_winner()
+	return result
 
 func is_damage_skill(skill: Skill) -> bool:
 	for effect in skill.effects:
@@ -317,7 +323,9 @@ func tick(delta: float) -> Array:
 				"action": acted.get("action", ""),
 				"target": acted.get("target", null),
 				"to": acted.get("to", null),
-				"from": prev_pos
+				"from": prev_pos,
+				"damage": acted.get("damage", 0),
+				"crit": acted.get("crit", false)
 			})
 		unit.tick_turn_end(game)
 		# 行动结束触发 + 冷却推进
@@ -342,8 +350,8 @@ func _auto_act(unit: Unit) -> Dictionary:
 	var targets := get_attack_targets(unit)
 	if targets.size() > 0:
 		var target: Unit = targets[0]
-		perform_attack(unit, target)
-		return {"action": "attack", "target": target}
+		var res := perform_attack(unit, target)
+		return {"action": "attack", "target": target, "damage": res.get("damage", 0), "crit": res.get("crit", false)}
 	# 无目标：移动（含嘲讽引导），移动后再次尝试攻击
 	var decision := EnemyAI.get_decision(self, unit)
 	if decision.action == "move":
@@ -353,8 +361,8 @@ func _auto_act(unit: Unit) -> Dictionary:
 		var new_targets := get_attack_targets(unit)
 		if new_targets.size() > 0:
 			var target2: Unit = new_targets[0]
-			perform_attack(unit, target2)
-			return {"action": "move_attack", "target": target2, "to": to}
+			var res2 := perform_attack(unit, target2)
+			return {"action": "move_attack", "target": target2, "to": to, "damage": res2.get("damage", 0), "crit": res2.get("crit", false)}
 		return {"action": "move", "to": to}
 	return {"action": "wait"}
 

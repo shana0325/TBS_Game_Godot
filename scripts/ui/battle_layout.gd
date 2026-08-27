@@ -3,7 +3,7 @@ class_name BattleLayout
 extends RefCounted
 
 # 计算格子边长（像素）。留出上下 HUD 空间。
-static func compute_tile_size(cols: int, rows: int, viewport: Vector2, margin: float = 0.82) -> int:
+static func compute_tile_size(cols: int, rows: int, viewport: Vector2, margin: float = 0.94) -> int:
 	if cols <= 0 or rows <= 0:
 		return 64
 	var avail_w := viewport.x * margin

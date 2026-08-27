@@ -55,7 +55,7 @@ static func on_kill(manager: BattleManager, killer: Unit, game) -> void:
 			if trigger is Dictionary and str(trigger.get("event", "")) == "on_kill":
 				var heal_percent := float(trigger.get("heal_percent", 0.0))
 				if heal_percent > 0.0:
-					var healed := killer.heal(roundi(killer.max_hp * heal_percent))
+					var healed := killer.heal(roundi(killer.max_hp * heal_percent), killer)
 					if healed > 0 and game != null and game.has_method("add_log"):
 						game.add_log("%s 通过遗物%s恢复 %d 点生命" % [killer.get_display_name(), str(relic.get("name", "")), healed])
 

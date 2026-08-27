@@ -10,6 +10,7 @@ var scenario_override: Dictionary = {}   # 非空时优先于关卡文件（爬�
 var deployed_units: Array = []
 var last_winner: String = ""
 var victory_rewards: Array = []
+var battle_stats: Array = []             # 本场战斗统计：[{name, camp, damage, heal, taken}]
 
 # --- 爬塔单局状态 ---
 var tower_floor: int = 0
@@ -26,6 +27,7 @@ func select_scenario(scenario_id: String) -> void:
 	deployed_units.clear()
 	last_winner = ""
 	victory_rewards = []
+	battle_stats = []
 
 # 开始爬塔：进入第 1 层（沿用当前编成的单位作为默认部署）。
 func start_tower() -> void:
@@ -39,6 +41,7 @@ func start_tower() -> void:
 	run_blessings.clear()
 	last_winner = ""
 	victory_rewards = []
+	battle_stats = []
 
 # 当前是否处于进行中的爬塔局。
 func tower_has_active_run() -> bool:
@@ -78,6 +81,7 @@ func end_tower_run() -> void:
 	run_blessings.clear()
 	last_winner = ""
 	victory_rewards = []
+	battle_stats = []
 
 func get_floor_label() -> String:
 	return "爬塔 第 %d 层" % tower_floor

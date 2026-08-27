@@ -5,7 +5,7 @@ extends RefCounted
 
 const ROSTER_PATH := "user://player_roster.json"
 const VALID_SLOTS := ["weapon", "offhand", "accessory"]
-const POINTABLE_STATS := ["attack", "defense", "move", "hp"]
+const POINTABLE_STATS := ["attack", "defense", "move", "hp", "crit_rate", "crit_damage"]
 
 static func required_exp_for_level(level: int) -> int:
 	return maxi(100, level * 100)

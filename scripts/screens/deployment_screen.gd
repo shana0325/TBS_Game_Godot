@@ -15,8 +15,11 @@ var selected_slot: int = -1
 
 var grid_view: Node2D
 var units_layer: Node2D
+var roster_panel: PanelContainer
+var hint_label: Label
 var roster_container: VBoxContainer
 var start_button: Button
+var remove_button: Button
 var state_label: Label
 var unit_views: Dictionary = {}
 var preview_player_units: Array = []
@@ -26,7 +29,9 @@ func _ready() -> void:
 	scenario_id = GameSession.current_scenario
 	var scenario := _load_scenario()
 	grid = Grid.new(int(scenario.get("width", 12)), int(scenario.get("height", 6)))
-	tile_size = BattleLayout.compute_tile_size(grid.width, grid.height, get_viewport_rect().size, 0.7)
+	# 部署阶段同样保证战场是主区域，右侧编成栏只作为辅助面板。
+	var initial_vp := get_viewport_rect().size
+	tile_size = BattleLayout.compute_tile_size(grid.width, grid.height, _board_available_size(initial_vp), 0.86)
 	deployment_zone = _parse_cells(scenario.get("deployment_zone", []))
 	roster_units = GameDatabase.player_roster.get("units", [])
 	mod_unit_types = _collect_mod_unit_types()
@@ -116,17 +121,16 @@ func _build_ui(scenario: Dictionary) -> void:
 	add_child(back_btn)
 
 	if GameSession.mode == GameSession.MODE_TOWER:
-		var hint := Label.new()
-		hint.text = "爬塔：胜利选完奖励会回到部署，可调整后继续（或返回选关挑战其他模式）"
-		hint.add_theme_font_size_override("font_size", 15)
-		hint.position = Vector2(20, 630)
-		hint.custom_minimum_size = Vector2(900, 30)
-		add_child(hint)
+		hint_label = Label.new()
+		hint_label.text = "爬塔：胜利选完奖励会回到部署，可调整后继续（或返回选关挑战其他模式）"
+		hint_label.add_theme_font_size_override("font_size", 15)
+		hint_label.custom_minimum_size = Vector2(900, 30)
+		add_child(hint_label)
 
-	# 战场视图：居中放置（底部留出编成面板空间）
+	# 战场视图：中央左侧放置，底部操作区和右侧编成栏不覆盖地图。
 	grid_view = Node2D.new()
 	var vp := get_viewport_rect().size
-	grid_view.position = BattleLayout.board_position(grid.width, grid.height, tile_size, Vector2(vp.x, vp.y - 140))
+	grid_view.position = _board_position(vp)
 	var gv := preload("res://scripts/ui/grid_view.gd").new()
 	grid_view.add_child(gv)
 	grid_view.get_child(0).setup(grid, tile_size)
@@ -147,7 +151,7 @@ func _build_ui(scenario: Dictionary) -> void:
 		_create_unit_view(unit)
 
 	# 右侧编成列表
-	var roster_panel := PanelContainer.new()
+	roster_panel = PanelContainer.new()
 	roster_panel.position = Vector2(vp.x - 230.0, 80.0)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
@@ -185,7 +189,50 @@ func _build_ui(scenario: Dictionary) -> void:
 	start_button.pressed.connect(_on_start_pressed)
 	add_child(start_button)
 
+	remove_button = Button.new()
+	remove_button.text = "撤回选中单位"
+	remove_button.custom_minimum_size = Vector2(220, 40)
+	remove_button.position = Vector2(20, 206)
+	remove_button.disabled = true
+	remove_button.pressed.connect(_on_remove_pressed)
+	add_child(remove_button)
+
 	_refresh_state()
+	_layout_ui()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and grid != null:
+		var vp := get_viewport_rect().size
+		tile_size = BattleLayout.compute_tile_size(grid.width, grid.height, _board_available_size(vp), 0.86)
+		grid_view.position = _board_position(vp)
+		grid_view.get_child(0).setup(grid, tile_size)
+		for child in units_layer.get_children():
+			if child is UnitView:
+				child.tile_size = tile_size
+				child.refresh()
+		_layout_ui()
+		_refresh_units()
+
+# 窗口尺寸变化时重排部署辅助控件，保证主战场和按钮都留在可视区域。
+func _layout_ui() -> void:
+	var vp := get_viewport_rect().size
+	if roster_panel != null:
+		roster_panel.position = Vector2(maxf(16.0, vp.x - 230.0), 80.0)
+	if state_label != null:
+		state_label.position = Vector2(20.0, vp.y - 124.0)
+	if start_button != null:
+		start_button.position = Vector2(20.0, vp.y - 76.0)
+	if remove_button != null:
+		remove_button.position = Vector2(260.0, vp.y - 76.0)
+	if hint_label != null:
+		hint_label.position = Vector2(20.0, vp.y - 34.0)
+
+# 为右侧编成栏和底部操作区预留空间，避免地图与文字互相覆盖。
+func _board_position(_vp: Vector2) -> Vector2:
+	return Vector2(24.0, 104.0)
+
+func _board_available_size(vp: Vector2) -> Vector2:
+	return Vector2(maxf(320.0, vp.x - 280.0), maxf(360.0, vp.y - 150.0))
 
 func _create_unit_view(unit: Unit) -> void:
 	var uv := preload("res://scripts/ui/unit_view.gd").new()
@@ -215,6 +262,15 @@ func _on_clicked(cell: Vector2i) -> void:
 
 func _on_slot_clicked(index: int) -> void:
 	selected_slot = index
+	_refresh_state()
+
+func _on_remove_pressed() -> void:
+	if selected_slot < 0 or not placements.has(selected_slot):
+		return
+	var old_cell: Vector2i = placements[selected_slot]
+	placements.erase(selected_slot)
+	cell_to_slot.erase(old_cell)
+	_refresh_units()
 	_refresh_state()
 
 func _place_slot(slot: int, cell: Vector2i) -> void:
@@ -273,6 +329,7 @@ func _refresh_state() -> void:
 	else:
 		state_label.text = "已部署 %d 个  请将单位放入蓝色区域（可反复点击调整位置）" % placed
 	start_button.disabled = placed == 0
+	remove_button.disabled = selected_slot < 0 or not placements.has(selected_slot)
 
 func _on_start_pressed() -> void:
 	var deployed: Array = []

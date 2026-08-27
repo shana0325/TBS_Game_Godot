@@ -199,11 +199,11 @@ B 受击后 ── on_be_attacked（受到攻击后触发）→ 用于反击/免
 | `flat` | 固定伤害（可选，替代 power 计算） |
 | `can_crit` | 是否可暴击（默认 true；特殊技能可禁用） |
 
-**暴击规则（必定命中，暂不考虑闪避/命中率）**
-- 每次攻击/技能伤害独立判定暴击。
-- 暴击率来自攻击者属性 `crit_rate`（默认 0），暴击伤害倍率来自 `crit_damage`（默认 1.5 倍）。
-- 暴击时：`最终伤害 = 基础伤害 × crit_damage`。
-- 全局统一，不需要在技能 JSON 中配置（可通过 Unit 属性/Buff 调整）。
+**暴击规则（已实现）**
+- 每次攻击/技能伤害独立判定暴击（必定命中，暂不考虑闪避/命中率）。
+- 暴击率来自攻击者属性 `crit_rate`（百分数，如 5 = 5%），暴击伤害倍率来自 `crit_damage`（百分数，150 = 1.5 倍）。
+- 暴击时：`最终伤害 = 基础伤害 × crit_damage 倍率`（在减伤之后、power 倍率之前应用）。
+- 通过 Unit 属性/Buff/装备/加点均可调整（`get_stat` 统一聚合）。默认：Hero/Knight/Goblin 5%/150%，Orc 10%/160%。
 
 **直接伤害（预留）**
 - `ignore_defense: true` 视为"直接伤害"，无视目标防御减伤；后续可扩展为独立伤害类型。
@@ -444,7 +444,6 @@ static func apply(context: EffectContext) -> Dictionary
 
 **尚未实现（按需补充）**：
 - ⬜ AOE 范围形状（`shape`：cross/line/around/square）——当前目标解析支持全体但范围形状未落地
-- ⬜ 暴击系统（`crit_rate`/`crit_damage`）
 - ⬜ `random_enemy`/`area` 目标类型
 - ⬜ 更多触发条件（`round`/`range`/`is_boss` 等）
 
@@ -456,7 +455,7 @@ static func apply(context: EffectContext) -> Dictionary
 - [x] 不做元素类型表，先纯物理伤害；已通过 `ignore_defense` 实现"直接伤害"雏形。
 - [x] 抵消附带伤害暂不实现（后续做复杂机制时再引入）。
 - [x] 需要暴击；不考虑命中率，必定命中。
-- [ ] 暴击率/暴击伤害默认值（建议 crit_rate 5%、crit_damage 150%，待定）。
+- [x] 暴击率/暴击伤害默认值（已定：Hero/Knight/Goblin 5%/150%，Orc 10%/160%；可加点/装备/Buff 调整）。
 - [ ] 位移在自走棋中是否受"移动点数"限制（当前位移无视移动力）。
 - [ ] AOE 范围形状（cross/line/around/square）是否实现。
 
