@@ -433,10 +433,11 @@ static func apply(context: EffectContext) -> Dictionary
 - ✅ 自动行动：攻击范围内有敌人则攻击，否则移动（1 移动力）再尝试攻击
 - ✅ 技能触发系统：`SkillTriggerSystem.dispatch(battle, trigger, context)`，支持 14 个触发时机
 - ✅ 技能结构：`trigger`/`condition`/`cooldown`/`priority`/`min_range`/`max_range`/`effects`
-- ✅ 效果类型（已实现 19 类）：
+- ✅ 效果类型（已实现 20 类）：
   - 即时：`damage`/`heal`/`revive`/`dispel`/`summon`/`mark`/`teleport`（位移家族）
   - 伤害变体：`percentage_damage`/`chain_damage`
   - 状态：`buff`/`dot`/`shield`/`stat_mod`/`taunt`/`immunity`/`reflect`/`protect`/`ignore`/`lifesteal`
+  - 永久成长：`permanent_stat`（永久属性强化，persist=true 全局永久写回编成 / false 仅本局永久）
 - ✅ 位移家族：`teleport`（mode self/target × dir target/away/self × distance，支持突脸/拉人/击退/闪现/后撤）
 - ✅ 目标系统：`self`/`target`/`enemy`/`ally`/`all_enemies`/`all_allies`（按射程/全体解析）
 - ✅ 条件系统：`hp_percent`/`has_buff`/`target_has_buff` 等基础条件
@@ -458,3 +459,34 @@ static func apply(context: EffectContext) -> Dictionary
 - [ ] 暴击率/暴击伤害默认值（建议 crit_rate 5%、crit_damage 150%，待定）。
 - [ ] 位移在自走棋中是否受"移动点数"限制（当前位移无视移动力）。
 - [ ] AOE 范围形状（cross/line/around/square）是否实现。
+
+---
+
+## 11. 双轨实现与固有/通用技能（2026-08-11）
+
+### 11.1 固有技能 / 通用技能
+
+- 单位模板 `units.json` 的 `innate_skill` 声明固有技能：模板独有、始终生效、不可更换；可为空（兼容）。
+- `skills.json` 中 `common: true` 标记通用技能：在队伍编成中花费技能点学习并装备后才参与战斗。
+- 修复：已学未装备的技能不再自动生效（只有已装备的通用技能 + 固有技能进入战斗）。
+- 示例：Hero 固有"以战养战"（on_kill 触发，permanent_stat 永久生命上限 +1，persist=true 写回编成）。
+
+### 11.2 代码技能双轨
+
+为覆盖 JSON 难以表达的复杂逻辑（任意条件、多段流程），技能分为两条轨道：
+
+| 轨道 | 方式 | 适用 |
+|---|---|---|
+| JSON 轨 | skills.json 组合效果积木 | 简单/组合型技能，mod 初学者 |
+| 代码轨 | 继承 `CodeSkill` 覆写钩子 | 复杂条件/流程逻辑，进阶作者 |
+
+实现：
+
+- `Skill` 基类三个可覆写钩子（默认实现 = 原有数据驱动逻辑，JSON 技能行为不变）：
+  - `check_condition(battle, context)`：触发条件（血量/护盾/任意自定义）
+  - `resolve_targets(battle, user, context)`：目标解析
+  - `execute(user, targets, game)`：效果执行（可直接调用 EffectSystem 效果库）
+- `CodeSkill`（scripts/battle/skills/code_skill.gd）：代码技能基类，元数据（名称/触发/冷却/射程/common）在 `_init` 中设置，`export_meta()` 供合并注册。
+- `skill_code_registry.gd`：集中注册文件，一行（技能 id + 脚本 res:// 路径）。
+- GameDatabase 启动时把代码技能并入全局技能表，战斗创建/编成界面/信息面板统一访问，与 JSON 技能无差别。
+- 代码技能与 JSON 技能共用同一条触发分发管线与效果函数库。

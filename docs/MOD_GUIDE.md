@@ -97,3 +97,20 @@ mods/
 `mods/example_mod/` 是一个完整的示例：包含 mod.json、SampleHero 单位、Power Strike 技能、idle 与 portrait 图片。复制它改成自己的即可。
 
 > 提示：新增图片后需让 Godot 重新导入（首次启动会自动导入）。
+
+## 8. 代码技能（进阶）
+
+普通技能用 JSON 组合效果积木即可（见第 4 节）。需要**自定义条件或复杂流程**的技能，可以用 GDScript 实现（技能双轨制）：
+
+1. 新建脚本继承 `CodeSkill`（基类：`res://scripts/battle/skills/code_skill.gd`），并按需覆写：
+   - `check_condition(battle, context)`：触发条件（缺省按 JSON `condition` 判断）
+   - `resolve_targets(battle, user, context)`：目标解析（缺省按 `target_type` 与射程）
+   - `execute(user, targets, game)`：效果执行（缺省把 `effects` 交给效果库；可直接调用 `EffectSystem.apply_effects`）
+2. 元数据（名称/描述/触发时机/冷却/射程/common 标记）在脚本 `_init` 中设置。
+3. 在集中注册文件 `scripts/battle/skills/skill_code_registry.gd` 的 `get_entries()` 里注册一行：
+   ```gdscript
+   "My Skill Name": "res://scripts/你脚本的路径.gd",
+   ```
+4. 脚本需声明 `class_name`；新增后运行一次 Godot `--import` 刷新全局类缓存（或启动游戏自动扫描导入）。
+
+代码技能与 JSON 技能统一并入技能表，编成界面、战斗触发、单位创建均自动生效。

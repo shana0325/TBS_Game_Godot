@@ -89,6 +89,20 @@ static func unequip_item(unit: Dictionary, slot: String) -> bool:
 	unit["equipment"] = equipment
 	return true
 
+# 给编成角色的永久强化累加 +amount 并写回 JSON（全局永久成长）。
+# stat 与单位字段一致（hp/attack/defense/move）。返回是否成功。
+static func add_permanent_stat(unit_id: String, stat: String, amount: int) -> bool:
+	if unit_id.strip_edges().is_empty() or amount == 0:
+		return false
+	for unit in GameDatabase.player_roster.get("units", []):
+		if str(unit.get("id", "")) != unit_id:
+			continue
+		var mods: Dictionary = unit.get("permanent_mods", {})
+		mods[stat] = int(mods.get(stat, 0)) + amount
+		unit["permanent_mods"] = mods
+		return save_roster()
+	return false
+
 # 将当前内存中的 player_roster 写回 JSON 文件。
 static func save_roster() -> bool:
 	var json_text := JSON.stringify(GameDatabase.player_roster, "\t")

@@ -19,6 +19,7 @@ var alive: bool = true
 var turn_interval: float = 4.0
 var turn_timer: float = 0.0
 var allocated_stats: Dictionary = {}
+var permanent_mods: Dictionary = {}
 var skills: Array = []
 var buffs: Array = []
 var equipment: Dictionary = {}
@@ -44,9 +45,10 @@ static func create_from_config(
 	unit.exp = int(roster_data.get("exp", 0))
 	unit.turn_interval = float(config_data.get("turn_interval", 4.0))
 	unit.allocated_stats = roster_data.get("allocated_stats", {})
+	unit.permanent_mods = roster_data.get("permanent_mods", {})
 	unit.learned_skill_names = roster_data.get("learned_skills", [])
 	unit.equipped_skill_names = roster_data.get("equipped_skills", [])
-	unit.max_hp = unit.get_base_stat("hp")
+	unit.max_hp = unit.get_base_stat("hp") + int(unit.permanent_mods.get("hp", 0))
 	unit.hp = unit.max_hp
 	unit._apply_equipment_data(roster_data.get("equipment", {}), game_db)
 	unit.apply_skills(game_db)
@@ -60,6 +62,7 @@ func get_base_stat(stat: String) -> int:
 
 func get_stat(stat: String) -> int:
 	var value := get_base_stat(stat)
+	value += int(permanent_mods.get(stat, 0))
 	for slot in equipment:
 		var equip: Equipment = equipment[slot]
 		value += int(equip.modifiers.get(stat, 0))
@@ -207,9 +210,13 @@ func apply_skills(game_db = null) -> void:
 	var db = game_db
 	if db == null:
 		db = GameDatabase
-	var skill_names: Array = config.get("skills", [])
+	var skill_names: Array = []
+	# 固有技能：模板独有，永远生效
+	var innate_id: String = str(config.get("innate_skill", ""))
+	if innate_id != "":
+		skill_names.append(innate_id)
+	# 通用技能：仅已装备的参与战斗（已学未装备的不生效）
 	skill_names.append_array(equipped_skill_names)
-	skill_names.append_array(learned_skill_names)
 	for slot in equipment:
 		var equip: Equipment = equipment[slot]
 		skill_names.append_array(equip.granted_skills)

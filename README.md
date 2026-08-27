@@ -8,7 +8,12 @@
 - 已接入 JSON 数据加载（单位、技能、Buff、装备、玩家编成）
 - 已建立核心实体基础：Tile / Grid / Unit / Skill / Buff / Equipment
 - 已建立战斗基础模块：Pathfinder / DamageCalculator / TurnManager / EffectSystem / EventSystem / CombatSystem
-- UI 与完整战斗流程仍在后续阶段实现
+- 自走棋玩法：时间驱动独立回合、事件触发技能（14 时机）、自动战斗与胜负结算
+- 完整流程：主菜单 → 选关 → 部署 → 自动战斗 → 结算；成长/装备、多关卡、素材、mod 系统
+- 技能双轨制：固有技能（Hero"以战养战"击杀永久成长）+ 通用技能池；复杂技能支持 GDScript 代码实现
+- 战斗表现：护盾条、技能详情（触发时机/冷却/持续时间）、移动+攻击动画链条
+
+UI 与完整战斗流程仍在后续阶段实现
 
 ## 运行方式
 

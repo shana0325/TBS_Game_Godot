@@ -68,6 +68,8 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 				report["damage"] += _apply_percentage_damage(user, target, effect, game)
 			"chain_damage":
 				report["damage"] += _apply_chain_damage(user, target, effect, game)
+			"permanent_stat":
+				_apply_permanent_stat(user, target, effect, game)
 			_:
 				push_warning("未知技能效果类型: %s" % effect_type)
 	return report
@@ -402,3 +404,25 @@ static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, ga
 		if current_target != null:
 			hit.append(current_target)
 	return total
+
+# 永久属性强化：提升属性（跨战斗全局永久或本局永久）。
+# config: { stat, amount, persist }。persist=true 写回编成（全局永久），false 仅本局生效。
+static func _apply_permanent_stat(user: Unit, target: Unit, config: Dictionary, game) -> void:
+	var owner := user if user != null and user.alive else target
+	if owner == null or not owner.alive:
+		return
+	var stat := str(config.get("stat", "hp"))
+	var amount := int(config.get("amount", 1))
+	if amount == 0:
+		return
+	owner.permanent_mods[stat] = int(owner.permanent_mods.get(stat, 0)) + amount
+	if stat == "hp":
+		# 生命上限永久 +amount，当前生命同步跟随（不超过新的上限）
+		owner.max_hp += amount
+		owner.hp = mini(owner.hp + amount, owner.max_hp)
+	if bool(config.get("persist", false)):
+		# 全局永久：写回编成存档；无编成 id（如敌方单位）时仅本局生效
+		ProgressManager.add_permanent_stat(owner.unit_id, stat, amount)
+	if game != null and game.has_method("add_log"):
+		var stat_label: String = str({"hp": "生命上限", "attack": "攻击", "defense": "防御", "move": "移动"}.get(stat, stat))
+		game.add_log("%s 的%s永久 +%d" % [owner.get_display_name(), stat_label, amount])

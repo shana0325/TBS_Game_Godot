@@ -13,15 +13,30 @@ var content_panel: VBoxContainer
 var overview_label: Label
 var overview_portrait: TextureRect
 var status_label: Label
+var selected_skill: String = ""
+
+# 触发时机中文标签（与 skill_trigger_system.gd 的常量对应）
+const SKILL_TRIGGER_LABELS := {
+	"on_battle_start": "战斗开始时", "on_turn_start": "行动开始时", "on_attack_start": "攻击前",
+	"on_attack": "攻击时", "on_attack_end": "攻击结束后", "on_hit": "造成伤害后",
+	"on_be_attacked": "受到攻击后", "on_taken_damage": "受到伤害后", "on_kill": "击杀敌人后",
+	"on_death": "阵亡时", "on_ally_death": "友军阵亡时", "on_turn_end": "行动结束时",
+	"on_round_start": "首回合开始时", "passive": "常驻被动",
+}
+const SKILL_STAT_LABELS := {"hp": "生命", "attack": "攻击", "defense": "防御", "move": "移动"}
 
 func _ready() -> void:
 	roster = GameDatabase.player_roster.get("units", [])
 	_build_top_bar()
 	_build_tab_bar()
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(80, 200)
+	scroll.custom_minimum_size = Vector2(620, 440)
+	add_child(scroll)
 	content_panel = VBoxContainer.new()
-	content_panel.position = Vector2(80, 200)
+	content_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_panel.add_theme_constant_override("separation", 10)
-	add_child(content_panel)
+	scroll.add_child(content_panel)
 	_build_overview_panel()
 	status_label = Label.new()
 	status_label.position = Vector2(80, 660)
@@ -162,6 +177,13 @@ func _refresh_overview(unit: Dictionary) -> void:
 		lines.append("  （无）")
 	for name in skill_names:
 		lines.append("  · %s" % name)
+	var perm_mods: Dictionary = unit.get("permanent_mods", {})
+	if not perm_mods.is_empty():
+		lines.append("")
+		lines.append("永久强化:")
+		var stat_labels := {"hp": "生命上限", "attack": "攻击", "defense": "防御", "move": "移动"}
+		for stat in perm_mods:
+			lines.append("  %s +%d" % [str(stat_labels.get(stat, stat)), int(perm_mods[stat])])
 	overview_label.text = "\n".join(lines)
 
 # --- 属性子页 ---
@@ -169,16 +191,18 @@ func _build_stats_tab(unit: Dictionary) -> void:
 	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
 	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
+	var perm_mods: Dictionary = unit.get("permanent_mods", {})
 	var labels := {"attack": "攻击", "defense": "防御", "move": "移动", "hp": "生命"}
 	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp"}
 	for stat in ProgressManager.POINTABLE_STATS:
 		var base := int(config.get(base_keys[stat], 0))
 		var alloc := int(allocated.get(stat, 0))
 		var equip := int(equip_mods.get(stat, 0))
-		var total := base + alloc + equip
+		var perm := int(perm_mods.get(stat, 0))
+		var total := base + alloc + equip + perm
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(340, 40)
-		btn.text = "%s: %d  (基础%d +加点%d +装备%d)  [加点]" % [labels[stat], total, base, alloc, equip]
+		btn.text = "%s: %d  (基础%d +加点%d +装备%d +永久%d)  [加点]" % [labels[stat], total, base, alloc, equip, perm]
 		btn.pressed.connect(_on_add_stat.bind(stat))
 		content_panel.add_child(btn)
 
@@ -195,26 +219,28 @@ func _get_equip_modifiers(unit: Dictionary) -> Dictionary:
 			totals[key] = int(totals.get(key, 0)) + int(data["modifiers"][key])
 	return totals
 
-# 计算角色整体属性（基础+加点+装备）。
+# 计算角色整体属性（基础+加点+装备+永久强化）。
 func _get_total_stats(unit: Dictionary) -> Dictionary:
 	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
 	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
+	var perm_mods: Dictionary = unit.get("permanent_mods", {})
 	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp"}
 	var result: Dictionary = {}
 	for stat in ProgressManager.POINTABLE_STATS:
 		result[stat] = int(config.get(base_keys[stat], 0)) \
-			+ int(allocated.get(stat, 0)) + int(equip_mods.get(stat, 0))
+			+ int(allocated.get(stat, 0)) + int(equip_mods.get(stat, 0)) \
+			+ int(perm_mods.get(stat, 0))
 	return result
 
-# 收集角色当前所有技能名（模板+已学+已装备+装备授予）。
+# 收集角色实际带进战斗的技能名（固有 + 已装备 + 装备授予；已学未装备的不生效）。
 func _get_all_skill_names(unit: Dictionary) -> Array:
 	var names: Array = []
 	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
-	for s in config.get("skills", []):
-		names.append(str(s))
-	for s in unit.get("learned_skills", []):
-		names.append(str(s))
+	var innate_id: String = str(config.get("innate_skill", ""))
+	if innate_id != "":
+		var innate_data: Dictionary = GameDatabase.get_skill(innate_id)
+		names.append(str(innate_data.get("name", innate_id)))
 	for s in unit.get("equipped_skills", []):
 		names.append(str(s))
 	for slot in ProgressManager.VALID_SLOTS:
@@ -233,12 +259,47 @@ func _on_add_stat(stat: String) -> void:
 	else:
 		status_label.text = "属性点不足"
 
-# --- 技能子页 ---
+# --- 技能子页（固有技能锁定区 + 通用技能池，点击技能查看详情） ---
 func _build_skills_tab(unit: Dictionary) -> void:
+	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
+	# 固有技能：模板独有，自动生效，不可更换
+	var innate_id: String = str(config.get("innate_skill", ""))
+	if innate_id == "":
+		var none := Label.new()
+		none.text = "固有技能：（无）"
+		none.add_theme_font_size_override("font_size", 16)
+		content_panel.add_child(none)
+	else:
+		var innate_data: Dictionary = GameDatabase.get_skill(innate_id)
+		var info := Label.new()
+		info.text = "固有技能（始终生效，不可更换）：%s\n%s" % [
+			str(innate_data.get("name", innate_id)), _skill_detail_text(innate_id)
+		]
+		info.modulate = Color(1.5, 1.25, 0.5)
+		info.add_theme_font_size_override("font_size", 14)
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.custom_minimum_size = Vector2(560, 0)
+		content_panel.add_child(info)
+	# 已选中的通用技能：详情 + 操作（放在列表上方，保证可见）
+	if selected_skill != "" and GameDatabase.get_skill(selected_skill).has("common"):
+		var detail := Label.new()
+		detail.text = _skill_detail_text(selected_skill)
+		detail.add_theme_font_size_override("font_size", 14)
+		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail.custom_minimum_size = Vector2(560, 0)
+		content_panel.add_child(detail)
+		var action_btn := Button.new()
+		action_btn.custom_minimum_size = Vector2(280, 40)
+		action_btn.text = _skill_action_label(selected_skill, unit)
+		action_btn.pressed.connect(_on_selected_skill_action)
+		content_panel.add_child(action_btn)
+	# 通用技能池：仅展示 common 标记的技能，点击查看详情与操作
 	var learned: Array = unit.get("learned_skills", [])
 	var equipped: Array = unit.get("equipped_skills", [])
 	for skill_id in GameDatabase.skills.keys():
 		var data: Dictionary = GameDatabase.get_skill(skill_id)
+		if not bool(data.get("common", false)):
+			continue
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(560, 40)
 		var status := ""
@@ -249,10 +310,151 @@ func _build_skills_tab(unit: Dictionary) -> void:
 		else:
 			status = "  未学习"
 		btn.text = "%s%s" % [str(data.get("name", skill_id)), status]
-		btn.pressed.connect(_on_skill_action.bind(skill_id))
+		if selected_skill == skill_id:
+			btn.modulate = Color(1.2, 1.2, 0.5)
+		btn.pressed.connect(_on_select_skill.bind(skill_id))
 		content_panel.add_child(btn)
 
-func _on_skill_action(skill_id: String) -> void:
+# 技能详情文本：描述 + 触发时机 + 冷却 +（按需）射程 + 目标 + 效果列表（含持续时间）。
+func _skill_detail_text(skill_id: String) -> String:
+	var data: Dictionary = GameDatabase.get_skill(skill_id)
+	if data.is_empty():
+		return "（未知技能）"
+	var lines: Array = []
+	var desc: String = str(data.get("desc", ""))
+	if desc != "":
+		lines.append("描述：%s" % desc)
+	var trigger: String = str(data.get("trigger", ""))
+	var trigger_label: String = str(SKILL_TRIGGER_LABELS.get(trigger, trigger))
+	lines.append("触发时机：%s   冷却：%d 次触发间隔" % [trigger_label, int(data.get("cooldown", 0))])
+	# 仅目标为位置类（敌人/友军/单体目标）时才显示射程；自身/全体类无关射程
+	var condition: Dictionary = data.get("condition", {})
+	var target_type: String = str(condition.get("target_type", condition.get("target", "target")))
+	if target_type in ["enemy", "ally", "target", "random_enemy"]:
+		lines.append("射程：%s 至 %s 格" % [str(data.get("min_range", 1)), str(data.get("max_range", 1))])
+	lines.append("目标：%s" % _skill_target_label(condition))
+	lines.append("效果：")
+	var effects: Array = data.get("effects", [])
+	if effects.is_empty():
+		if data.get("code_script") is GDScript:
+			lines.append("  · （由代码实现的自定义效果，详见描述）")
+		else:
+			lines.append("  · （无效果）")
+	for effect in effects:
+		if effect is Dictionary:
+			lines.append("  · %s" % _skill_effect_text(effect))
+	return "\n".join(lines)
+
+# 目标解析中文说明。
+func _skill_target_label(condition: Dictionary) -> String:
+	var target_type: String = str(condition.get("target_type", condition.get("target", "target")))
+	var labels := {"self": "自身", "target": "当前目标", "enemy": "射程内敌人", "ally": "射程内友军",
+		"all_enemies": "全体敌人", "all_allies": "全体友军", "random_enemy": "随机敌人"}
+	var text: String = str(labels.get(target_type, target_type))
+	if condition.has("hp_percent"):
+		text += "（附加自身生命比例条件）"
+	if condition.has("has_buff"):
+		text += "（附加持有指定Buff条件）"
+	if condition.has("target_has_buff"):
+		text += "（附加目标持有指定Buff条件）"
+	return text
+
+# 单条效果的中文描述。
+func _skill_effect_text(effect: Dictionary) -> String:
+	var etype: String = str(effect.get("type", ""))
+	var text := ""
+	match etype:
+		"damage":
+			text = "造成 %.1f 倍攻击伤害" % float(effect.get("power", 1.0))
+			if bool(effect.get("ignore_defense", false)):
+				text += "（无视防御）"
+		"heal":
+			text = "恢复 %d 点生命" % int(effect.get("amount", 0))
+		"shield":
+			text = "获得 %d 点护罩%s" % [int(effect.get("amount", 0)), _duration_text(int(effect.get("duration", 0)))]
+		"buff":
+			var buff_id: String = str(effect.get("buff", ""))
+			var bdata: Dictionary = GameDatabase.get_buff(buff_id)
+			var bname: String = str(bdata.get("name", buff_id))
+			var bdur: int = int(bdata.get("duration", 0))
+			text = "附加状态「%s」%s" % [bname, _duration_text(bdur)]
+			if int(bdata.get("tick_damage", 0)) > 0:
+				text += "（每回合 %d 点持续伤害）" % int(bdata.get("tick_damage", 0))
+			if int(bdata.get("tick_heal", 0)) > 0:
+				text += "（每回合恢复 %d 点）" % int(bdata.get("tick_heal", 0))
+		"stat_mod":
+			var parts: Array = []
+			for k in effect.get("stats", {}):
+				var v: int = int(effect["stats"][k])
+				parts.append("%s%s%d" % [str(SKILL_STAT_LABELS.get(k, k)), "+" if v >= 0 else "", v])
+			text = "属性变化：%s%s" % ["、".join(parts), _duration_text(int(effect.get("duration", 0)))]
+		"dot":
+			text = "持续伤害 %d 点%s" % [int(effect.get("damage", 0)), _duration_text(int(effect.get("duration", 0)))]
+		"summon":
+			text = "召唤「%s」%s" % [str(effect.get("unit_type", "？")), _duration_text(int(effect.get("duration", 0)))]
+		"revive":
+			text = "复活目标（恢复 %d%% 生命上限）" % roundi(float(effect.get("hp_percent", 0.5)) * 100.0)
+		"dispel":
+			var friendly: String = "（仅驱散目标身上不利效果）" if not bool(effect.get("friendly", false)) else "（仅驱散有利效果）"
+			text = "驱散目标效果%s" % friendly
+		"permanent_stat":
+			var pstat: String = str(effect.get("stat", "hp"))
+			text = "永久提升%s %d（%s）" % [
+				str(SKILL_STAT_LABELS.get(pstat, pstat)), int(effect.get("amount", 1)),
+				"全局永久" if bool(effect.get("persist", false)) else "本局永久"
+			]
+		"teleport":
+			text = "位移（%s）" % str(effect.get("mode", "target"))
+		"taunt":
+			text = "挑衅（持续期间敌人只能攻击自己）%s" % _duration_text(int(effect.get("duration", 0)))
+		"immunity":
+			text = "免疫指定状态%s" % _duration_text(int(effect.get("duration", 0)))
+		"reflect":
+			text = "反射 %.0f%% 受到的伤害%s" % [float(effect.get("percent", 0.3)) * 100.0, _duration_text(int(effect.get("duration", 0)))]
+		"protect":
+			text = "受到伤害减少 %.0f%%%s" % [float(effect.get("reduction", 0.3)) * 100.0, _duration_text(int(effect.get("duration", 0)))]
+		"ignore":
+			text = "攻击无视目标防御/护罩%s" % _duration_text(int(effect.get("duration", 0)))
+		"mark":
+			text = "标记目标（供其他技能作条件）%s" % _duration_text(int(effect.get("duration", 0)))
+		"lifesteal":
+			text = "吸血：造成伤害时恢复 %.0f%%%s" % [float(effect.get("percent", 0.3)) * 100.0, _duration_text(int(effect.get("duration", 0)))]
+		"percentage_damage":
+			text = "造成目标生命上限 %.0f%% 的伤害" % (float(effect.get("percent", 0.1)) * 100.0)
+		"chain_damage":
+			text = "连锁伤害：%.1f 倍，最多连锁 %d 次" % [float(effect.get("power", 1.0)), int(effect.get("chain", 2))]
+		_:
+			text = "类型：%s" % etype
+	return text
+
+# 持续时间文字：>0 显示回合数，<0 常驻，否则空。
+func _duration_text(dur: int) -> String:
+	if dur < 0:
+		return "（常驻）"
+	if dur > 0:
+		return "（持续 %d 回合）" % dur
+	return ""
+
+# 当前选中技能的下一步操作按钮文字。
+func _skill_action_label(skill_id: String, unit: Dictionary) -> String:
+	var learned: Array = unit.get("learned_skills", [])
+	var equipped: Array = unit.get("equipped_skills", [])
+	if equipped.has(skill_id):
+		return "卸下技能"
+	if learned.has(skill_id):
+		return "装备技能"
+	return "学习并装备（消耗 1 技能点）"
+
+# 点击技能行：选中并展开详情。
+func _on_select_skill(skill_id: String) -> void:
+	selected_skill = skill_id
+	_refresh()
+
+# 对当前选中的技能执行 学习/装备/卸下。
+func _on_selected_skill_action() -> void:
+	var skill_id := selected_skill
+	if skill_id == "":
+		return
 	var unit := _current_unit()
 	var learned: Array = unit.get("learned_skills", [])
 	var equipped: Array = unit.get("equipped_skills", [])

@@ -1,7 +1,27 @@
-﻿{
+{
+  "Kill Growth": {
+    "name": "以战养战",
+    "desc": "每击杀一名敌人，生命值上限永久 +1（当前生命同步 +1）",
+    "trigger": "on_kill",
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 2,
+    "effects": [
+      {
+        "type": "permanent_stat",
+        "stat": "hp",
+        "amount": 1,
+        "persist": true
+      }
+    ]
+  },
   "Power Strike": {
     "name": "强力打击",
     "trigger": "on_attack",
+    "common": true,
     "cooldown": 2,
     "condition": {
       "target_type": "target"
@@ -18,6 +38,7 @@
   "Poison Strike": {
     "name": "剧毒之击",
     "trigger": "on_attack",
+    "common": true,
     "cooldown": 3,
     "condition": {
       "target_type": "target"
@@ -38,6 +59,7 @@
   "Regen Aura": {
     "name": "再生光环",
     "trigger": "on_turn_start",
+    "common": true,
     "cooldown": 3,
     "condition": {
       "target_type": "self"
@@ -54,6 +76,7 @@
   "Guard Shield": {
     "name": "守护护罩",
     "trigger": "on_turn_start",
+    "common": true,
     "cooldown": 3,
     "condition": {
       "target_type": "self"
@@ -71,6 +94,7 @@
   "Battle Chant": {
     "name": "战意高昂",
     "trigger": "on_attack_start",
+    "common": true,
     "cooldown": 3,
     "condition": {
       "target_type": "self"
@@ -91,6 +115,7 @@
   "Concussion Blow": {
     "name": "眩晕重击",
     "trigger": "on_attack",
+    "common": true,
     "cooldown": 4,
     "condition": {
       "target_type": "target"
@@ -111,6 +136,7 @@
   "Counter Stance": {
     "name": "反击架势",
     "trigger": "on_be_attacked",
+    "common": true,
     "cooldown": 3,
     "condition": {
       "target_type": "self"
@@ -127,6 +153,7 @@
   "War Banner": {
     "name": "战旗光环",
     "trigger": "on_turn_start",
+    "common": true,
     "cooldown": 3,
     "condition": {
       "target_type": "self"
@@ -143,6 +170,7 @@
   "Blood Rush": {
     "name": "浴血狂袭",
     "trigger": "on_attack",
+    "common": true,
     "cooldown": 3,
     "condition": {
       "target_type": "self"
@@ -159,6 +187,7 @@
   "Raise Skeleton": {
     "name": "白骨召唤",
     "trigger": "on_turn_start",
+    "common": true,
     "cooldown": 4,
     "condition": {
       "target_type": "self"
@@ -176,6 +205,7 @@
   "Revive Prayer": {
     "name": "复苏祷言",
     "trigger": "on_ally_death",
+    "common": true,
     "cooldown": 5,
     "condition": {
       "target_type": "ally"

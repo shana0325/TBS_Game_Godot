@@ -21,9 +21,27 @@ func _ready() -> void:
 	buffs = _load_json(DATA_PATHS.buffs)
 	equipments = _load_json(DATA_PATHS.equipments)
 	player_roster = _load_json(DATA_PATHS.player_roster)
+	_merge_code_skills()
 	print("GameDatabase loaded: units=%d skills=%d buffs=%d equipments=%d" % [
 		units.size(), skills.size(), buffs.size(), equipments.size()
 	])
+
+# 合并代码技能（技能代码轨）：把注册文件中的技能并入全局技能表，
+# 战斗与界面统一通过 get_skill 访问，与 JSON 技能无差别。
+func _merge_code_skills() -> void:
+	for skill_id in SkillCodeRegistry.get_entries():
+		var path: String = str(SkillCodeRegistry.get_entries()[skill_id])
+		var script: GDScript = load(path)
+		if script == null or not script.can_instantiate():
+			push_error("代码技能脚本无效: %s (%s)" % [skill_id, path])
+			continue
+		var inst: Object = script.new()
+		if not (inst is CodeSkill):
+			push_error("代码技能必须继承 CodeSkill: %s" % skill_id)
+			continue
+		var meta: Dictionary = (inst as CodeSkill).export_meta()
+		meta["code_script"] = script
+		skills[skill_id] = meta
 
 func _load_json(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):

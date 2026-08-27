@@ -1,4 +1,4 @@
-﻿# TBS_Game_Godot 交接文档
+# TBS_Game_Godot 交接文档
 
 > 交接时间：2026-08-10
 > 项目路径：`D:\Shana Program\文档\TBS_Game_Godot`
@@ -22,7 +22,7 @@
 
 ```text
 Godot Engine v4.7.1
-GameDatabase loaded: units=4 skills=11 buffs=10 equipments=5
+GameDatabase loaded: units=4 skills=12 buffs=10 equipments=5
 ```
 
 ## 2. 如何运行
@@ -69,11 +69,11 @@ docs/                   # 设计文档、交接文档
 数据全部放在 `data/`，由 `GameDatabase` autoload 统一加载。
 
 ```text
-data/unit/units.json                 # 单位模板
-data/skill/skills.json               # 技能与 effect 列表
+data/unit/units.json                 # 单位模板（含 innate_skill 固有技能）
+data/skill/skills.json               # 技能与 effect 列表（common=true 通用技能；无标记为固有/专用）
 data/buff/buffs.json                 # Buff 配置
 data/equipment/equipments.json       # 装备配置
-data/player/player_roster.json       # 玩家编成、成长、技能、装备
+data/player/player_roster.json       # 玩家编成、成长、技能、装备、permanent_mods 永久强化
 ```
 
 创建 `Unit` 时会合并：
@@ -81,7 +81,8 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - 单位模板 `units.json`
 - 玩家编成数据 `player_roster.json`
 - 角色成长点 `allocated_stats`
-- 已学/已装备技能
+- 永久强化 `permanent_mods`（跨战斗保留，如固有技能"以战养战"击杀成长）
+- 固有技能（`innate_skill`，始终生效）与已装备的通用技能
 - 装备属性修正与装备授予技能
 
 ## 5. 已实现模块说明
@@ -91,10 +92,10 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - `scripts/core/tile.gd`：单个格子，保存坐标、移动消耗、防御加成、可通行状态。
 - `scripts/core/grid.gd`：二维 Tile 网格，负责取格子和获取上下左右可通行邻居。
 - `scripts/core/unit.gd`：单位，组合模板、成长、技能、Buff、装备；提供属性计算、受伤、治疗、Buff、控制状态等方法。
-- `scripts/core/skill.gd`：技能模板，保存射程与 effect 列表，执行统一交给 EffectSystem。
+- `scripts/core/skill.gd`：技能基类，保存触发时机/条件/射程/effect 列表；提供三个可覆写钩子 `check_condition` / `resolve_targets` / `execute`（JSON 技能默认数据驱动，代码技能可覆写）。
 - `scripts/core/buff.gd`：Buff，支持属性修正、持续伤害、持续治疗、控制、护盾、触发型效果、反击标记等字段。
 - `scripts/core/equipment.gd`：装备，保存槽位、属性修正、授予技能。
-- `scripts/core/game_database.gd`：Godot autoload，统一加载和访问 JSON 数据。
+- `scripts/core/game_database.gd`：Godot autoload，统一加载和访问 JSON 数据；启动时合并代码技能（双轨）。
 
 ### 战斗系统
 
@@ -102,7 +103,7 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - `scripts/battle/combat/damage_calculator.gd`：纯数值计算，不修改单位状态。
 - `scripts/battle/combat/combat_system.gd`：普通攻击执行、射程判断、ON_ATTACK / ON_HIT / ON_KILL 事件分发。
 - `scripts/battle/turn/turn_manager.gd`：阵营回合切换、单位 acted 状态管理。
-- `scripts/battle/effects/effect_system.gd`：按 effect 类型分发技能效果。
+- `scripts/battle/effects/effect_system.gd`：按 effect 类型分发技能效果（20 类原子效果函数）。
 - `scripts/battle/effects/damage_effect.gd`：技能伤害效果。
 - `scripts/battle/effects/heal_effect.gd`：技能治疗效果。
 - `scripts/battle/effects/buff_effect.gd`：从 buffs.json 创建 Buff 并挂到单位。
@@ -127,7 +128,7 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - 战斗内单位信息面板（`battle_screen.gd`）：点击任意单位在左上角显示其属性/装备/技能/Buff。
 - `scripts/ui/battle_screen.gd`：战斗界面（自走棋自动战斗），`_process` 驱动 `manager.tick`，播放行动动画/日志，判定胜负。
 - `scripts/ui/grid_view.gd`：网格渲染，绘制地板、边框与高亮（当前自动战斗下移动/攻击高亮已不用，保留悬停/选中）。
-- `scripts/ui/unit_view.gd`：单位渲染，动作贴图（stand/move/attack/death）填满格子，名称/血条，acted 变暗。
+- `scripts/ui/unit_view.gd`：单位渲染，动作贴图（stand/move/attack/death）填满格子，名称/血条/护盾条，acted 变暗。
 - `scripts/ui/battle_layout.gd`：根据视口与行列数计算自适应格子大小并居中战场。
 - `scenes/battle_screen.tscn`：战斗场景（网格、单位层、日志面板、回合标签）。
 - `data/scenario/battle_01.json`：关卡（12×6，2 玩家 vs 3 敌方，玩家部署左半区 x0-5）。
@@ -137,8 +138,10 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - `scripts/battle/battle_manager.gd`：纯逻辑战斗状态机，`tick(delta)` 驱动时间推进；`_auto_act` 处理单位自动行动（攻击/移动）；`perform_attack` 分发技能触发时机与反射；`spawn_unit`/`move_unit_to` 供技能调用。
 - `scripts/battle/turn/turn_manager.gd`：时间驱动独立回合，每单位 `turn_interval` + `turn_timer`，`tick(delta)` 统一推进。
 - `scripts/battle/enemy_ai.gd`：敌方 AI（含嘲讽引导目标）。
-- `scripts/battle/skills/skill_trigger_system.gd`：技能触发系统，14 个触发时机按事件流自动施放（含条件/冷却/目标解析）。
-- `scripts/battle/effects/effect_system.gd`：注册表驱动效果分发，已实现 19 类 effect。
+- `scripts/battle/skills/skill_trigger_system.gd`：技能触发系统，14 个触发时机按事件流自动施放（条件/冷却/目标解析均走 Skill 对象钩子，双轨兼容）。
+- `scripts/battle/skills/code_skill.gd`：代码技能基类（继承 Skill），复杂逻辑技能覆写钩子实现。
+- `scripts/battle/skills/skill_code_registry.gd`：代码技能集中注册文件（id -> 脚本路径），启动时并入技能表。
+- `scripts/battle/effects/effect_system.gd`：注册表驱动效果分发，已实现 20 类 effect。
 - `scripts/battle/combat/combat_system.gd` / `damage_calculator.gd`：攻击执行与伤害计算（曼哈顿距离射程，支持无视防御/减伤/反射）。
 - `scripts/core/grid.gd`：10×10（或按关卡 12×6）单战场，曼哈顿距离；`setup_dual`/跨战场逻辑已弃用但保留兼容。
 - `scripts/core/unit.gd`：`turn_interval`/`turn_timer`、`moved` 状态、状态查询（taunt/immune/reflect/ignore 等）。
@@ -154,10 +157,28 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备
 - **自走棋核心**：时间驱动独立回合（每单位 `turn_interval`）、自动攻击/移动（1 移动力）、胜负判定。
 - **战场规格**：单战场 12×6，曼哈顿距离射程，格子随视口自适应放大，单位动作图填满格子。
 - **技能触发系统**：14 个触发时机（battle_start/turn_start/attack_start/attack/attack_end/hit/be_attacked/taken_damage/kill/death/ally_death/turn_end/round_start/passive）+ 条件/冷却/目标解析。
-- **效果类型库（19 类）**：damage/heal/revive/dispel/summon/mark/teleport（位移家族）/percentage_damage/chain_damage/buff/dot/shield/stat_mod/taunt/immunity/reflect/protect/ignore/lifesteal。
+- **效果类型库（20 类）**：damage/heal/revive/dispel/summon/mark/teleport（位移家族）/percentage_damage/chain_damage/permanent_stat/buff/dot/shield/stat_mod/taunt/immunity/reflect/protect/ignore/lifesteal。
 - **技能本地化**：全部技能/Buff/装备中文名（参照棕色尘埃效果类别）。
 - **素材**：hero 四等分动作图（站立/移动/攻击/死亡）、中文字体、像素小人生成器。
 - **mod 系统**：目录扫描加载 + 角色素材约定目录（详见 docs/MOD_GUIDE.md）。
+
+### 技能体系双轨与养成改造（2026-08-11）
+
+- **固有技能 + 通用技能**：units.json 新增 `innate_skill`（Hero 固有"以战养战"）；skills.json 现有技能标记 `common: true` 归入通用技能池（编成中学习/装备，消耗技能点）。
+- **永久属性强化**：新效果类型 `permanent_stat`（persist=true 全局永久写回编成；false 仅本局永久）；Unit 新增 `permanent_mods` 字段；一并修复"max_hp 不吃装备/Buff 修正"的旧问题。
+- **以战养战**：Hero 固有技能，`on_kill` 触发，生命上限永久 +1（当前生命同步 +1），无上限。
+- **已学未装备修复**：只有"已装备"的通用技能参与战斗（原为学了就生效）。
+- **护盾条**：战斗内血条上方蓝色护盾条（剩余/初始比例显示），信息面板显示"护罩 X/Y"。
+- **技能详情**：队伍编成技能页点击技能显示完整详情（描述/触发时机/冷却/射程/目标/效果含持续时间）；非位置类目标（自身/全体）不显示射程。
+- **部署区**：battle_01/battle_02 部署区扩为左半场全部 6 行（x0-5 × y0-5）。
+- **动画修复**：同一行动"移动后攻击"的动画链条化，攻击动画不再被移动吞掉。
+
+### 代码技能双轨（2026-08-11 新增架构）
+
+- `Skill` 基类提供可覆写钩子：`check_condition`（触发条件）、`resolve_targets`（目标解析）、`execute`（效果执行）；JSON 技能走默认数据驱动实现，行为不变。
+- 复杂技能：继承 `CodeSkill` 覆写钩子，并在 `skill_code_registry.gd` 集中注册一行（id + 脚本路径）。
+- GameDatabase 启动时把代码技能并入全局技能表，战斗/编成/信息面板统一可见。
+- 新增 `class_name` 后需运行一次 `--import` 刷新全局类缓存。
 
 > 已取消：i18n（仅中文版）。文档见 `docs/skills/SKILL_SYSTEM.md`（含触发时机/效果实现状态与待办）。
 
@@ -202,4 +223,6 @@ Test-Path 'D:\Shana Program\文档\TBS_Game_Godot\project.godot'
 - 保持逻辑层与 UI 分离。
 - 新增功能优先做新模块，不要大范围重写已有逻辑。
 - 数据优先放在 JSON，不要把可配置数值写死在脚本里。
+- 新增简单技能：改 JSON 组合效果积木；新增复杂技能：继承 CodeSkill 写代码并集中注册。
+- 新增 `class_name` 的脚本后，运行一次 `--import` 刷新全局类缓存再跑无头检查。
 - 不要混用旧 Python/pygame 代码，Godot 项目只使用 GDScript/Godot 资源。

@@ -1,4 +1,4 @@
-﻿{
+{
   "Hero": {
     "hp": 22,
     "atk": 7,
@@ -7,7 +7,7 @@
     "range_min": 1,
     "range_max": 2,
     "turn_interval": 4.0,
-    "skills": []
+    "innate_skill": "Kill Growth"
   },
   "Knight": {
     "hp": 20,
@@ -17,7 +17,7 @@
     "range_min": 1,
     "range_max": 1,
     "turn_interval": 4.0,
-    "skills": ["Power Strike"]
+    "innate_skill": ""
   },
   "Goblin": {
     "hp": 14,
@@ -27,7 +27,7 @@
     "range_min": 1,
     "range_max": 1,
     "turn_interval": 3.0,
-    "skills": []
+    "innate_skill": ""
   },
   "Orc": {
     "hp": 18,
@@ -37,6 +37,6 @@
     "range_min": 1,
     "range_max": 1,
     "turn_interval": 4.5,
-    "skills": []
+    "innate_skill": ""
   }
 }
