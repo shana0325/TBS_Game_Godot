@@ -80,5 +80,18 @@ func _draw() -> void:
 	var hp_ratio := float(unit.hp) / float(unit.max_hp)
 	draw_rect(Rect2(bar_pos, Vector2(bar_width, bar_height)), Color(0.10, 0.10, 0.12))
 	draw_rect(Rect2(bar_pos, Vector2(bar_width * hp_ratio, bar_height)), Color(0.25, 0.85, 0.35))
+	# 护盾条：血条上方，蓝色，按剩余/初始护盾量填充
+	var shield_amount := 0
+	var shield_max := 0
+	for buff in unit.buffs:
+		if buff.shield > 0:
+			shield_amount += buff.shield
+			shield_max += int(buff.raw_data.get("shield", buff.shield))
+	if shield_amount > 0:
+		var shield_ratio := float(shield_amount) / float(maxi(shield_max, shield_amount))
+		var shield_h := 4
+		var shield_pos := Vector2(bar_pos.x, bar_pos.y - shield_h - 1)
+		draw_rect(Rect2(shield_pos, Vector2(bar_width, shield_h)), Color(0.10, 0.13, 0.22))
+		draw_rect(Rect2(shield_pos, Vector2(bar_width * shield_ratio, shield_h)), Color(0.42, 0.72, 1.00))
 	draw_string(ThemeDB.fallback_font, Vector2(-40, tile_size / 2.0 + 12.0), "%d/%d" % [unit.hp, unit.max_hp], \
 		HORIZONTAL_ALIGNMENT_CENTER, 80, 12, Color.WHITE)

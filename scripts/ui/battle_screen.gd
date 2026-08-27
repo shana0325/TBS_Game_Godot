@@ -1,4 +1,4 @@
-﻿# 战斗界面（自走棋·自动战斗）：渲染网格与单位，实时驱动 BattleManager.tick，
+# 战斗界面（自走棋·自动战斗）：渲染网格与单位，实时驱动 BattleManager.tick，
 # 播放行动动画/日志，判定胜负后进入结算。
 extends Control
 
@@ -109,9 +109,23 @@ func _show_unit_info(unit: Unit) -> void:
 	var lines: Array = []
 	lines.append("%s  Lv.%d  (%s)" % [unit.get_display_name(), unit.level, camp_text])
 	lines.append("HP: %d/%d" % [unit.hp, unit.max_hp])
+	var shield_total := 0
+	for buff in unit.buffs:
+		shield_total += buff.shield
+	if shield_total > 0:
+		var shield_max_all := 0
+		for buff in unit.buffs:
+			if buff.shield > 0:
+				shield_max_all += int(buff.raw_data.get("shield", buff.shield))
+		lines.append("护罩: %d/%d" % [shield_total, shield_max_all])
 	lines.append("攻击: %d   防御: %d   移动: %d" % [unit.get_attack(), unit.get_defense(), unit.get_move_points()])
 	lines.append("射程: %d-%d" % [unit.get_range_min(), unit.get_range_max()])
 	lines.append("行动间隔: %.1fs" % unit.turn_interval)
+	if not unit.permanent_mods.is_empty():
+		lines.append("永久强化:")
+		var stat_labels := {"hp": "生命上限", "attack": "攻击", "defense": "防御", "move": "移动"}
+		for stat in unit.permanent_mods:
+			lines.append("  %s +%d" % [str(stat_labels.get(stat, stat)), int(unit.permanent_mods[stat])])
 	lines.append("")
 	lines.append("装备:")
 	var has_equip := false
@@ -172,12 +186,16 @@ func _handle_event(ev: Dictionary) -> void:
 				add_log("%s 攻击 %s" % [unit.get_display_name(), target.get_display_name()])
 		"move", "move_attack":
 			var to: Vector2i = ev.get("to")
+			var t2: Unit = ev.get("target")
 			if unit_view != null:
-				_animate_unit_move(unit_view, ev.get("from", Vector2i(-1, -1)), to)
+				if action == "move_attack" and t2 != null:
+					# 移动结束后再播攻击动画（链条化），避免同一行动中攻击动画被移动吞掉
+					_animate_unit_move(unit_view, ev.get("from", Vector2i(-1, -1)), to, \
+						func(): _play_attack_animation(unit_view, t2))
+				else:
+					_animate_unit_move(unit_view, ev.get("from", Vector2i(-1, -1)), to)
 			if action == "move_attack":
-				var t2: Unit = ev.get("target")
 				if t2 != null:
-					_play_attack_animation(unit_view, t2)
 					add_log("%s 移动后攻击 %s" % [unit.get_display_name(), t2.get_display_name()])
 			else:
 				add_log("%s 移动" % unit.get_display_name())
@@ -208,12 +226,15 @@ func _play_attack_animation(unit_view: Node2D, target: Unit) -> void:
 		uv.refresh()
 	)
 
-# 按路径逐格移动：从移动前位置(from_cell)到目标，逐格补间。
-func _animate_unit_move(unit_view: Node2D, from_cell: Vector2i, to_cell: Vector2i) -> void:
+# 按路径逐格移动：从移动前位置(from_cell)到目标，逐格补间；
+# 移动补间结束后执行 follow_up（如连接攻击动画），无实际位移时直接执行 follow_up。
+func _animate_unit_move(unit_view: Node2D, from_cell: Vector2i, to_cell: Vector2i, follow_up: Callable = Callable()) -> void:
 	if unit_view == null or not (unit_view is UnitView):
 		return
 	var uv := unit_view as UnitView
 	if from_cell.x < 0 or to_cell == from_cell:
+		if follow_up.is_valid():
+			follow_up.call()
 		return
 	var path: Array = []
 	var start := manager.grid.get_tile(from_cell.x, from_cell.y)
@@ -221,10 +242,16 @@ func _animate_unit_move(unit_view: Node2D, from_cell: Vector2i, to_cell: Vector2
 	if start != null and goal != null:
 		path = Pathfinder.find_path(manager.grid, start, goal)
 	if path.size() <= 1:
+		if follow_up.is_valid():
+			follow_up.call()
 		return
 	uv.set_action("move")
 	var tween := uv.animate_move(path, MOVE_STEP_TIME / ANIM_SPEED)
-	tween.finished.connect(func(): uv.set_action("stand"))
+	tween.finished.connect(func():
+		uv.set_action("stand")
+		if follow_up.is_valid():
+			follow_up.call()
+	)
 
 # --- 刷新与结果 ---
 func _refresh_units() -> void:
