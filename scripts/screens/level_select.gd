@@ -37,12 +37,12 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "选择模式"
 	title.add_theme_font_size_override("font_size", 42)
-	title.position = Vector2(80, 80)
+	title.position = Vector2(130, 112)
 	add_child(title)
 
 	var back_btn := Button.new()
 	back_btn.text = "返回主菜单"
-	back_btn.position = Vector2(80, 40)
+	back_btn.position = Vector2(130, 62)
 	back_btn.pressed.connect(_go_back)
 	add_child(back_btn)
 
@@ -50,22 +50,22 @@ func _build_ui() -> void:
 	var tower_btn := Button.new()
 	tower_btn.text = "◆ %s" % GameSession.get_tower_entry_label()
 	tower_btn.custom_minimum_size = Vector2(520, 56)
-	tower_btn.position = Vector2(80, 170)
+	tower_btn.position = Vector2(130, 210)
 	tower_btn.pressed.connect(_on_tower_pressed)
 	add_child(tower_btn)
 
 	var divider := Label.new()
 	divider.text = "—— 快速对战关卡 ——"
 	divider.add_theme_font_size_override("font_size", 20)
-	divider.position = Vector2(80, 250)
+	divider.position = Vector2(130, 292)
 	add_child(divider)
 
-	var start_y := 300
+	var start_y := 342
 	for i in scenario_ids.size():
 		var btn := Button.new()
 		btn.text = "%s  (%s)" % [scenario_names[scenario_ids[i]], scenario_ids[i]]
 		btn.custom_minimum_size = Vector2(420, 48)
-		btn.position = Vector2(80, start_y + i * 64)
+		btn.position = Vector2(130, start_y + i * 64)
 		btn.pressed.connect(_on_scenario_selected.bind(scenario_ids[i]))
 		add_child(btn)
 

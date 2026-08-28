@@ -5,7 +5,6 @@
 extends Node
 
 const BUILTIN_DIR := "res://assets/units/"
-
 # 获取单位战斗小人贴图。action: stand/move/attack/death/skill。
 func get_unit_sprite(unit_type: String, action: String = "stand") -> Texture2D:
 	var path: String = _find_sprite_path(unit_type, action)

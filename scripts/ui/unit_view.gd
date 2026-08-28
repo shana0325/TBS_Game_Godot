@@ -7,6 +7,8 @@ var tile_size := 64
 var action: String = "stand"
 var sprite_texture: Texture2D = null
 var is_moving: bool = false
+var show_hp_text: bool = true
+var show_name: bool = true
 
 # 目标显示尺寸：战斗小人缩放到格子的这个比例。
 const SPRITE_TARGET_RATIO := 0.72
@@ -69,10 +71,15 @@ func _draw() -> void:
 		# acted 时变暗
 		var mod := Color(1, 1, 1, 0.6) if unit.acted else Color(1, 1, 1, 1)
 		draw_texture_rect(sprite_texture, Rect2(draw_pos, draw_rect_size), false, mod)
-	# 顶部名称
-	var name_pos := Vector2(-tile_size / 2.0, -tile_size / 2.0 - 4.0)
-	draw_string(ThemeDB.fallback_font, name_pos, unit.get_display_name(), \
-		HORIZONTAL_ALIGNMENT_CENTER, tile_size, 14, Color.WHITE)
+	# 阵营边框提供稳定的视觉识别，不依赖单位贴图或颜色滤镜。
+	var camp_color := Color(0.84, 0.67, 0.34, 0.95) if unit.camp == TurnManager.PLAYER_CAMP else Color(0.78, 0.28, 0.25, 0.95)
+	var frame_rect := Rect2(-tile_size / 2.0 + 2.0, -tile_size / 2.0 + 2.0, tile_size - 4.0, tile_size - 4.0)
+	draw_rect(frame_rect, camp_color, false, 2.0)
+	# 顶部名称：战场视图可关闭，底部单位卡保留名称用于辨认。
+	if show_name:
+		var name_pos := Vector2(-tile_size / 2.0, -tile_size / 2.0 - 4.0)
+		draw_string(ThemeDB.fallback_font, name_pos, unit.get_display_name(), \
+			HORIZONTAL_ALIGNMENT_CENTER, tile_size, 14, Color.WHITE)
 	# 底部血条
 	var bar_width := tile_size - 6
 	var bar_height := 6
@@ -93,5 +100,6 @@ func _draw() -> void:
 		var shield_pos := Vector2(bar_pos.x, bar_pos.y - shield_h - 1)
 		draw_rect(Rect2(shield_pos, Vector2(bar_width, shield_h)), Color(0.10, 0.13, 0.22))
 		draw_rect(Rect2(shield_pos, Vector2(bar_width * shield_ratio, shield_h)), Color(0.42, 0.72, 1.00))
-	draw_string(ThemeDB.fallback_font, Vector2(-40, tile_size / 2.0 + 12.0), "%d/%d" % [unit.hp, unit.max_hp], \
-		HORIZONTAL_ALIGNMENT_CENTER, 80, 12, Color.WHITE)
+	if show_hp_text:
+		draw_string(ThemeDB.fallback_font, Vector2(-40, tile_size / 2.0 + 12.0), "%d/%d" % [unit.hp, unit.max_hp], \
+			HORIZONTAL_ALIGNMENT_CENTER, 80, 12, Color.WHITE)

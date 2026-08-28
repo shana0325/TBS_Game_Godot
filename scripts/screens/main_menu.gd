@@ -7,10 +7,12 @@ extends Control
 @onready var quit_button: Button = $QuitButton
 
 func _ready() -> void:
-	status_label.text = GameDatabase.get_data_summary()
+	status_label.text = "自动战斗 · 战棋部署 · 爬塔冒险"
 	start_button.pressed.connect(_on_start_pressed)
 	roster_button.pressed.connect(_on_roster_pressed)
 	quit_button.pressed.connect(_on_quit_pressed)
+	quit_button.add_theme_color_override("font_color", Color(0.92, 0.48, 0.42, 1.0))
+	quit_button.add_theme_color_override("font_hover_color", Color(1.0, 0.68, 0.56, 1.0))
 
 func _on_start_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/level_select.tscn")

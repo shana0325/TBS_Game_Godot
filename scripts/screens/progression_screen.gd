@@ -9,10 +9,18 @@ var current_tab: int = Tab.STATS
 
 var role_buttons: Array = []
 var tab_buttons: Array = []
+var role_scroll: ScrollContainer
+var role_box: HBoxContainer
+var tab_bar: HBoxContainer
+var content_scroll: ScrollContainer
 var content_panel: VBoxContainer
+var overview_panel: PanelContainer
+var overview_scroll: ScrollContainer
+var overview_box: VBoxContainer
 var overview_label: Label
 var overview_portrait: TextureRect
 var status_label: Label
+var start_button: Button
 var selected_skill: String = ""
 
 # 触发时机中文标签（与 skill_trigger_system.gd 的常量对应）
@@ -29,45 +37,79 @@ func _ready() -> void:
 	roster = GameDatabase.player_roster.get("units", [])
 	_build_top_bar()
 	_build_tab_bar()
-	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(80, 200)
-	scroll.custom_minimum_size = Vector2(620, 440)
-	add_child(scroll)
+	content_scroll = ScrollContainer.new()
+	content_scroll.name = "ContentScroll"
+	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	add_child(content_scroll)
 	content_panel = VBoxContainer.new()
+	content_panel.name = "ContentPanel"
+	content_panel.custom_minimum_size = Vector2(580, 0)
 	content_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_panel.add_theme_constant_override("separation", 10)
-	scroll.add_child(content_panel)
+	content_scroll.add_child(content_panel)
 	_build_overview_panel()
 	status_label = Label.new()
-	status_label.position = Vector2(80, 660)
 	status_label.add_theme_font_size_override("font_size", 18)
 	add_child(status_label)
+	_layout_screen()
 	_refresh()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_layout_screen()
+
+# 响应窗口尺寸变化：左右内容独立滚动，顶部按钮用容器排布避免互相覆盖。
+func _layout_screen() -> void:
+	var vp := get_viewport_rect().size
+	var right_x := minf(maxf(650.0, vp.x * 0.58), maxf(650.0, vp.x - 360.0))
+	if start_button != null:
+		start_button.position = Vector2(maxf(60.0, vp.x - 280.0), 70.0)
+	if role_scroll != null:
+		role_scroll.position = Vector2(60.0, 120.0)
+		role_scroll.size = Vector2(maxf(360.0, vp.x - 120.0), 42.0)
+	if tab_bar != null:
+		tab_bar.position = Vector2(60.0, 174.0)
+		tab_bar.size = Vector2(minf(440.0, maxf(360.0, vp.x - 120.0)), 42.0)
+	if content_scroll != null:
+		content_scroll.position = Vector2(60.0, 226.0)
+		content_scroll.size = Vector2(maxf(360.0, right_x - 90.0), maxf(260.0, vp.y - 286.0))
+		content_panel.custom_minimum_size.x = maxf(340.0, content_scroll.size.x - 18.0)
+	if overview_panel != null:
+		overview_panel.position = Vector2(right_x, 170.0)
+		overview_panel.size = Vector2(maxf(300.0, vp.x - right_x - 40.0), maxf(300.0, vp.y - 210.0))
+	if status_label != null:
+		status_label.position = Vector2(60.0, maxf(0.0, vp.y - 48.0))
 
 # 右侧角色总览面板：展示装备/加点后的整体属性与已装备技能。
 func _build_overview_panel() -> void:
-	var panel := PanelContainer.new()
-	panel.position = Vector2(700, 170)
+	overview_panel = PanelContainer.new()
+	overview_panel.name = "OverviewPanel"
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 16)
 	margin.add_theme_constant_override("margin_right", 16)
 	margin.add_theme_constant_override("margin_top", 12)
 	margin.add_theme_constant_override("margin_bottom", 12)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
+	overview_scroll = ScrollContainer.new()
+	overview_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	overview_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	overview_box = VBoxContainer.new()
+	overview_box.add_theme_constant_override("separation", 10)
+	overview_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	overview_portrait = TextureRect.new()
-	overview_portrait.custom_minimum_size = Vector2(160, 160)
+	overview_portrait.custom_minimum_size = Vector2(0, 180)
 	overview_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	overview_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	box.add_child(overview_portrait)
+	overview_box.add_child(overview_portrait)
 	overview_label = Label.new()
 	overview_label.add_theme_font_size_override("font_size", 20)
 	overview_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	overview_label.custom_minimum_size = Vector2(460, 280)
-	box.add_child(overview_label)
-	margin.add_child(box)
-	panel.add_child(margin)
-	add_child(panel)
+	overview_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	overview_box.add_child(overview_label)
+	overview_scroll.add_child(overview_box)
+	margin.add_child(overview_scroll)
+	overview_panel.add_child(margin)
+	add_child(overview_panel)
 
 func _current_unit() -> Dictionary:
 	return roster[selected_index]
@@ -85,32 +127,41 @@ func _build_top_bar() -> void:
 	back_btn.pressed.connect(_go_back)
 	add_child(back_btn)
 
-	var start_btn := Button.new()
-	start_btn.name = "StartGameButton"
-	start_btn.text = "保存并开始游戏"
-	start_btn.custom_minimum_size = Vector2(220, 44)
-	start_btn.position = Vector2(get_viewport_rect().size.x - 280.0, 70.0)
-	start_btn.pressed.connect(_start_game)
-	add_child(start_btn)
+	start_button = Button.new()
+	start_button.name = "StartGameButton"
+	start_button.text = "保存并开始游戏"
+	start_button.custom_minimum_size = Vector2(220, 44)
+	start_button.pressed.connect(_start_game)
+	add_child(start_button)
 
-	# 角色选择按钮（横向排列）
+	# 角色选择按钮：放进横向滚动容器，角色数量增加时不会挤压标签页。
+	role_scroll = ScrollContainer.new()
+	role_scroll.name = "RoleScroll"
+	role_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	role_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	role_box = HBoxContainer.new()
+	role_box.add_theme_constant_override("separation", 12)
+	role_scroll.add_child(role_box)
+	add_child(role_scroll)
 	for i in roster.size():
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(170, 44)
+		btn.custom_minimum_size = Vector2(160, 42)
 		btn.text = "%d. %s" % [i + 1, str(roster[i].get("type", "Unit"))]
 		btn.pressed.connect(_on_role_selected.bind(i))
-		add_child(btn)
-		btn.position = Vector2(60 + i * 190, 120)
+		role_box.add_child(btn)
 		role_buttons.append(btn)
 
 func _build_tab_bar() -> void:
+	tab_bar = HBoxContainer.new()
+	tab_bar.name = "TabBar"
+	tab_bar.add_theme_constant_override("separation", 12)
+	add_child(tab_bar)
 	for t in [Tab.STATS, Tab.SKILLS, Tab.EQUIP]:
 		var btn := Button.new()
 		btn.text = ["属性", "技能", "装备"][t]
-		btn.custom_minimum_size = Vector2(120, 40)
-		btn.position = Vector2(80 + t * 140, 160)
+		btn.custom_minimum_size = Vector2(126, 40)
 		btn.pressed.connect(_on_tab_selected.bind(t))
-		add_child(btn)
+		tab_bar.add_child(btn)
 		tab_buttons.append(btn)
 
 func _on_role_selected(index: int) -> void:
@@ -277,6 +328,10 @@ func _on_add_stat(stat: String) -> void:
 # --- 技能子页（固有技能锁定区 + 通用技能池，点击技能查看详情） ---
 func _build_skills_tab(unit: Dictionary) -> void:
 	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
+	var list_title := Label.new()
+	list_title.text = "技能列表（点击技能查看详情）"
+	list_title.add_theme_font_size_override("font_size", 18)
+	content_panel.add_child(list_title)
 	# 固有技能：模板独有，自动生效，不可更换
 	var innate_id: String = str(config.get("innate_skill", ""))
 	if innate_id == "":
@@ -308,16 +363,27 @@ func _build_skills_tab(unit: Dictionary) -> void:
 		action_btn.text = _skill_action_label(selected_skill, unit)
 		action_btn.pressed.connect(_on_selected_skill_action)
 		content_panel.add_child(action_btn)
-	# 通用技能池：仅展示 common 标记的技能，点击查看详情与操作
+	# 技能池：只展示当前角色的固有技能和通用技能，避免检索到其他角色的专属技能。
 	var learned: Array = unit.get("learned_skills", [])
 	var equipped: Array = unit.get("equipped_skills", [])
+	var skill_ids: Array = GameDatabase.skills.keys()
+	if skill_ids.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "暂无技能数据（请检查 data/skill/skills.json）"
+		empty_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.5, 1.0))
+		content_panel.add_child(empty_label)
 	for skill_id in GameDatabase.skills.keys():
 		var data: Dictionary = GameDatabase.get_skill(skill_id)
-		if not bool(data.get("common", false)):
+		var status := ""
+		var is_innate := str(skill_id) == innate_id
+		var is_common := bool(data.get("common", false))
+		if not is_innate and not is_common:
+			continue
+		# 当前角色的固有技能在上方已经有详细说明，这里不重复加入可检索列表。
+		if is_innate:
 			continue
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(560, 40)
-		var status := ""
+		btn.custom_minimum_size = Vector2(0, 48)
 		if equipped.has(skill_id):
 			status = "  已装备"
 		elif learned.has(skill_id):

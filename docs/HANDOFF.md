@@ -1,6 +1,6 @@
 # TBS_Game_Godot 交接文档
 
-> 交接时间：2026-08-10
+> 交接时间：2026-08-28（UI/流程同步）
 > 项目路径：`D:\Shana Program\文档\TBS_Game_Godot`
 > 参考项目：`D:\PycharmProjects\TBS_Game`（旧 Python/pygame 版，仅作设计参考，不混用代码）
 > 参考素材：`E:\SteamLibrary\steamapps\common\Brave Nine`（棕色尘埃单机版，用于提取技能体系与中文文本）
@@ -66,8 +66,8 @@ scripts/
     turn/               # 回合管理
     effects/            # 技能效果分发：damage / heal / buff
     events/             # 战斗事件常量、事件对象、事件分发
-  screens/              # 战斗外流程（目前只有主菜单占位）
-  ui/                   # 后续 UI 组件
+  screens/              # 主菜单、选关、部署、成长、结算、奖励界面控制器
+  ui/                   # 战场显示、单位卡、共享信息文本与布局组件
 assets/                 # 美术/音频资源
 docs/                   # 设计文档、交接文档
 ```
@@ -120,12 +120,12 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 - `scripts/battle/events/battle_event.gd`：事件数据对象。
 - `scripts/battle/events/event_system.gd`：遍历单位 Buff，将匹配 trigger 的事件交给 Buff。
 
-### 界面与流程（M3 新增：主菜单→选关→部署→战斗→结算）
+### 界面与流程（当前：主菜单→选关→部署→战斗→结算/爬塔奖励）
 
 - `scripts/core/game_session.gd`：全局会话 autoload，跨屏幕传递当前关卡、部署位置与战斗结果。
 - `scripts/screens/main_menu.gd`：主菜单，显示数据加载结果，提供开始游戏（进入选关）与退出入口。
 - `scripts/screens/level_select.gd`：选关屏幕，扫描 `data/scenario/` 生成关卡按钮，选择后进入部署。
-- `scripts/screens/deployment_screen.gd`：部署屏幕，展示地图与蓝色部署区，右侧编成槽位，点选单位后点击部署格放置（可反复调整位置，槽位显示已部署状态），全部就绪后可开始战斗。
+- `scripts/screens/deployment_screen.gd`：部署屏幕，展示地图与底部横向单位栏；支持拖拽部署、拖拽换位、拖出部署区自动撤回，点击己方/敌方单位查看信息。
 - `scripts/screens/result_screen.gd`：结算屏幕，展示胜负结果，提供"再来一局"与"返回主菜单"。
 - `scenes/level_select.tscn` / `scenes/deployment_screen.tscn` / `scenes/result_screen.tscn`：对应场景。
 
@@ -138,9 +138,19 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 - `scripts/ui/battle_screen.gd`：战斗界面（自走棋自动战斗），`_process` 驱动 `manager.tick`，播放行动动画/日志，判定胜负。
 - `scripts/ui/grid_view.gd`：网格渲染，绘制地板、边框与高亮（当前自动战斗下移动/攻击高亮已不用，保留悬停/选中）。
 - `scripts/ui/unit_view.gd`：单位渲染，动作贴图（stand/move/attack/death）填满格子，名称/血条/护盾条，acted 变暗。
+- `scripts/ui/deployment_unit_card.gd`：部署/战斗底部单位卡共用组件；战斗中只读，部署中可拖动。
+- `scripts/ui/unit_info_text.gd`：部署与战斗共用的单位信息文本格式化模块。
 - `scripts/ui/battle_layout.gd`：根据视口与行列数计算自适应格子大小并居中战场。
 - `scenes/battle_screen.tscn`：战斗场景（网格、单位层、日志面板、回合标签）。
 - `data/scenario/battle_01.json`：关卡（12×6，2 玩家 vs 3 敌方，玩家部署左半区 x0-5）。
+
+当前 UI 行为约定：
+
+- 部署与战斗使用同一战场安全区和底部单位栏尺寸规则。
+- 战斗底部栏只显示未上场单位，保留展示但关闭拖动；底部卡片与部署阶段共用同一组件。
+- 战斗胜利奖励在当前战斗场景内以半透明悬浮窗显示，可隐藏以查看战场；选择或跳过奖励均进入下一层部署。
+- 信息卡无关闭按钮，点击卡片外区域隐藏；部署和战斗均可查看己方与敌方单位。
+- 战斗倍速保存在 `GameSession`，下一场战斗继承；离开战斗时只重置时间缩放。
 
 ### 战斗系统（自走棋）
 

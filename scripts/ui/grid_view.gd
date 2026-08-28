@@ -35,16 +35,16 @@ func set_hover(cell: Vector2i) -> void:
 func _draw() -> void:
 	if grid == null:
 		return
-	var floor_color := Color(0.30, 0.32, 0.36)
-	var alt_color := Color(0.34, 0.36, 0.40)
-	var border_color := Color(0.16, 0.17, 0.20)
+	var floor_color := Color(0.16, 0.20, 0.25)
+	var alt_color := Color(0.19, 0.24, 0.29)
+	var border_color := Color(0.08, 0.11, 0.15)
 	for y in range(grid.height):
 		for x in range(grid.width):
 			var tile := grid.get_tile(x, y)
 			var rect := Rect2(x * tile_size, y * tile_size, tile_size, tile_size)
 			var base := floor_color if (x + y) % 2 == 0 else alt_color
 			if not tile.passable:
-				base = Color(0.20, 0.20, 0.22)
+				base = Color(0.11, 0.13, 0.16)
 			draw_rect(rect, base)
 			draw_rect(rect, border_color, false, 1.0)
 	for cell in move_highlight:

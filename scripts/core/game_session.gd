@@ -8,9 +8,11 @@ var mode: String = MODE_QUICK
 var current_scenario: String = "battle_01"
 var scenario_override: Dictionary = {}   # 非空时优先于关卡文件（爬塔分层生成用）
 var deployed_units: Array = []
+var deployment_units: Array = []          # 战前部署栏原始单位列表，切入战斗后继续复用
 var last_winner: String = ""
 var victory_rewards: Array = []
 var battle_stats: Array = []             # 本场战斗统计：[{name, camp, damage, heal, taken}]
+var battle_speed: int = 1                # 战斗倍速设置，跨战斗保留
 
 # --- 爬塔单局状态 ---
 var tower_floor: int = 0
@@ -25,6 +27,7 @@ func select_scenario(scenario_id: String) -> void:
 	current_scenario = scenario_id
 	scenario_override = {}
 	deployed_units.clear()
+	deployment_units.clear()
 	last_winner = ""
 	victory_rewards = []
 	battle_stats = []
@@ -58,13 +61,15 @@ func prepare_tower_deployment() -> void:
 	current_scenario = "tower_floor"
 	scenario_override = tower_scenario
 	deployed_units.clear()
+	deployment_units.clear()
 	last_winner = ""
 	victory_rewards = []
 
 # 从部署开始战斗：记录部署并保证场景就绪。
 func start_tower_battle(deployed: Array) -> void:
-	tower_deployed = deployed
-	deployed_units = deployed
+	# 深拷贝阵容与坐标，奖励进入下一层时继续沿用本层最终编成。
+	tower_deployed = deployed.duplicate(true)
+	deployed_units = tower_deployed.duplicate(true)
 	scenario_override = tower_scenario
 	last_winner = ""
 	victory_rewards = []
@@ -76,6 +81,7 @@ func end_tower_run() -> void:
 	tower_floor = 0
 	tower_scenario = {}
 	tower_deployed = []
+	deployment_units.clear()
 	scenario_override = {}
 	run_relics.clear()
 	run_blessings.clear()
