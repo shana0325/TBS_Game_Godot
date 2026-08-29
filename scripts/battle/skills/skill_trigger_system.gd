@@ -27,7 +27,8 @@ const PASSIVE := "passive"
 static func dispatch(battle, trigger: String, context: Dictionary) -> Array:
 	var casted: Array = []
 	var actor = context.get("actor")
-	if actor == null or not (actor is Unit) or not actor.alive:
+	var allow_dead_actor := trigger == ON_DEATH
+	if actor == null or not (actor is Unit) or (not actor.alive and not allow_dead_actor):
 		return casted
 	for item in actor.skills:
 		if not (item is Skill):
@@ -42,9 +43,24 @@ static func dispatch(battle, trigger: String, context: Dictionary) -> Array:
 		var targets := skill.resolve_targets(battle, actor, context)
 		if targets.is_empty():
 			continue
-		skill.execute(actor, targets, battle.game)
+		var reports: Array = skill.execute(actor, targets, battle.game)
 		skill.start_cooldown()
 		casted.append(skill)
+		var skill_damage := 0
+		for report_entry in reports:
+			if typeof(report_entry) != TYPE_DICTIONARY:
+				continue
+			var report: Dictionary = report_entry.get("report", {})
+			var damage := int(report.get("damage", 0))
+			if damage <= 0:
+				continue
+			skill_damage += damage
+			var target: Unit = report_entry.get("target")
+			if battle.game != null and battle.game.has_method("record_skill_damage"):
+				battle.game.record_skill_damage(actor, target, damage, skill.name)
 		if battle.game != null and battle.game.has_method("add_log"):
-			battle.game.add_log("%s 触发技能 %s" % [actor.get_display_name(), skill.name])
+			if skill_damage > 0:
+				battle.game.add_log("%s 使用技能 %s，造成 %d 点技能伤害" % [actor.get_display_name(), skill.name, skill_damage])
+			else:
+				battle.game.add_log("%s 触发技能 %s" % [actor.get_display_name(), skill.name])
 	return casted

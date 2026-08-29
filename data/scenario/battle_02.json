@@ -52,19 +52,19 @@
   ],
   "enemy_units": [
     {
-      "type": "Goblin",
+      "type": "Archer",
       "pos": [10, 1]
     },
     {
-      "type": "Goblin",
+      "type": "Archer",
       "pos": [9, 3]
     },
     {
-      "type": "Orc",
+      "type": "Assassin",
       "pos": [11, 2]
     },
     {
-      "type": "Orc",
+      "type": "Tank",
       "pos": [10, 4]
     }
   ]

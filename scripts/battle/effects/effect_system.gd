@@ -39,6 +39,9 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 			"shield":
 				var sh := _apply_shield(target, effect, game)
 				report["shield"] += sh
+			"shield_max_hp_percent":
+				var max_sh := _apply_max_hp_shield(target, effect, game)
+				report["shield"] += max_sh
 			"stat_mod":
 				_apply_stat_mod(target, effect, game)
 			"revive":
@@ -81,7 +84,7 @@ static func _apply_damage(user: Unit, target: Unit, config: Dictionary, game) ->
 		return 0
 	var power := float(config.get("power", 1.0))
 	var terrain_bonus := int(config.get("terrain_bonus", 0))
-	var calc := DamageCalculator.calculate_skill_damage(user, target, power, terrain_bonus)
+	var calc := DamageCalculator.calculate_skill_damage(user, target, power, terrain_bonus, _get_final_damage_multiplier(game))
 	var damage: int = calc.get("damage", 0)
 	var crit: bool = calc.get("crit", false)
 	var result := target.take_damage(damage, game)
@@ -118,12 +121,19 @@ static func _apply_shield(target: Unit, config: Dictionary, game) -> int:
 		"name": "护罩",
 		"duration": int(config.get("duration", 2)),
 		"shield": amount,
+		"permanent": bool(config.get("permanent", false)),
 	}
 	var buff := Buff.from_data(data)
 	target.add_buff(buff)
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 获得 %d 点护罩" % [target.get_display_name(), amount])
 	return amount
+
+static func _apply_max_hp_shield(target: Unit, config: Dictionary, game) -> int:
+	if target == null or not target.alive:
+		return 0
+	var amount := maxi(1, roundi(float(target.max_hp) * float(config.get("percent", 0.1))))
+	return _apply_shield(target, {"amount": amount, "duration": int(config.get("duration", -1)), "permanent": bool(config.get("permanent", true))}, game)
 
 static func _apply_stat_mod(target: Unit, config: Dictionary, game) -> void:
 	if target == null:
@@ -132,6 +142,8 @@ static func _apply_stat_mod(target: Unit, config: Dictionary, game) -> void:
 		"name": str(config.get("name", "属性变化")),
 		"duration": int(config.get("duration", 2)),
 		"modifiers": config.get("stats", {}),
+		"conditional_hp_percent": config.get("conditional_hp_percent", {}),
+		"permanent": bool(config.get("permanent", false)),
 	}
 	var buff := Buff.from_data(data)
 	target.add_buff(buff)
@@ -167,7 +179,7 @@ static func _apply_dispel(target: Unit, config: Dictionary, game) -> void:
 static func _apply_summon(user: Unit, config: Dictionary, game) -> void:
 	if user == null:
 		return
-	var unit_type := str(config.get("unit_type", "Goblin"))
+	var unit_type := str(config.get("unit_type", "Warrior"))
 	var config_data: Dictionary = GameDatabase.get_unit(unit_type)
 	if config_data.is_empty():
 		push_warning("召唤未知单位: %s" % unit_type)
@@ -220,6 +232,7 @@ static func _apply_reflect(target: Unit, config: Dictionary, game) -> void:
 		"name": str(config.get("name", "反射")),
 		"duration": int(config.get("duration", 2)),
 		"reflect_percent": float(config.get("percent", 0.3)),
+		"permanent": bool(config.get("permanent", false)),
 		"is_beneficial": true,
 	}
 	var buff := Buff.from_data(data)
@@ -339,10 +352,8 @@ static func _apply_teleport(user: Unit, target: Unit, config: Dictionary, game) 
 			if not _is_cell_walkable(battle, next_cell):
 				break
 			cell = next_cell
-	if cell != start:
-		battle.move_unit_to(subject, cell)
-		if battle.has_method("add_log"):
-			game.add_log("%s 被位移到 %s" % [subject.get_display_name(), str(cell)])
+		if cell != start:
+			battle.move_unit_to(subject, cell)
 
 # 检查格子可走（地图内/可通行/未被占用）。
 static func _is_cell_walkable(battle, cell: Vector2i) -> bool:
@@ -364,6 +375,7 @@ static func _apply_percentage_damage(user: Unit, target: Unit, config: Dictionar
 	var max_damage := int(config.get("max", 999999))
 	var damage := mini(roundi(target.max_hp * percent), max_damage)
 	damage = maxi(1, damage)
+	damage = maxi(1, roundi(damage * _get_final_damage_multiplier(game)))
 	var result := target.take_damage(damage, game)
 	if user != null:
 		user.damage_dealt += int(result.get("hp_lost", 0))
@@ -387,7 +399,7 @@ static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, ga
 	for i in range(chain):
 		if current_target == null or not current_target.alive:
 			break
-		var calc := DamageCalculator.calculate_skill_damage(user, current_target, power, 0)
+		var calc := DamageCalculator.calculate_skill_damage(user, current_target, power, 0, _get_final_damage_multiplier(game))
 		var damage: int = calc.get("damage", 0)
 		var crit: bool = calc.get("crit", false)
 		var hop_result := current_target.take_damage(damage, game)
@@ -414,6 +426,11 @@ static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, ga
 		if current_target != null:
 			hit.append(current_target)
 	return total
+
+static func _get_final_damage_multiplier(game) -> float:
+	if game != null and game.has_method("get_final_damage_multiplier"):
+		return maxf(float(game.get_final_damage_multiplier()), 1.0)
+	return 1.0
 
 # 永久属性强化：提升属性（跨战斗全局永久或本局永久）。
 # config: { stat, amount, persist }。persist=true 写回编成（全局永久），false 仅本局生效。

@@ -22,7 +22,7 @@
 
 ```text
 Godot Engine v4.7.1
-GameDatabase loaded: units=4 skills=12 buffs=10 equipments=5 relics=5
+GameDatabase loaded: units=5 skills=12 buffs=11 equipments=5 relics=5
 ```
 
 ## 2. 如何运行
@@ -51,7 +51,7 @@ res://scenes/main.tscn
 - 发布方式：一键脚本 `tools/deploy_web.ps1`（无头导出 Web 构建 → 独立 worktree 整体重建 gh-pages 分支并强推 → 清理；主分支工作区不受影响）。
 - 每次想更新网页版：改完 main 后直接重跑该脚本即可，无需手动管理分支。
 - 约束：Web 导出预设 `export_presets.cfg` 必须保持 `variant/thread_support=false`（GitHub Pages 无法设置 COOP/COEP 头，线程版会因 SharedArrayBuffer 不可用而无法启动）；Pages 源分支为 gh-pages 根目录。
-- 进度保存：编成数据写 `user://`（网页上自动落到浏览器 IndexedDB），首次运行由内建 JSON 播种（`GameDatabase._sync_user_roster`）。
+- 进度保存：编成与背包数据写 `user://`（网页上自动落到浏览器 IndexedDB），首次运行由内建 JSON 播种（`GameDatabase._sync_user_roster`）。
 
 ## 3. 当前架构
 
@@ -67,8 +67,12 @@ scripts/
     effects/            # 技能效果分发：damage / heal / buff
     events/             # 战斗事件常量、事件对象、事件分发
   screens/              # 主菜单、选关、部署、成长、结算、奖励界面控制器
-  ui/                   # 战场显示、单位卡、共享信息文本与布局组件
+  ui/                   # 战场显示、单位卡、背包弹窗、共享信息文本与布局组件
 assets/                 # 美术/音频资源
+  fonts/                # 当前运行时字体
+  skills/               # 当前运行时技能图标
+  units/                # 当前运行时单位图片和立绘
+  reference/ui_material/ # 未接入的 UI 候选素材
 docs/                   # 设计文档、交接文档
 ```
 
@@ -82,8 +86,10 @@ data/skill/skills.json               # 技能与 effect 列表（common=true 通
 data/buff/buffs.json                 # Buff 配置
 data/equipment/equipments.json       # 装备配置
 data/relic/relics.json               # 遗物配置（爬塔局内成长）
-data/player/player_roster.json       # 玩家编成、成长、技能、装备、permanent_mods 永久强化
+data/player/player_roster.json       # 玩家编成、成长、技能、装备、permanent_mods 永久强化、inventory 背包
 ```
+
+当前基础职业模板为 `Warrior`、`Tank`、`Archer`、`Assassin`，另保留 `Hero` 作为固有技能测试单位；旧的 Knight/Goblin/Orc 测试单位已删除。
 
 创建 `Unit` 时会合并：
 
@@ -101,8 +107,8 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 - `scripts/core/tile.gd`：单个格子，保存坐标、移动消耗、防御加成、可通行状态。
 - `scripts/core/grid.gd`：二维 Tile 网格，负责取格子和获取上下左右可通行邻居。
 - `scripts/core/unit.gd`：单位，组合模板、成长、技能、Buff、装备；提供属性计算、受伤、治疗、Buff、控制状态等方法。
-- `scripts/core/skill.gd`：技能基类，保存触发时机/条件/射程/effect 列表；提供三个可覆写钩子 `check_condition` / `resolve_targets` / `execute`（JSON 技能默认数据驱动，代码技能可覆写）。
-- `scripts/core/buff.gd`：Buff，支持属性修正、持续伤害、持续治疗、控制、护盾、触发型效果、反击标记等字段。
+- `scripts/core/skill.gd`：技能基类，保存触发时机/条件/射程/effect 列表；支持一次性技能与目标生命/暴击条件。
+- `scripts/core/buff.gd`：Buff，支持属性修正、条件属性修正、持续伤害、持续治疗、控制、护盾、触发型效果、反击标记等字段。
 - `scripts/core/equipment.gd`：装备，保存槽位、属性修正、授予技能。
 - `scripts/core/game_database.gd`：Godot autoload，统一加载和访问 JSON 数据；启动时合并代码技能（双轨）。
 
@@ -110,6 +116,7 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 
 - `scripts/battle/movement/pathfinder.gd`：Dijkstra 移动范围计算和简单路径回溯。
 - `scripts/battle/combat/damage_calculator.gd`：纯数值计算，不修改单位状态。
+- `scripts/core/combat_formula.gd`：共享护甲减伤公式，供伤害计算与 UI 数值展示共用。
 - `scripts/battle/combat/combat_system.gd`：普通攻击执行、射程判断、ON_ATTACK / ON_HIT / ON_KILL 事件分发。
 - `scripts/battle/turn/turn_manager.gd`：阵营回合切换、单位 acted 状态管理。
 - `scripts/battle/effects/effect_system.gd`：按 effect 类型分发技能效果（20 类原子效果函数）。
@@ -123,7 +130,7 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 ### 界面与流程（当前：主菜单→选关→部署→战斗→结算/爬塔奖励）
 
 - `scripts/core/game_session.gd`：全局会话 autoload，跨屏幕传递当前关卡、部署位置与战斗结果。
-- `scripts/screens/main_menu.gd`：主菜单，显示数据加载结果，提供开始游戏（进入选关）与退出入口。
+- `scripts/screens/main_menu.gd`：主菜单，提供“继续游戏”“开始新游戏”、队伍编成与退出入口；新游戏从内置种子重建角色和背包。
 - `scripts/screens/level_select.gd`：选关屏幕，扫描 `data/scenario/` 生成关卡按钮，选择后进入部署。
 - `scripts/screens/deployment_screen.gd`：部署屏幕，展示地图与底部横向单位栏；支持拖拽部署、拖拽换位、拖出部署区自动撤回，点击己方/敌方单位查看信息。
 - `scripts/screens/result_screen.gd`：结算屏幕，展示胜负结果，提供"再来一局"与"返回主菜单"。
@@ -131,15 +138,18 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 
 ### 成长与装备（M4 新增）
 
-- `scripts/core/progress_manager.gd`：成长逻辑（加点/学技能/装技能/换装备/写回 player_roster.json），纯逻辑不依赖 UI。
-- `scripts/screens/progression_screen.gd`：成长界面，两段式（先选角色再成长），属性/技能/装备三个子页；右侧整体属性总览面板（含装备修正）实时刷新。
+- `scripts/core/progress_manager.gd`：成长与背包逻辑（加点/升星/学技能/装备/换装备/技能书/写回 player_roster.json），纯逻辑不依赖 UI。
+- `scripts/core/game_database.gd`：加载/迁移玩家存档；五个基础角色均为持久化角色，旧存档启动时自动补齐缺少的基础角色。
+- `scripts/screens/progression_screen.gd`：成长界面，两段式（先选角色再成长），属性/技能/装备三个子页；右侧整体属性总览面板（含标签、星级、槽位和装备修正）实时刷新。
 - `scenes/progression_screen.tscn`：成长界面场景；主菜单新增"队伍编成"入口。
 - 战斗内单位信息面板（`battle_screen.gd`）：点击任意单位在左上角显示其属性/装备/技能/Buff。
 - `scripts/ui/battle_screen.gd`：战斗界面（自走棋自动战斗），`_process` 驱动 `manager.tick`，播放行动动画/日志，判定胜负。
 - `scripts/ui/grid_view.gd`：网格渲染，绘制地板、边框与高亮（当前自动战斗下移动/攻击高亮已不用，保留悬停/选中）。
 - `scripts/ui/unit_view.gd`：单位渲染，动作贴图（stand/move/attack/death）填满格子，名称/血条/护盾条，acted 变暗。
 - `scripts/ui/deployment_unit_card.gd`：部署/战斗底部单位卡共用组件；战斗中只读，部署中可拖动。
-- `scripts/ui/unit_info_text.gd`：部署与战斗共用的单位信息文本格式化模块。
+- `scripts/ui/unit_info_text.gd`：部署与战斗共用的单位信息文本格式化模块，防御显示为护甲及百分比减伤。
+- `scripts/ui/backpack_panel.gd`：部署界面背包悬浮窗，以网格显示道具，提供名称/简介提示和技能书拖拽来源。
+- `scripts/ui/backpack_item_cell.gd`：背包网格道具格子，负责技能书拖拽数据和道具悬停/点击交互。
 - `scripts/ui/battle_layout.gd`：根据视口与行列数计算自适应格子大小并居中战场。
 - `scenes/battle_screen.tscn`：战斗场景（网格、单位层、日志面板、回合标签）。
 - `data/scenario/battle_01.json`：关卡（12×6，2 玩家 vs 3 敌方，玩家部署左半区 x0-5）。
@@ -184,6 +194,8 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 ### 技能体系双轨与养成改造（2026-08-11）
 
 - **固有技能 + 通用技能**：units.json 新增 `innate_skill`（Hero 固有"以战养战"）；skills.json 现有技能标记 `common: true` 归入通用技能池（编成中学习/装备，消耗技能点）。
+- **标签与检索**：单位模板支持 `tags`；技能支持 `tags` 与 `searchable`。不可检索技能排除常规学习、敌人随机技能和爬塔随机技能奖励，但可由指定逻辑直接获取。
+- **星级与技能槽**：单位从 1 星开始，当前最高 3 星；每次升星使初始生命/攻击/护甲提高 50%。通用技能槽为 1/2/3 格，升星最多增加 2 格。
 - **永久属性强化**：新效果类型 `permanent_stat`（persist=true 全局永久写回编成；false 仅本局永久）；Unit 新增 `permanent_mods` 字段；一并修复"max_hp 不吃装备/Buff 修正"的旧问题。
 - **以战养战**：Hero 固有技能，`on_kill` 触发，生命上限永久 +1（当前生命同步 +1），无上限。
 - **已学未装备修复**：只有"已装备"的通用技能参与战斗（原为学了就生效）。
@@ -205,8 +217,11 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 
 - **入口**：主菜单新增"爬塔模式"（与快速对战并存）；沿用当前编成自动部署。
 - **会话**：`GameSession` 新增 `mode / tower_floor / run_relics / run_blessings` 与 `scenario_override`（运行时覆盖关卡字典）。
-- **层生成**：`TowerGenerator` 按层生成敌人（普通/精英(每3层)/Boss(每5层)，类型 Goblin→Orc 进阶，敌人按层配技能成长）。
-- **奖励**：胜利进入 `reward_screen` 三选一（通用技能/装备/祝福/遗物，`RewardGenerator` 生成与应用）；技能/装备奖励写回编成。
+- **层生成**：`TowerGenerator` 按层生成敌人（普通/精英(每3层)/Boss(每5层)，使用四种职业模板，敌人按层配技能成长）。
+- **背包**：部署界面右侧操作区提供“背包”按钮。悬浮窗以网格显示升星道具与技能书，点击/悬停显示名称和简介；技能书可直接拖到我方单位，满槽时弹出替换列表，取消不消耗技能书。点击背包外区域自动关闭。首次存档发放 99 个升星道具和每种可学习通用技能书 1 本用于测试。
+- **技能详情**：`skill_detail_formatter.gd` 统一生成单位信息卡和背包技能书使用的技能详情；部署底部未上场角色卡也可直接接收技能书。
+- **奖励**：胜利进入 `reward_screen` 三选一（技能书/装备/祝福/遗物，`RewardGenerator` 生成与应用）；技能书和装备奖励写回编成/背包。
+- **狂暴**：`TurnManager` 在 60 秒后每 30 秒将双方最终伤害提高 50%；`BattleScreen` 在战斗时间右侧显示当前增幅，普攻、技能、百分比伤害和持续伤害统一应用。
 - **遗物系统**：`data/relic/relics.json` 首期 5 个（战神徽章/急速披风/鲜血吊坠/不灭徽记/荆棘之心）；`RelicSystem` 战斗开始应用（stat_percent / turn_speed / 永久反射 Buff），事件钩子 on_kill 回血、on_first_death 复活（每场一次）。Unit 新增 `percent_mods`（百分比属性）、Buff 新增 `permanent` 标记（不衰减）。
 
 已知边界：不灭徽记复活仅挂"攻击致死"路径（DOT/技能间接致死暂不触发）；商店/事件/31+ 无限层未做。
@@ -257,3 +272,4 @@ Test-Path 'D:\Shana Program\文档\TBS_Game_Godot\project.godot'
 - 新增简单技能：改 JSON 组合效果积木；新增复杂技能：继承 CodeSkill 写代码并集中注册。
 - 新增 `class_name` 的脚本后，运行一次 `--import` 刷新全局类缓存再跑无头检查。
 - 不要混用旧 Python/pygame 代码，Godot 项目只使用 GDScript/Godot 资源。
+- **删除目录/文件前先向用户确认**：尤其批量生成产物、非本会话创建或未提交 git 的文件；先说明价值判断（有用/无用/可重建），由用户明确同意后再删除。

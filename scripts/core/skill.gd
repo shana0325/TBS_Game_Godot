@@ -6,6 +6,7 @@ class_name Skill
 extends RefCounted
 
 var name: String
+var skill_id: String = ""
 var desc: String = ""
 var trigger: String = "on_attack"
 var condition: Dictionary = {}
@@ -16,7 +17,11 @@ var max_range: int = 1
 var effects: Array = []
 var cooldown_remaining: int = 0
 var common: bool = false
+var tags: Array = []
+var searchable: bool = true
 var code_script: GDScript = null
+var once: bool = false
+var triggered: bool = false
 
 static func from_data(data: Dictionary) -> Skill:
 	var skill: Skill
@@ -27,6 +32,7 @@ static func from_data(data: Dictionary) -> Skill:
 		skill.code_script = data["code_script"]
 	else:
 		skill = Skill.new()
+	skill.skill_id = str(data.get("id", data.get("name", "Skill")))
 	skill.name = str(data.get("name", data.get("id", "Skill")))
 	skill.desc = str(data.get("desc", ""))
 	skill.trigger = str(data.get("trigger", "on_attack"))
@@ -37,17 +43,31 @@ static func from_data(data: Dictionary) -> Skill:
 	skill.max_range = int(data.get("max_range", 1))
 	skill.effects = data.get("effects", [])
 	skill.common = bool(data.get("common", false))
+	skill.tags = _string_array(data.get("tags", []))
+	skill.searchable = bool(data.get("searchable", true))
+	skill.once = bool(data.get("once", false))
 	if skill is CodeSkill:
 		(skill as CodeSkill).after_from_data(data)
 	return skill
 
+static func _string_array(value: Variant) -> Array:
+	var result: Array = []
+	if value is Array:
+		for item in value:
+			var text := str(item).strip_edges()
+			if text != "" and not result.has(text):
+				result.append(text)
+	return result
+
 # 判断技能当前是否可触发（不在冷却中）。
 func is_ready() -> bool:
-	return cooldown_remaining <= 0
+	return cooldown_remaining <= 0 and not (once and triggered)
 
 # 触发后进入冷却，回合推进时由外部调用 tick_cooldown() 减少。
 func start_cooldown() -> void:
 	cooldown_remaining = cooldown
+	if once:
+		triggered = true
 
 func tick_cooldown() -> void:
 	if cooldown_remaining > 0:
@@ -72,6 +92,15 @@ func check_condition(battle, context: Dictionary) -> bool:
 		var target = context.get("target")
 		if target == null or not (target is Unit) or not unit_has_buff(target, buff_name2):
 			return false
+	if condition.has("target_hp_percent"):
+		var target_hp: Variant = context.get("target")
+		if target_hp == null or not (target_hp is Unit):
+			return false
+		var target_ratio := float((target_hp as Unit).hp) / float(maxi((target_hp as Unit).max_hp, 1))
+		if not compare_num(target_ratio, condition["target_hp_percent"]):
+			return false
+	if condition.has("crit") and bool(condition.get("crit", false)) != bool(context.get("crit", false)):
+		return false
 	return true
 
 # 默认按 condition.target_type 解析目标；代码技能可覆写。

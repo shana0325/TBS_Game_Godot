@@ -275,8 +275,8 @@ func _build_options() -> void:
 
 func _type_text(t: String) -> String:
 	match t:
-		"skill":
-			return "◆ 通用技能"
+		"skill_book":
+			return "◆ 技能书"
 		"equipment":
 			return "◆ 装备"
 		"blessing":

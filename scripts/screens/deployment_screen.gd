@@ -1,8 +1,6 @@
 # 部署屏幕：展示关卡地图与底部单位栏，支持拖拽部署及战场内拖动换位。
 extends Control
 
-const UNIT_INFO_TEXT = preload("res://scripts/ui/unit_info_text.gd")
-
 var tile_size: int = 64
 
 var scenario_id: String = ""
@@ -22,10 +20,13 @@ var roster_container: HBoxContainer
 var roster_scroll: ScrollContainer
 var back_button: Button
 var start_button: Button
+var backpack_button: Button
 var action_buttons: Array[Control] = []
-var info_panel: PanelContainer
-var info_label: Label
-var info_portrait: TextureRect
+var info_panel: UnitDetailPanel
+var backpack_panel: BackpackPanel
+var skill_replace_panel: PanelContainer
+var pending_skill_book_id: String = ""
+var pending_skill_unit: Dictionary = {}
 var unit_views: Dictionary = {}
 var slot_views: Dictionary = {}
 var preview_player_units: Array = []
@@ -35,7 +36,7 @@ var drag_start_position := Vector2.ZERO
 var drag_moved := false
 
 func _ready() -> void:
-	# 根节点作为战场拖放目标，同时让底部卡片正常接收鼠标事件。
+	# 根节点接收底部单位拖入战场的放置事件；具体按钮和卡片仍由子控件处理点击。
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	scenario_id = GameSession.current_scenario
 	var scenario := _load_scenario()
@@ -146,7 +147,7 @@ func _build_ui(scenario: Dictionary) -> void:
 
 	# 预览敌方单位
 	for entry in scenario.get("enemy_units", []):
-		var unit_type := str(entry.get("type", "Goblin"))
+		var unit_type := str(entry.get("type", "Warrior"))
 		var config: Dictionary = GameDatabase.get_unit(unit_type)
 		if config.is_empty():
 			continue
@@ -179,6 +180,7 @@ func _build_ui(scenario: Dictionary) -> void:
 		var card := DeploymentUnitCard.new()
 		card.setup(i, str(selectable_units[i].get("type", "Unit")), int(selectable_units[i].get("roster_index", -1)), tile_size)
 		card.inspect_requested.connect(_on_unit_card_inspect)
+		card.skill_book_drop_requested.connect(_on_unit_card_skill_book_drop)
 		roster_container.add_child(card)
 		unit_cards.append(card)
 
@@ -189,9 +191,15 @@ func _build_ui(scenario: Dictionary) -> void:
 	start_button.disabled = true
 	start_button.pressed.connect(_on_start_pressed)
 	add_child(start_button)
+	backpack_button = Button.new()
+	backpack_button.text = "背包"
+	backpack_button.custom_minimum_size = Vector2(220, 48)
+	backpack_button.pressed.connect(_on_backpack_pressed)
+	add_child(backpack_button)
 	# 操作区按“从下往上”维护，后续新增按钮直接追加到数组即可。
-	action_buttons = [start_button, back_button]
+	action_buttons = [start_button, back_button, backpack_button]
 	_build_info_panel()
+	_build_backpack_panel()
 
 	_refresh_state()
 	_layout_ui()
@@ -222,8 +230,13 @@ func _layout_ui() -> void:
 		roster_panel.size = Vector2(maxf(320.0, vp.x - 48.0), tray_height)
 	_layout_action_buttons(vp)
 	if info_panel != null:
-		info_panel.position = Vector2(maxf(20.0, vp.x - 400.0), 112.0)
-		info_panel.size = Vector2(minf(376.0, maxf(320.0, vp.x - 40.0)), maxf(260.0, vp.y - _tray_height() - 136.0))
+		var panel_size := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
+		info_panel.position = Vector2(maxf(16.0, (vp.x - panel_size.x) / 2.0), maxf(16.0, (vp.y - panel_size.y) / 2.0))
+		info_panel.size = panel_size
+	if skill_replace_panel != null and skill_replace_panel.visible:
+		var replace_size := Vector2(minf(440.0, vp.x - 32.0), minf(360.0, vp.y - 32.0))
+		skill_replace_panel.position = (vp - replace_size) / 2.0
+		skill_replace_panel.size = replace_size
 
 # 为右侧操作区和底部单位栏预留空间，避免地图与文字互相覆盖。
 func _board_position(_vp: Vector2) -> Vector2:
@@ -252,38 +265,23 @@ func _tray_height() -> float:
 
 # 构建悬浮单位信息卡，内容过长时在卡片内部滚动。
 func _build_info_panel() -> void:
-	info_panel = PanelContainer.new()
+	info_panel = UnitDetailPanel.new()
 	info_panel.name = "DeploymentUnitInfoPanel"
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	var title := Label.new()
-	title.text = "单位信息"
-	title.add_theme_font_size_override("font_size", 20)
-	box.add_child(title)
-	info_portrait = TextureRect.new()
-	info_portrait.custom_minimum_size = Vector2(140, 140)
-	info_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	box.add_child(info_portrait)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	info_label = Label.new()
-	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info_label.custom_minimum_size = Vector2(330, 0)
-	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(info_label)
-	box.add_child(scroll)
-	margin.add_child(box)
-	info_panel.add_child(margin)
+	info_panel.custom_minimum_size = Vector2(680.0, 420.0)
+	info_panel.ascension_requested.connect(_on_info_panel_ascension_requested)
 	add_child(info_panel)
 	info_panel.visible = false
+
+# 构建背包悬浮窗；背包 UI 独立于部署逻辑，技能书拖放后再回到进度逻辑层。
+func _build_backpack_panel() -> void:
+	backpack_panel = BackpackPanel.new()
+	backpack_panel.name = "BackpackPanel"
+	add_child(backpack_panel)
+	backpack_panel.visible = false
+
+func _on_backpack_pressed() -> void:
+	if backpack_panel != null:
+		backpack_panel.toggle()
 
 func _unit_for_slot(slot: int) -> Unit:
 	if slot < 0 or slot >= selectable_units.size():
@@ -300,17 +298,62 @@ func _unit_for_slot(slot: int) -> Unit:
 	return Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, pos, config, roster_data, GameDatabase)
 
 func _on_unit_card_inspect(slot: int) -> void:
-	_show_unit_info(_unit_for_slot(slot))
+	_open_unit_info(_unit_for_slot(slot))
+
+func _on_unit_card_skill_book_drop(slot: int, skill_id: String) -> void:
+	_attempt_skill_book_drop(_unit_for_slot(slot), skill_id)
 
 func _show_unit_info(unit: Unit) -> void:
+	_open_unit_info(unit)
+
+# 所有部署阶段点击入口统一走这里：我方单位按持久化 ID 重建，敌方沿用当前场景实例。
+func _open_unit_info(unit: Unit) -> void:
+	unit = _resolve_inspection_unit(unit)
 	if unit == null or not unit.alive or info_panel == null:
 		return
-	var portrait := ArtManager.get_portrait(unit.unit_type)
-	info_portrait.texture = portrait
-	info_portrait.visible = portrait != null
-	info_label.text = UNIT_INFO_TEXT.build(unit)
+	info_panel.set_ascension_enabled(_can_ascend_unit(unit))
+	info_panel.show_unit(unit)
 	info_panel.visible = true
 	_layout_ui()
+
+func _resolve_inspection_unit(unit: Unit) -> Unit:
+	if unit == null or unit.camp != TurnManager.PLAYER_CAMP:
+		return unit
+	var roster_index := _find_roster_index(unit.unit_id)
+	if roster_index < 0:
+		return unit
+	var slot := _find_selectable_slot(roster_index)
+	return _unit_for_slot(slot) if slot >= 0 else unit
+
+func _can_ascend_unit(unit: Unit) -> bool:
+	return unit != null and unit.camp == TurnManager.PLAYER_CAMP and _find_roster_index(unit.unit_id) >= 0
+
+func _find_roster_index(unit_id: String) -> int:
+	if unit_id.strip_edges().is_empty():
+		return -1
+	for i in roster_units.size():
+		if str(roster_units[i].get("id", "")) == unit_id:
+			return i
+	return -1
+
+func _find_selectable_slot(roster_index: int) -> int:
+	for i in selectable_units.size():
+		if int(selectable_units[i].get("roster_index", -1)) == roster_index:
+			return i
+	return -1
+
+func _on_info_panel_ascension_requested(unit: Unit) -> void:
+	var roster_index := _find_roster_index(unit.unit_id if unit != null else "")
+	if roster_index < 0:
+		return
+	var roster_unit: Dictionary = roster_units[roster_index]
+	if not ProgressManager.ascend_unit(roster_unit):
+		return
+	_refresh_units()
+	var slot := _find_selectable_slot(roster_index)
+	if slot >= 0:
+		_show_unit_info(_unit_for_slot(slot))
+	_refresh_state()
 
 func _hide_unit_info() -> void:
 	if info_panel != null:
@@ -337,6 +380,12 @@ func _unit_at_cell(cell: Vector2i) -> Unit:
 	return null
 
 func _input(event: InputEvent) -> void:
+	# 背包打开时由其遮罩独占鼠标，避免点击弹窗内容误触发战场拖动。
+	if backpack_panel != null and backpack_panel.visible:
+		return
+	# 技能替换弹窗打开时同样暂停部署输入，只允许弹窗按钮处理操作。
+	if skill_replace_panel != null and skill_replace_panel.visible:
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if info_panel != null and info_panel.visible and info_panel.get_global_rect().has_point(event.position):
 			return
@@ -356,7 +405,7 @@ func _input(event: InputEvent) -> void:
 			var clicked_unit := _unit_at_cell(cell)
 			if clicked_unit != null:
 				# 敌方单位也可以查看，但不进入部署拖动流程。
-				_show_unit_info(clicked_unit)
+				_open_unit_info(clicked_unit)
 				get_viewport().set_input_as_handled()
 			else:
 				# 点击信息卡外的空白区域自动收起信息卡。
@@ -370,7 +419,7 @@ func _input(event: InputEvent) -> void:
 				var clicked_view: UnitView = slot_views.get(clicked_slot)
 				if clicked_view != null:
 					clicked_view.z_index = 0
-				_show_unit_info(_unit_for_slot(clicked_slot))
+				_open_unit_info(_unit_for_slot(clicked_slot))
 				_refresh_state()
 			else:
 				_finish_battlefield_drag(_screen_to_cell(event.position))
@@ -388,7 +437,14 @@ func _input(event: InputEvent) -> void:
 
 # 底部单位卡片拖入根节点时，只有部署区内的空格可以接收。
 func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
-	if typeof(data) != TYPE_DICTIONARY or str(data.get("kind", "")) != "deployment_unit":
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	if str(data.get("kind", "")) == "skill_book":
+		var target_unit := _unit_for_drop_position(at_position)
+		return target_unit != null and target_unit.camp == TurnManager.PLAYER_CAMP \
+			and _find_roster_index(target_unit.unit_id) >= 0 \
+			and ProgressManager.get_skill_book_count(str(data.get("skill_id", ""))) > 0
+	if str(data.get("kind", "")) != "deployment_unit":
 		return false
 	var cell := _screen_to_cell(at_position)
 	if not grid.in_bounds(cell.x, cell.y) or not deployment_zone.has(cell):
@@ -397,11 +453,116 @@ func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
 	return slot >= 0 and slot < selectable_units.size() and not placements.has(slot) and cell_to_slot.get(cell, null) == null
 
 func _drop_data(at_position: Vector2, data: Variant) -> void:
+	if typeof(data) == TYPE_DICTIONARY and str(data.get("kind", "")) == "skill_book":
+		if _can_drop_data(at_position, data):
+			_attempt_skill_book_drop(_unit_for_drop_position(at_position), str(data.get("skill_id", "")))
+		get_viewport().set_input_as_handled()
+		return
 	if not _can_drop_data(at_position, data):
 		return
 	var slot := int(data.get("selectable_index", -1))
 	_place_slot(slot, _screen_to_cell(at_position))
 	selected_slot = slot
+
+# 技能书拖到战场时按部署槽位重建持久化单位，避免使用旧的临时预览实例。
+func _unit_for_drop_position(screen_position: Vector2) -> Unit:
+	var cell := _screen_to_cell(screen_position)
+	var slot_variant = cell_to_slot.get(cell, null)
+	if slot_variant != null:
+		return _unit_for_slot(int(slot_variant))
+	return _unit_at_cell(cell)
+
+func _attempt_skill_book_drop(unit: Unit, skill_id: String) -> void:
+	if unit == null or skill_id.is_empty():
+		return
+	var roster_index := _find_roster_index(unit.unit_id)
+	if roster_index < 0:
+		# 兼容旧的运行时部署数据：基础角色类型唯一时仍解析回持久化角色。
+		for i in roster_units.size():
+			if str(roster_units[i].get("type", "")) == unit.unit_type:
+				roster_index = i
+				break
+	if roster_index < 0:
+		return
+	var roster_unit: Dictionary = roster_units[roster_index]
+	if roster_unit.get("learned_skills", []).has(skill_id):
+		if backpack_panel != null:
+			backpack_panel.set_status("该角色已经学会这项技能。")
+		return
+	var equipped: Array = roster_unit.get("equipped_skills", [])
+	var slot_limit := Unit.get_skill_slot_limit(int(roster_unit.get("star", 1)))
+	if equipped.size() >= slot_limit:
+		_open_skill_replace_popup(roster_unit, skill_id)
+		return
+	if ProgressManager.use_skill_book(roster_unit, skill_id):
+		_finish_skill_book_learning(roster_index, skill_id)
+	elif backpack_panel != null:
+		backpack_panel.set_status("技能学习失败：该技能可能已学会、技能槽已满或技能书数量不足。")
+
+func _finish_skill_book_learning(roster_index: int, skill_id: String, replaced_skill_id: String = "") -> void:
+	var skill_name := str(GameDatabase.get_skill(skill_id).get("name", skill_id))
+	if backpack_panel != null:
+		backpack_panel.refresh()
+		backpack_panel.set_status("已学习：%s" % skill_name)
+	_refresh_units()
+	var slot := _find_selectable_slot(roster_index)
+	if info_panel != null and info_panel.visible and slot >= 0:
+		_show_unit_info(_unit_for_slot(slot))
+
+func _open_skill_replace_popup(unit: Dictionary, skill_id: String) -> void:
+	_close_skill_replace_popup()
+	pending_skill_unit = unit
+	pending_skill_book_id = skill_id
+	skill_replace_panel = PanelContainer.new()
+	skill_replace_panel.name = "SkillReplacePopup"
+	skill_replace_panel.z_index = 220
+	skill_replace_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	skill_replace_panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	margin.add_child(box)
+	var title := Label.new()
+	title.text = "通用技能槽已满"
+	title.add_theme_font_size_override("font_size", 24)
+	box.add_child(title)
+	var skill_name := str(GameDatabase.get_skill(skill_id).get("name", skill_id))
+	var hint := Label.new()
+	hint.text = "选择要替换的技能以学习：%s" % skill_name
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(hint)
+	for equipped_id in unit.get("equipped_skills", []):
+		var replace_button := Button.new()
+		replace_button.text = "替换：%s" % str(GameDatabase.get_skill(str(equipped_id)).get("name", equipped_id))
+		replace_button.custom_minimum_size.y = 40
+		replace_button.pressed.connect(_on_skill_replace_selected.bind(str(equipped_id)))
+		box.add_child(replace_button)
+	var cancel_button := Button.new()
+	cancel_button.text = "取消（不消耗技能书）"
+	cancel_button.custom_minimum_size.y = 38
+	cancel_button.pressed.connect(_close_skill_replace_popup)
+	box.add_child(cancel_button)
+	add_child(skill_replace_panel)
+	skill_replace_panel.visible = true
+	_layout_ui()
+
+func _on_skill_replace_selected(replaced_skill_id: String) -> void:
+	var roster_index := _find_roster_index(str(pending_skill_unit.get("id", "")))
+	var skill_id := pending_skill_book_id
+	if roster_index >= 0 and ProgressManager.use_skill_book(pending_skill_unit, skill_id, replaced_skill_id):
+		_close_skill_replace_popup()
+		_finish_skill_book_learning(roster_index, skill_id, replaced_skill_id)
+
+func _close_skill_replace_popup() -> void:
+	if skill_replace_panel != null:
+		skill_replace_panel.queue_free()
+		skill_replace_panel = null
+	pending_skill_unit = {}
+	pending_skill_book_id = ""
 
 func _finish_battlefield_drag(cell: Vector2i) -> void:
 	var slot := dragging_slot

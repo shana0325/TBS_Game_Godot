@@ -32,6 +32,12 @@ func select_scenario(scenario_id: String) -> void:
 	victory_rewards = []
 	battle_stats = []
 
+# 主菜单“开始新游戏”使用：清空运行中的关卡/爬塔状态，但不触碰玩家角色存档。
+func reset_run_state() -> void:
+	end_tower_run()
+	mode = MODE_QUICK
+	current_scenario = "battle_01"
+
 # 开始爬塔：进入第 1 层（沿用当前编成的单位作为默认部署）。
 func start_tower() -> void:
 	mode = MODE_TOWER

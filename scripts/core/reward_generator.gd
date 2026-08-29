@@ -1,4 +1,4 @@
-# 爬塔奖励生成：胜利后三选一（通用技能 / 装备 / 祝福 / 遗物），应用结果写入会话或编成。
+# 爬塔奖励生成：胜利后三选一（技能书 / 装备 / 祝福 / 遗物），应用结果写入会话或编成。
 class_name RewardGenerator
 extends RefCounted
 
@@ -15,16 +15,15 @@ const REWARD_OPTION_COUNT := 3
 	# 生成指定数量的互不重复选项。
 static func generate_options() -> Array:
 	var candidates: Array = []
-	# 通用技能（队伍尚未拥有）
+	# 技能书（队伍尚未学会的可检索通用技能）
 	var roster: Array = GameDatabase.player_roster.get("units", [])
-	for skill_id in GameDatabase.skills.keys():
+	for skill_id in GameDatabase.get_searchable_skill_ids(true):
 		var data: Dictionary = GameDatabase.get_skill(skill_id)
-		if not bool(data.get("common", false)):
-			continue
 		if _party_has_skill(roster, skill_id):
 			continue
-		candidates.append({"type": "skill", "id": skill_id,
-			"label": str(data.get("name", skill_id)), "desc": str(data.get("desc", "通用技能"))})
+		candidates.append({"type": "skill_book", "id": skill_id,
+			"label": "技能书：%s" % str(data.get("name", skill_id)),
+			"desc": "使用后可指定一名角色学习：%s" % str(data.get("desc", "通用技能"))})
 	# 装备
 	for equip_id in GameDatabase.equipments.keys():
 		var data: Dictionary = GameDatabase.get_equipment(equip_id)
@@ -48,11 +47,8 @@ static func generate_options() -> Array:
 static func apply_option(option: Dictionary) -> void:
 	var roster: Array = GameDatabase.player_roster.get("units", [])
 	match str(option.get("type", "")):
-		"skill":
-			var unit := _first_party_unit(roster)
-			if unit != null:
-				ProgressManager.grant_skill_free(unit, str(option.get("id", "")))
-				ProgressManager.save_roster()
+		"skill_book":
+			ProgressManager.add_skill_book(str(option.get("id", "")), 1)
 		"equipment":
 			var data: Dictionary = GameDatabase.get_equipment(str(option.get("id", "")))
 			var slot: String = str(data.get("slot", ""))

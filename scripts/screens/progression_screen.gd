@@ -1,6 +1,9 @@
 # 成长界面：两段式——先选角色，再在 属性/技能/装备 三个子页中成长，修改写回 player_roster.json。
 extends Control
 
+const COMBAT_FORMULA = preload("res://scripts/core/combat_formula.gd")
+const SKILL_DETAIL_FORMATTER = preload("res://scripts/ui/skill_detail_formatter.gd")
+
 enum Tab { STATS, SKILLS, EQUIP }
 
 var roster: Array = []
@@ -22,6 +25,7 @@ var overview_portrait: TextureRect
 var status_label: Label
 var start_button: Button
 var selected_skill: String = ""
+var selected_skill_tag: String = ""
 
 # 触发时机中文标签（与 skill_trigger_system.gd 的常量对应）
 const SKILL_TRIGGER_LABELS := {
@@ -166,6 +170,8 @@ func _build_tab_bar() -> void:
 
 func _on_role_selected(index: int) -> void:
 	selected_index = index
+	selected_skill = ""
+	selected_skill_tag = ""
 	_refresh()
 
 func _on_tab_selected(tab: int) -> void:
@@ -192,13 +198,26 @@ func _refresh() -> void:
 	_clear_content()
 	var unit := _current_unit()
 	var info := Label.new()
-	info.text = "等级 %d  经验 %d/%d  属性点 %d  技能点 %d" % [
+	var star := clampi(int(unit.get("star", 1)), 1, ProgressManager.MAX_STARS)
+	var skill_slots := ProgressManager.get_skill_slot_limit(star)
+	info.text = "%d星  等级 %d  经验 %d/%d  属性点 %d  技能点 %d  通用技能槽 %d/%d  升星道具 %d" % [
+		star,
 		int(unit.get("level", 1)), int(unit.get("exp", 0)),
 		ProgressManager.required_exp_for_level(int(unit.get("level", 1))),
-		int(unit.get("stat_points", 0)), int(unit.get("skill_points", 0))
+		int(unit.get("stat_points", 0)), int(unit.get("skill_points", 0)),
+		unit.get("equipped_skills", []).size(), skill_slots,
+		ProgressManager.get_star_item_count()
 	]
 	info.add_theme_font_size_override("font_size", 20)
 	content_panel.add_child(info)
+	var ascend_button := Button.new()
+	var ascend_cost := ProgressManager.get_ascension_cost(star)
+	ascend_button.text = "升星（消耗 %d 个升星道具）" % ascend_cost
+	ascend_button.custom_minimum_size = Vector2(320, 40)
+	ascend_button.disabled = star >= ProgressManager.MAX_STARS \
+		or ProgressManager.get_star_item_count() < ascend_cost
+	ascend_button.pressed.connect(_on_ascend_pressed)
+	content_panel.add_child(ascend_button)
 	match current_tab:
 		Tab.STATS:
 			_build_stats_tab(unit)
@@ -217,10 +236,17 @@ func _refresh_overview(unit: Dictionary) -> void:
 	var equipment: Dictionary = unit.get("equipment", {})
 	var slot_labels := {"weapon": "武器", "offhand": "副手", "accessory": "饰品"}
 	var lines: Array = []
-	lines.append("%s  Lv.%d" % [str(unit.get("type", "Unit")), int(unit.get("level", 1))])
+	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
+	var tags: Array = config.get("tags", [])
+	var tags_text := "、".join(tags) if not tags.is_empty() else "无"
+	var star := clampi(int(unit.get("star", 1)), 1, ProgressManager.MAX_STARS)
+	lines.append("%s  %d星  Lv.%d" % [str(unit.get("type", "Unit")), star, int(unit.get("level", 1))])
+	lines.append("标签：%s" % tags_text)
+	lines.append("通用技能槽：%d/%d" % [unit.get("equipped_skills", []).size(), ProgressManager.get_skill_slot_limit(star)])
 	lines.append("HP: %d" % int(total.get("hp", 0)))
-	lines.append("攻击: %d   防御: %d   移动: %d" % [
-		int(total.get("attack", 0)), int(total.get("defense", 0)), int(total.get("move", 0))
+	var total_armor := int(total.get("defense", 0))
+	lines.append("攻击: %d   护甲: %d（%.1f%%减伤）   移动: %d" % [
+		int(total.get("attack", 0)), total_armor, COMBAT_FORMULA.armor_reduction_percent(total_armor), int(total.get("move", 0))
 	])
 	lines.append("暴击率: %d%%   暴击伤害: %d%%" % [
 		int(total.get("crit_rate", 0)), int(total.get("crit_damage", 0))
@@ -254,17 +280,15 @@ func _build_stats_tab(unit: Dictionary) -> void:
 	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
 	var perm_mods: Dictionary = unit.get("permanent_mods", {})
-	var labels := {"attack": "攻击", "defense": "防御", "move": "移动", "hp": "生命",
+	var labels := {"attack": "攻击", "defense": "护甲", "move": "移动", "hp": "生命",
 		"crit_rate": "暴击率", "crit_damage": "暴击伤害"}
-	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp",
-		"crit_rate": "crit_rate", "crit_damage": "crit_damage"}
 	for stat in ProgressManager.POINTABLE_STATS:
-		var base := int(config.get(base_keys[stat], 0))
+		var base := Unit.get_scaled_base_stat(config, stat, int(unit.get("star", 1)))
 		var alloc := int(allocated.get(stat, 0))
 		var equip := int(equip_mods.get(stat, 0))
 		var perm := int(perm_mods.get(stat, 0))
 		var total := base + alloc + equip + perm
-		var unit_text := "%d%%" % total if stat == "crit_rate" or stat == "crit_damage" else str(total)
+		var unit_text := "%d%%" % total if stat == "crit_rate" or stat == "crit_damage" else ("%d（%.1f%%减伤）" % [total, COMBAT_FORMULA.armor_reduction_percent(total)] if stat == "defense" else str(total))
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(340, 40)
 		btn.text = "%s: %s  (基础%d +加点%d +装备%d +永久%d)  [加点]" % [labels[stat], unit_text, base, alloc, equip, perm]
@@ -290,11 +314,9 @@ func _get_total_stats(unit: Dictionary) -> Dictionary:
 	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
 	var perm_mods: Dictionary = unit.get("permanent_mods", {})
-	var base_keys := {"attack": "atk", "defense": "defense", "move": "move", "hp": "hp",
-		"crit_rate": "crit_rate", "crit_damage": "crit_damage"}
 	var result: Dictionary = {}
 	for stat in ProgressManager.POINTABLE_STATS:
-		result[stat] = int(config.get(base_keys[stat], 0)) \
+		result[stat] = Unit.get_scaled_base_stat(config, stat, int(unit.get("star", 1))) \
 			+ int(allocated.get(stat, 0)) + int(equip_mods.get(stat, 0)) \
 			+ int(perm_mods.get(stat, 0))
 	return result
@@ -318,6 +340,14 @@ func _get_all_skill_names(unit: Dictionary) -> Array:
 			names.append(str(s))
 	return names
 
+func _on_ascend_pressed() -> void:
+	if ProgressManager.ascend_unit(_current_unit()):
+		selected_skill = ""
+		status_label.text = "升星成功"
+		_refresh()
+	else:
+		status_label.text = "升星失败：需要升星道具且不能超过最高星级"
+
 func _on_add_stat(stat: String) -> void:
 	if ProgressManager.add_stat_point(_current_unit(), stat):
 		_refresh()
@@ -332,6 +362,21 @@ func _build_skills_tab(unit: Dictionary) -> void:
 	list_title.text = "技能列表（点击技能查看详情）"
 	list_title.add_theme_font_size_override("font_size", 18)
 	content_panel.add_child(list_title)
+	var tag_filter_box := HBoxContainer.new()
+	tag_filter_box.add_theme_constant_override("separation", 6)
+	var tag_label := Label.new()
+	tag_label.text = "标签筛选："
+	tag_filter_box.add_child(tag_label)
+	var all_tag_button := Button.new()
+	all_tag_button.text = "全部"
+	all_tag_button.pressed.connect(_on_skill_tag_filter.bind(""))
+	tag_filter_box.add_child(all_tag_button)
+	for tag in _get_skill_filter_tags():
+		var tag_button := Button.new()
+		tag_button.text = str(tag)
+		tag_button.pressed.connect(_on_skill_tag_filter.bind(str(tag)))
+		tag_filter_box.add_child(tag_button)
+	content_panel.add_child(tag_filter_box)
 	# 固有技能：模板独有，自动生效，不可更换
 	var innate_id: String = str(config.get("innate_skill", ""))
 	if innate_id == "":
@@ -363,16 +408,22 @@ func _build_skills_tab(unit: Dictionary) -> void:
 		action_btn.text = _skill_action_label(selected_skill, unit)
 		action_btn.pressed.connect(_on_selected_skill_action)
 		content_panel.add_child(action_btn)
-	# 技能池：只展示当前角色的固有技能和通用技能，避免检索到其他角色的专属技能。
+	# 技能池：常规检索只展示可检索的通用技能；已通过指定手段获得的隐藏技能仍保留在角色列表中。
 	var learned: Array = unit.get("learned_skills", [])
 	var equipped: Array = unit.get("equipped_skills", [])
-	var skill_ids: Array = GameDatabase.skills.keys()
+	var skill_ids: Array = GameDatabase.get_searchable_skill_ids(true, [selected_skill_tag] if selected_skill_tag != "" else [])
+	for owned_id in learned + equipped:
+		var owned_data: Dictionary = GameDatabase.get_skill(str(owned_id))
+		var owned_tags: Array = owned_data.get("tags", [])
+		var tag_matches := selected_skill_tag == "" or owned_tags.has(selected_skill_tag)
+		if bool(owned_data.get("common", false)) and tag_matches and not skill_ids.has(str(owned_id)):
+			skill_ids.append(str(owned_id))
 	if skill_ids.is_empty():
 		var empty_label := Label.new()
 		empty_label.text = "暂无技能数据（请检查 data/skill/skills.json）"
 		empty_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.5, 1.0))
 		content_panel.add_child(empty_label)
-	for skill_id in GameDatabase.skills.keys():
+	for skill_id in skill_ids:
 		var data: Dictionary = GameDatabase.get_skill(skill_id)
 		var status := ""
 		var is_innate := str(skill_id) == innate_id
@@ -386,45 +437,31 @@ func _build_skills_tab(unit: Dictionary) -> void:
 		btn.custom_minimum_size = Vector2(0, 48)
 		if equipped.has(skill_id):
 			status = "  已装备"
-		elif learned.has(skill_id):
-			status = "  已学习(未装备)"
 		else:
-			status = "  未学习"
+			status = "  未装备"
 		btn.text = "%s%s" % [str(data.get("name", skill_id)), status]
 		if selected_skill == skill_id:
 			btn.modulate = Color(1.2, 1.2, 0.5)
 		btn.pressed.connect(_on_select_skill.bind(skill_id))
 		content_panel.add_child(btn)
 
+func _get_skill_filter_tags() -> Array:
+	var result: Array = []
+	for skill_id in GameDatabase.get_searchable_skill_ids(true):
+		var data: Dictionary = GameDatabase.get_skill(skill_id)
+		for tag in data.get("tags", []):
+			if not result.has(tag):
+				result.append(tag)
+	return result
+
+func _on_skill_tag_filter(tag: String) -> void:
+	selected_skill_tag = tag
+	selected_skill = ""
+	_refresh()
+
 # 技能详情文本：描述 + 触发时机 + 冷却 +（按需）射程 + 目标 + 效果列表（含持续时间）。
 func _skill_detail_text(skill_id: String) -> String:
-	var data: Dictionary = GameDatabase.get_skill(skill_id)
-	if data.is_empty():
-		return "（未知技能）"
-	var lines: Array = []
-	var desc: String = str(data.get("desc", ""))
-	if desc != "":
-		lines.append("描述：%s" % desc)
-	var trigger: String = str(data.get("trigger", ""))
-	var trigger_label: String = str(SKILL_TRIGGER_LABELS.get(trigger, trigger))
-	lines.append("触发时机：%s   冷却：%d 次触发间隔" % [trigger_label, int(data.get("cooldown", 0))])
-	# 仅目标为位置类（敌人/友军/单体目标）时才显示射程；自身/全体类无关射程
-	var condition: Dictionary = data.get("condition", {})
-	var target_type: String = str(condition.get("target_type", condition.get("target", "target")))
-	if target_type in ["enemy", "ally", "target", "random_enemy"]:
-		lines.append("射程：%s 至 %s 格" % [str(data.get("min_range", 1)), str(data.get("max_range", 1))])
-	lines.append("目标：%s" % _skill_target_label(condition))
-	lines.append("效果：")
-	var effects: Array = data.get("effects", [])
-	if effects.is_empty():
-		if data.get("code_script") is GDScript:
-			lines.append("  · （由代码实现的自定义效果，详见描述）")
-		else:
-			lines.append("  · （无效果）")
-	for effect in effects:
-		if effect is Dictionary:
-			lines.append("  · %s" % _skill_effect_text(effect))
-	return "\n".join(lines)
+	return SKILL_DETAIL_FORMATTER.build(skill_id)
 
 # 目标解析中文说明。
 func _skill_target_label(condition: Dictionary) -> String:

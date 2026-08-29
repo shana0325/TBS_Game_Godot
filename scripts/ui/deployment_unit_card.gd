@@ -3,6 +3,7 @@ class_name DeploymentUnitCard
 extends Control
 
 signal inspect_requested(selectable_index: int)
+signal skill_book_drop_requested(selectable_index: int, skill_id: String)
 
 var selectable_index: int = -1
 var unit_type: String = ""
@@ -81,14 +82,32 @@ func _gui_input(event: InputEvent) -> void:
 func _get_drag_data(_at_position: Vector2) -> Variant:
 	if not drag_enabled:
 		return null
-	var preview := DeploymentUnitCard.new()
-	preview.setup(selectable_index, unit_type, roster_index, tile_size)
-	preview.size = Vector2(tile_size + 16.0, tile_size + 52.0)
+	# 预览根节点的原点就是小人中心；Godot 会把拖拽预览原点放到鼠标位置。
+	# 不再复用底部卡片的上边距，避免鼠标落在小人左上角。
+	var preview := Control.new()
+	preview.size = Vector2(tile_size, tile_size)
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var preview_view := UnitView.new()
+	preview_view.setup(unit_view.unit, tile_size)
+	preview_view.show_name = false
+	preview_view.show_hp_text = false
+	preview_view.position = Vector2.ZERO
+	preview.add_child(preview_view)
 	preview.modulate = Color(1, 1, 1, 0.82)
-	# 拖拽预览以小人视觉中心对齐鼠标，和战场单位拖动保持一致。
-	preview.position = -Vector2((tile_size + 16) / 2.0, tile_size / 2.0 + 20.0)
 	set_drag_preview(preview)
 	return {
 		"kind": "deployment_unit",
 		"selectable_index": selectable_index,
 	}
+
+# 未部署角色卡也可以作为技能书目标，便于不先上场的角色直接学习技能。
+func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+	if typeof(data) != TYPE_DICTIONARY or str(data.get("kind", "")) != "skill_book":
+		return false
+	if roster_index < 0:
+		return false
+	return ProgressManager.get_skill_book_count(str(data.get("skill_id", ""))) > 0
+
+func _drop_data(_at_position: Vector2, data: Variant) -> void:
+	if _can_drop_data(_at_position, data):
+		skill_book_drop_requested.emit(selectable_index, str(data.get("skill_id", "")))

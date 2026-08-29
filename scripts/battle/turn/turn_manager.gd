@@ -12,6 +12,11 @@ var turn_number: int = 1
 var battle_time: float = 0.0
 var pending: Array = []
 
+# 狂暴阶段：60 秒后开始，每 30 秒使双方最终伤害再增加 50%。
+const FRENZY_START_TIME := 60.0
+const FRENZY_INTERVAL := 30.0
+const FRENZY_STEP_PERCENT := 50.0
+
 func _init(all_units: Array = []) -> void:
 	units = all_units
 
@@ -45,3 +50,13 @@ func reset_acted() -> void:
 # 顶部标签：自走棋为时间驱动，无"回合"概念，仅显示战斗用时。
 func get_turn_label() -> String:
 	return "战斗时间 %.1fs" % battle_time
+
+# 当前狂暴阶段的最终伤害增幅百分比；未到 60 秒时为 0。
+func get_final_damage_bonus_percent() -> float:
+	if battle_time < FRENZY_START_TIME:
+		return 0.0
+	var stage := floori((battle_time - FRENZY_START_TIME) / FRENZY_INTERVAL) + 1
+	return float(stage) * FRENZY_STEP_PERCENT
+
+func get_final_damage_multiplier() -> float:
+	return 1.0 + get_final_damage_bonus_percent() / 100.0

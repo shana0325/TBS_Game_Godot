@@ -20,6 +20,7 @@ var reduce_percent: float = 0.0
 var ignore_defense: bool = false
 var is_mark: bool = false
 var permanent: bool = false
+var conditional_hp_percent: Dictionary = {}
 var raw_data: Dictionary = {}
 
 static func from_data(data: Dictionary) -> Buff:
@@ -42,11 +43,25 @@ static func from_data(data: Dictionary) -> Buff:
 	buff.ignore_defense = bool(data.get("ignore_defense", false))
 	buff.is_mark = bool(data.get("is_mark", false))
 	buff.permanent = bool(data.get("permanent", false))
+	buff.conditional_hp_percent = data.get("conditional_hp_percent", {})
 	buff.raw_data = data
 	return buff
 
 func get_stat_modifier(stat: String) -> int:
+	if not conditional_hp_percent.is_empty():
+		return 0
 	return int(modifiers.get(stat, 0))
+
+func get_stat_modifier_for_unit(unit: Unit, stat: String) -> int:
+	if not _condition_matches(unit):
+		return 0
+	return int(modifiers.get(stat, 0))
+
+func _condition_matches(unit: Unit) -> bool:
+	if conditional_hp_percent.is_empty() or unit == null:
+		return true
+	var ratio := float(unit.hp) / float(maxi(unit.max_hp, 1))
+	return Skill.compare_num(ratio, conditional_hp_percent)
 
 func on_turn_start(unit, game) -> void:
 	if tick_phase == "turn_start":
@@ -60,7 +75,9 @@ func on_turn_end(unit, game) -> void:
 
 func on_trigger(unit, event, game) -> void:
 	# 触发型 Buff 的统一入口，当前先支持吸血示例。
-	if trigger == "on_hit" and heal_percent > 0.0 and event != null:
+	# on_hit 是“造成伤害后”事件，只允许伤害来源本人触发吸血，
+	# 避免受击者因同一事件错误回血。
+	if trigger == "on_hit" and heal_percent > 0.0 and event != null and event.source == unit:
 		var damage := int(event.data.get("damage", 0))
 		var heal := roundi(damage * heal_percent)
 		if heal > 0:
@@ -75,9 +92,12 @@ func is_expired() -> bool:
 
 func _apply_tick(unit, game) -> void:
 	if tick_damage > 0:
-		unit.take_damage(tick_damage, game)
+		var damage := tick_damage
+		if game != null and game.has_method("get_final_damage_multiplier"):
+			damage = maxi(1, roundi(float(damage) * float(game.get_final_damage_multiplier())))
+		unit.take_damage(damage, game)
 		if game != null and game.has_method("add_log"):
-			game.add_log("%s 受到 %s 的 %d 点持续伤害" % [unit.get_display_name(), name, tick_damage])
+			game.add_log("%s 受到 %s 的 %d 点持续伤害" % [unit.get_display_name(), name, damage])
 	if tick_heal > 0:
 		var healed: int = unit.heal(tick_heal, unit)
 		if healed > 0 and game != null and game.has_method("add_log"):

@@ -2,6 +2,9 @@
   "Kill Growth": {
     "name": "以战养战",
     "desc": "每击杀一名敌人，生命值上限永久 +1（当前生命同步 +1）",
+    "tags": ["固有", "成长"],
+    "common": false,
+    "searchable": false,
     "trigger": "on_kill",
     "cooldown": 0,
     "condition": {
@@ -20,14 +23,60 @@
   },
   "Power Strike": {
     "name": "强力打击",
+    "desc": "攻击后额外造成100%攻击力伤害",
+    "tags": ["通用", "攻击"],
     "trigger": "on_attack",
     "common": true,
-    "cooldown": 2,
+    "searchable": true,
+    "cooldown": 0,
     "condition": {
       "target_type": "target"
     },
     "min_range": 1,
     "max_range": 1,
+    "effects": [
+      {
+        "type": "damage",
+        "power": 1.0
+      }
+    ]
+  },
+  "Cleave": {
+    "name": "连斩",
+    "desc": "攻击后追加一次50%攻击力伤害",
+    "tags": ["通用", "攻击", "连击"],
+    "trigger": "on_attack",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "target"
+    },
+    "min_range": 1,
+    "max_range": 1,
+    "effects": [
+      {
+        "type": "damage",
+        "power": 0.5
+      }
+    ]
+  },
+  "Execute": {
+    "name": "斩杀",
+    "desc": "目标生命低于30%时，额外造成150%攻击力伤害",
+    "tags": ["通用", "攻击", "斩杀"],
+    "trigger": "on_attack",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "target",
+      "target_hp_percent": {
+        "lt": 0.3
+      }
+    },
+    "min_range": 1,
+    "max_range": 2,
     "effects": [
       {
         "type": "damage",
@@ -35,187 +84,190 @@
       }
     ]
   },
-  "Poison Strike": {
-    "name": "剧毒之击",
+  "Lifesteal": {
+    "name": "吸血",
+    "desc": "攻击后恢复相当于本次伤害100%的生命",
+    "tags": ["通用", "生存", "回复"],
+    "trigger": "on_battle_start",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 2,
+    "effects": [
+      {
+        "type": "buff",
+        "buff": "lifesteal_full"
+      }
+    ]
+  },
+  "Iron Wall": {
+    "name": "铁壁",
+    "desc": "战斗开始时获得相当于最大生命10%的护盾",
+    "tags": ["通用", "防御", "护盾"],
+    "trigger": "on_battle_start",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 1,
+    "effects": [
+      {
+        "type": "shield_max_hp_percent",
+        "percent": 0.1,
+        "duration": -1,
+        "permanent": true
+      }
+    ]
+  },
+  "Toughness": {
+    "name": "坚韧",
+    "desc": "生命低于50%时，护甲提高20",
+    "tags": ["通用", "防御", "低生命"],
+    "trigger": "passive",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 1,
+    "effects": [
+      {
+        "type": "stat_mod",
+        "name": "坚韧",
+        "duration": -1,
+        "permanent": true,
+        "conditional_hp_percent": {
+          "lte": 0.5
+        },
+        "stats": {
+          "defense": 20
+        }
+      }
+    ]
+  },
+  "Revive": {
+    "name": "复苏",
+    "desc": "首次死亡时恢复20%生命，每场战斗限一次",
+    "tags": ["通用", "生存", "复活"],
+    "trigger": "on_death",
+    "common": true,
+    "searchable": true,
+    "once": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 1,
+    "effects": [
+      {
+        "type": "revive",
+        "hp_percent": 0.2
+      }
+    ]
+  },
+  "Sharp": {
+    "name": "锐利",
+    "desc": "暴击率提高10个百分点",
+    "tags": ["通用", "暴击"],
+    "trigger": "passive",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 1,
+    "effects": [
+      {
+        "type": "stat_mod",
+        "name": "锐利",
+        "duration": -1,
+        "permanent": true,
+        "stats": {
+          "crit_rate": 10
+        }
+      }
+    ]
+  },
+  "Lethal": {
+    "name": "致命",
+    "desc": "暴击伤害从150%提高至200%",
+    "tags": ["通用", "暴击"],
+    "trigger": "passive",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 1,
+    "effects": [
+      {
+        "type": "stat_mod",
+        "name": "致命",
+        "duration": -1,
+        "permanent": true,
+        "stats": {
+          "crit_damage": 50
+        }
+      }
+    ]
+  },
+  "Thorns": {
+    "name": "荆棘",
+    "desc": "受到攻击时反弹25%的最终伤害",
+    "tags": ["通用", "防御", "反伤"],
+    "trigger": "passive",
+    "common": true,
+    "searchable": true,
+    "cooldown": 0,
+    "condition": {
+      "target_type": "self"
+    },
+    "min_range": 1,
+    "max_range": 1,
+    "effects": [
+      {
+        "type": "reflect",
+        "percent": 0.25,
+        "duration": -1,
+        "permanent": true
+      }
+    ]
+  },
+  "Fear": {
+    "name": "破胆",
+    "desc": "攻击后使目标护甲降低20，持续2次行动",
+    "tags": ["通用", "减益", "破甲"],
     "trigger": "on_attack",
     "common": true,
-    "cooldown": 3,
+    "searchable": true,
+    "cooldown": 0,
     "condition": {
       "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "damage",
-        "power": 1.0
-      },
-      {
-        "type": "buff",
-        "buff": "poison"
-      }
-    ]
-  },
-  "Regen Aura": {
-    "name": "再生光环",
-    "trigger": "on_turn_start",
-    "common": true,
-    "cooldown": 3,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "buff",
-        "buff": "regen"
-      }
-    ]
-  },
-  "Guard Shield": {
-    "name": "守护护罩",
-    "trigger": "on_turn_start",
-    "common": true,
-    "cooldown": 3,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "shield",
-        "amount": 20,
-        "duration": 2
-      }
-    ]
-  },
-  "Battle Chant": {
-    "name": "战意高昂",
-    "trigger": "on_attack_start",
-    "common": true,
-    "cooldown": 3,
-    "condition": {
-      "target_type": "self"
     },
     "min_range": 1,
     "max_range": 2,
     "effects": [
       {
         "type": "stat_mod",
-        "name": "攻击强化",
+        "name": "破胆",
         "duration": 2,
         "stats": {
-          "attack": 3
+          "defense": -20
         }
-      }
-    ]
-  },
-  "Concussion Blow": {
-    "name": "眩晕重击",
-    "trigger": "on_attack",
-    "common": true,
-    "cooldown": 4,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 1,
-    "effects": [
-      {
-        "type": "damage",
-        "power": 0.8
-      },
-      {
-        "type": "buff",
-        "buff": "stun"
-      }
-    ]
-  },
-  "Counter Stance": {
-    "name": "反击架势",
-    "trigger": "on_be_attacked",
-    "common": true,
-    "cooldown": 3,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "buff",
-        "buff": "counter"
-      }
-    ]
-  },
-  "War Banner": {
-    "name": "战旗光环",
-    "trigger": "on_turn_start",
-    "common": true,
-    "cooldown": 3,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "buff",
-        "buff": "attack_aura"
-      }
-    ]
-  },
-  "Blood Rush": {
-    "name": "浴血狂袭",
-    "trigger": "on_attack",
-    "common": true,
-    "cooldown": 3,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "buff",
-        "buff": "lifesteal"
-      }
-    ]
-  },
-  "Raise Skeleton": {
-    "name": "白骨召唤",
-    "trigger": "on_turn_start",
-    "common": true,
-    "cooldown": 4,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 1,
-    "effects": [
-      {
-        "type": "summon",
-        "unit_type": "Goblin",
-        "duration": 3
-      }
-    ]
-  },
-  "Revive Prayer": {
-    "name": "复苏祷言",
-    "trigger": "on_ally_death",
-    "common": true,
-    "cooldown": 5,
-    "condition": {
-      "target_type": "ally"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "revive",
-        "hp_percent": 0.5
       }
     ]
   }

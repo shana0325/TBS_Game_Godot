@@ -47,6 +47,18 @@ text = "当前关卡"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="FrenzyLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 380.0
+offset_top = 12.0
+offset_right = 700.0
+offset_bottom = 44.0
+theme_override_colors/font_color = Color(0.95, 0.48, 0.34, 1)
+theme_override_font_sizes/font_size = 18
+text = "双方受到最终伤害增加50%"
+visible = false
+vertical_alignment = 1
+
 [node name="TeamStatusLabel" type="Label" parent="."]
 layout_mode = 1
 anchors_preset = 1

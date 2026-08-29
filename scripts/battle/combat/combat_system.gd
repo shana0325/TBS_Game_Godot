@@ -13,11 +13,11 @@ func _init(p_game = null, p_event_system: EventSystem = null, p_grid: Grid = nul
 	grid = p_grid
 
 # 普通攻击执行，返回 { "damage": int, "crit": bool }。
-func perform_attack(attacker: Unit, defender: Unit, terrain_bonus: int = 0) -> Dictionary:
+func perform_attack(attacker: Unit, defender: Unit, terrain_bonus: int = 0, final_damage_multiplier: float = 1.0) -> Dictionary:
 	var result_dict := {"damage": 0, "crit": false}
 	if attacker == null or defender == null or not defender.alive:
 		return result_dict
-	var calc := DamageCalculator.calculate_damage(attacker, defender, terrain_bonus)
+	var calc := DamageCalculator.calculate_damage(attacker, defender, terrain_bonus, final_damage_multiplier)
 	var damage: int = calc.get("damage", 0)
 	var crit: bool = calc.get("crit", false)
 	var result := defender.take_damage(damage, game)

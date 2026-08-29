@@ -4,24 +4,26 @@
 class_name DamageCalculator
 extends RefCounted
 
-# 普攻伤害：max(1, 攻-防) → 减伤百分比 → 暴击倍率。
-static func calculate_damage(attacker: Unit, defender: Unit, terrain_bonus: int = 0) -> Dictionary:
-	return _calc(attacker, defender, 1.0, terrain_bonus)
+const COMBAT_FORMULA = preload("res://scripts/core/combat_formula.gd")
+
+# 普攻伤害：攻击力经过护甲百分比减伤 → 防护罩减伤 → 暴击倍率。
+static func calculate_damage(attacker: Unit, defender: Unit, terrain_bonus: int = 0, final_damage_multiplier: float = 1.0) -> Dictionary:
+	return _calc(attacker, defender, 1.0, terrain_bonus, final_damage_multiplier)
 
 # 技能伤害：普攻公式算基础，再乘 power 倍率，最后应用暴击。
-static func calculate_skill_damage(attacker: Unit, defender: Unit, power: float, terrain_bonus: int = 0) -> Dictionary:
-	return _calc(attacker, defender, power, terrain_bonus)
+static func calculate_skill_damage(attacker: Unit, defender: Unit, power: float, terrain_bonus: int = 0, final_damage_multiplier: float = 1.0) -> Dictionary:
+	return _calc(attacker, defender, power, terrain_bonus, final_damage_multiplier)
 
-static func _calc(attacker: Unit, defender: Unit, power: float, terrain_bonus: int) -> Dictionary:
+static func _calc(attacker: Unit, defender: Unit, power: float, terrain_bonus: int, final_damage_multiplier: float) -> Dictionary:
 	var result := {"damage": 0, "crit": false}
 	if attacker == null or defender == null:
 		return result
 	var attack := attacker.get_attack()
-	var defense := defender.get_defense() + terrain_bonus
+	var armor := float(defender.get_defense() + terrain_bonus)
 	# 无视防御：攻击者身上有 ignore_defense 时忽略目标防御
 	if attacker.has_ignore_defense():
-		defense = 0
-	var damage := maxi(1, attack - defense)
+		armor = 0.0
+	var damage := COMBAT_FORMULA.apply_armor(float(attack), armor)
 	# 减伤（防护罩）：按百分比降低
 	var reduce := defender.get_reduce_percent()
 	if reduce > 0.0:
@@ -31,6 +33,8 @@ static func _calc(attacker: Unit, defender: Unit, power: float, terrain_bonus: i
 	if is_crit:
 		damage = maxi(1, roundi(damage * (float(attacker.get_crit_damage()) / 100.0)))
 	damage = maxi(1, roundi(damage * power))
+	# 狂暴倍率放在所有技能/普攻修正之后，表示最终伤害增加。
+	damage = maxi(1, roundi(damage * maxf(final_damage_multiplier, 1.0)))
 	result["damage"] = damage
 	result["crit"] = is_crit
 	return result

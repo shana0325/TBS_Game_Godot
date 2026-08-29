@@ -21,6 +21,9 @@ func export_meta() -> Dictionary:
 		"max_range": max_range,
 		"effects": effects,
 		"common": common,
+		"tags": tags,
+		"searchable": searchable,
+		"once": once,
 	}
 
 # from_data 构造后回调：代码技能可在这里做初始化（读取数据中的附加字段）。

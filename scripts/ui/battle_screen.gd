@@ -2,8 +2,6 @@
 # 播放行动动画/日志，判定胜负后进入结算。
 extends Control
 
-const UNIT_INFO_TEXT = preload("res://scripts/ui/unit_info_text.gd")
-
 const ANIM_SPEED := 1.0
 const MOVE_STEP_TIME := 0.18
 
@@ -13,6 +11,7 @@ var unit_views: Dictionary = {}
 var _tween_running: int = 0
 
 @onready var turn_label: Label = $TurnLabel
+@onready var frenzy_label: Label = $FrenzyLabel
 @onready var floor_label: Label = $FloorLabel
 @onready var team_status_label: Label = $TeamStatusLabel
 @onready var enemy_status_label: Label = $EnemyStatusLabel
@@ -22,9 +21,7 @@ var _tween_running: int = 0
 @onready var log_panel: PanelContainer = $LogPanel
 @onready var victory_label: Label = $VictoryLabel
 
-var info_panel: PanelContainer
-var info_label: Label
-var info_portrait: TextureRect
+var info_panel: UnitDetailPanel
 var settings_panel: PanelContainer
 var pause_btn: Button
 var speed_btn: Button
@@ -36,10 +33,17 @@ var roster_container: HBoxContainer
 var battle_unit_cards: Array[DeploymentUnitCard] = []
 var battle_speed: int = 1
 const SPEED_OPTIONS := [1, 2, 3]
+const MAX_LOG_ENTRIES := 100
+const INFO_REFRESH_INTERVAL := 0.1
+var log_buffer: Array[String] = []
+var info_refresh_elapsed: float = 0.0
+var skill_damage_queue: Array[Dictionary] = []
 
 func _ready() -> void:
 	# 暂停时本界面保持可交互（暂停/倍速/信息面板可用）
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# 日志默认隐藏；隐藏期间只保存文本，不创建日志 Label 节点。
+	log_panel.visible = false
 	manager = BattleManager.new(GameSession.current_scenario, self, GameSession.deployed_units, GameSession.scenario_override)
 	manager.setup()
 	manager.setup_battle()
@@ -51,6 +55,7 @@ func _ready() -> void:
 	grid_view.setup(manager.grid, tile_size)
 	for unit in manager.units:
 		_create_unit_view(unit)
+	_flush_skill_damage_queue()
 	_build_info_panel()
 	_update_turn_label()
 	if GameSession.mode == GameSession.MODE_TOWER:
@@ -95,8 +100,9 @@ func _layout_overlay_controls() -> void:
 		log_panel.size = Vector2(minf(520.0, vp.x - 48.0), 232.0)
 	_layout_roster_panel(vp)
 	if info_panel != null:
-		info_panel.position = Vector2(maxf(16.0, vp.x - 324.0), 72.0)
-		info_panel.size = Vector2(300.0, minf(560.0, maxf(260.0, vp.y - 150.0)))
+		var panel_size := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
+		info_panel.position = Vector2(maxf(16.0, (vp.x - panel_size.x) / 2.0), maxf(16.0, (vp.y - panel_size.y) / 2.0))
+		info_panel.size = panel_size
 
 # 战斗日志：默认隐藏，可点击展开/收起。
 func _build_log_toggle() -> void:
@@ -109,9 +115,14 @@ func _build_log_toggle() -> void:
 	add_child(log_btn)
 
 func _on_log_toggled() -> void:
-	log_panel.visible = not log_panel.visible
+	var should_show := not log_panel.visible
+	if should_show:
+		_render_log_buffer()
+	else:
+		_clear_log_nodes()
+	log_panel.visible = should_show
 	if log_btn != null:
-		log_btn.text = "收起日志" if log_panel.visible else "展开日志"
+		log_btn.text = "收起日志" if should_show else "展开日志"
 
 func _build_battle_roster() -> void:
 	# 战斗中保留底部单位栏作为阵容确认区，但卡片只读、不可拖动。
@@ -294,6 +305,11 @@ func _process(delta: float) -> void:
 	for ev in events:
 		_handle_event(ev)
 	_refresh_units()
+	if info_panel != null and info_panel.visible:
+		info_refresh_elapsed += delta
+		if info_refresh_elapsed >= INFO_REFRESH_INTERVAL:
+			info_panel.refresh_current()
+			info_refresh_elapsed = 0.0
 	_update_turn_label()
 	if manager.winner != "":
 		_check_battle_end()
@@ -303,12 +319,33 @@ func get_database() -> Node:
 
 # --- 提供给战斗系统回调的接口 ---
 func add_log(text: String) -> void:
+	log_buffer.append(text)
+	while log_buffer.size() > MAX_LOG_ENTRIES:
+		log_buffer.pop_front()
+	if not log_panel.visible:
+		return
+	_append_log_label(text)
+	while log_list.get_child_count() > MAX_LOG_ENTRIES:
+		var oldest: Node = log_list.get_child(0)
+		log_list.remove_child(oldest)
+		oldest.queue_free()
+
+func _append_log_label(text: String) -> void:
 	var label := Label.new()
 	label.text = text
 	label.modulate = Color(0.92, 0.92, 0.92)
 	log_list.add_child(label)
-	while log_list.get_child_count() > 100:
-		log_list.get_child(0).queue_free()
+
+func _clear_log_nodes() -> void:
+	for child in log_list.get_children():
+		var node: Node = child
+		log_list.remove_child(node)
+		node.queue_free()
+
+func _render_log_buffer() -> void:
+	_clear_log_nodes()
+	for text in log_buffer:
+		_append_log_label(text)
 
 # --- 界面搭建 ---
 func _position_battle_view() -> void:
@@ -329,27 +366,9 @@ func _create_unit_view(unit: Unit) -> void:
 
 # --- 单位信息面板 ---
 func _build_info_panel() -> void:
-	info_panel = PanelContainer.new()
+	info_panel = UnitDetailPanel.new()
 	info_panel.name = "UnitInfoPanel"
-	info_panel.custom_minimum_size = Vector2(300.0, 0.0)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	info_portrait = TextureRect.new()
-	info_portrait.custom_minimum_size = Vector2(140, 140)
-	info_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	box.add_child(info_portrait)
-	info_label = Label.new()
-	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info_label.custom_minimum_size = Vector2(250, 0)
-	box.add_child(info_label)
-	margin.add_child(box)
-	info_panel.add_child(margin)
+	info_panel.custom_minimum_size = Vector2(680.0, 420.0)
 	add_child(info_panel)
 	info_panel.visible = false
 
@@ -357,11 +376,9 @@ func _build_info_panel() -> void:
 func _show_unit_info(unit: Unit) -> void:
 	if unit == null or not unit.alive:
 		return
-	var portrait := ArtManager.get_portrait(unit.unit_type)
-	info_portrait.texture = portrait
-	info_portrait.visible = portrait != null
-	info_label.text = UNIT_INFO_TEXT.build(unit)
+	info_panel.show_unit(unit)
 	info_panel.visible = true
+	info_refresh_elapsed = 0.0
 
 func _hide_unit_info() -> void:
 	info_panel.visible = false
@@ -371,12 +388,29 @@ func _unhandled_input(event: InputEvent) -> void:
 	if manager == null:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var cell := _screen_to_cell(event.position)
-		var unit := manager.get_unit_at(cell)
+		var unit := _unit_at_screen_position(event.position)
 		if unit != null:
 			_show_unit_info(unit)
 		else:
 			_hide_unit_info()
+# 优先按 UnitView 的实际屏幕中心命中，再回退到网格坐标，兼容窗口缩放和战场偏移。
+func _unit_at_screen_position(screen_pos: Vector2) -> Unit:
+	var hit_radius := maxf(20.0, tile_size * 0.5)
+	var nearest: Unit = null
+	var nearest_distance := INF
+	for candidate in unit_views:
+		if not (candidate is Unit) or not candidate.alive:
+			continue
+		var view := unit_views.get(candidate) as Node2D
+		if view == null:
+			continue
+		var distance := view.get_global_transform_with_canvas().origin.distance_to(screen_pos)
+		if distance <= hit_radius and distance < nearest_distance:
+			nearest = candidate
+			nearest_distance = distance
+	if nearest != null:
+		return nearest
+	return manager.get_unit_at(_screen_to_cell(screen_pos))
 
 func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
 	var local := ($BattleView as Node2D).to_local(screen_pos)
@@ -411,10 +445,8 @@ func _handle_event(ev: Dictionary) -> void:
 					_animate_unit_move(unit_view, ev.get("from", Vector2i(-1, -1)), to)
 			if action == "move_attack":
 				if t2 != null:
-					add_log("%s 移动后攻击 %s" % [unit.get_display_name(), t2.get_display_name()])
+					add_log("%s 攻击 %s" % [unit.get_display_name(), t2.get_display_name()])
 				_show_damage_popup(ev)
-			else:
-				add_log("%s 移动" % unit.get_display_name())
 		"wait":
 			pass
 
@@ -434,6 +466,29 @@ func _show_damage_popup(ev: Dictionary) -> void:
 	if crit:
 		text += "!"
 	_spawn_float_text(target_view.position, text, Color(1.0, 0.25, 0.2), 26 if crit else 22)
+
+# 技能伤害飙字与普通攻击分色显示，并由技能触发系统统一上报。
+func record_skill_damage(source: Unit, target: Unit, damage: int, skill_name: String) -> void:
+	if target == null or damage <= 0:
+		return
+	var item: Dictionary = {"source": source, "target": target, "damage": damage, "skill_name": skill_name}
+	skill_damage_queue.append(item)
+	_flush_skill_damage_queue()
+
+func _flush_skill_damage_queue() -> void:
+	if units_layer == null:
+		return
+	var pending := skill_damage_queue.duplicate()
+	skill_damage_queue.clear()
+	for item in pending:
+		var target: Unit = item.get("target")
+		var target_view: Node2D = unit_views.get(target)
+		if target_view == null:
+			# 单位视图尚未创建时保留，待 _ready 完成后再显示。
+			skill_damage_queue.append(item)
+			continue
+		if GameSettings.show_damage_numbers():
+			_spawn_float_text(target_view.position + Vector2(22.0, 0.0), "技能 -%d" % int(item.get("damage", 0)), Color(0.86, 0.42, 1.0), 20)
 
 # 生成一个向上飘动并淡出的文字。
 func _spawn_float_text(pos: Vector2, text: String, color: Color, font_size: int) -> void:
@@ -577,6 +632,10 @@ func _update_turn_label() -> void:
 		return
 	var text: String = manager.turn_manager.get_turn_label()
 	turn_label.text = text
+	var frenzy_percent := manager.get_final_damage_bonus_percent()
+	frenzy_label.visible = frenzy_percent > 0.0
+	if frenzy_percent > 0.0:
+		frenzy_label.text = "双方受到最终伤害增加%d%%" % int(frenzy_percent)
 	floor_label.text = GameSession.get_floor_label() if GameSession.mode == GameSession.MODE_TOWER else GameSession.current_scenario
 	team_status_label.text = "我方 %d/%d" % [_count_alive(TurnManager.PLAYER_CAMP), _count_camp(TurnManager.PLAYER_CAMP)]
 	enemy_status_label.text = "敌方 %d/%d" % [_count_alive(TurnManager.ENEMY_CAMP), _count_camp(TurnManager.ENEMY_CAMP)]

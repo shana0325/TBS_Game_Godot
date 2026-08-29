@@ -2,6 +2,8 @@
 class_name UnitInfoText
 extends RefCounted
 
+const COMBAT_FORMULA = preload("res://scripts/core/combat_formula.gd")
+
 static func build(unit: Unit) -> String:
 	if unit == null:
 		return ""
@@ -17,7 +19,7 @@ static func build(unit: Unit) -> String:
 			if buff.shield > 0:
 				shield_max_all += int(buff.raw_data.get("shield", buff.shield))
 		lines.append("护罩: %d/%d" % [shield_total, shield_max_all])
-	lines.append("攻击: %d   防御: %d   移动: %d" % [unit.get_attack(), unit.get_defense(), unit.get_move_points()])
+	lines.append("攻击: %d   护甲: %d（%.1f%%减伤）   移动: %d" % [unit.get_attack(), unit.get_defense(), COMBAT_FORMULA.armor_reduction_percent(unit.get_defense()), unit.get_move_points()])
 	lines.append("暴击率: %d%%   暴击伤害: %d%%" % [unit.get_crit_rate(), unit.get_crit_damage()])
 	lines.append("射程: %d-%d" % [unit.get_range_min(), unit.get_range_max()])
 	lines.append("行动间隔: %.1fs" % unit.turn_interval)

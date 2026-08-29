@@ -2,14 +2,18 @@
 class_name Unit
 extends RefCounted
 
+const MAX_STARS := 3
+
 var unit_id: String = ""
 var display_name: String = "Unit"
 var unit_type: String = ""
+var tags: Array = []
 var camp: String = "player"
 var team_id: int = 0
 var pos: Vector2i = Vector2i.ZERO
 var config: Dictionary = {}
 var level: int = 1
+var star: int = 1
 var exp: int = 0
 var hp: int = 0
 var max_hp: int = 0
@@ -39,10 +43,12 @@ static func create_from_config(
 	unit.unit_id = str(roster_data.get("id", ""))
 	unit.unit_type = unit_type
 	unit.display_name = str(config_data.get("display_name", unit_type))
+	unit.tags = _string_array(config_data.get("tags", []))
 	unit.camp = camp
 	unit.pos = spawn_pos
 	unit.config = config_data
 	unit.level = int(roster_data.get("level", 1))
+	unit.star = clampi(int(roster_data.get("star", 1)), 1, MAX_STARS)
 	unit.exp = int(roster_data.get("exp", 0))
 	unit.turn_interval = float(config_data.get("turn_interval", 4.0))
 	unit.allocated_stats = roster_data.get("allocated_stats", {})
@@ -59,7 +65,10 @@ func get_base_stat(stat: String) -> int:
 	var key := stat
 	if stat == "attack":
 		key = "atk"
-	return int(config.get(key, 0)) + int(allocated_stats.get(stat, 0))
+	var base_value := int(config.get(key, 0))
+	if stat in ["hp", "attack", "defense"]:
+		base_value = roundi(float(base_value) * get_star_multiplier(star))
+	return base_value + int(allocated_stats.get(stat, 0))
 
 func get_stat(stat: String) -> int:
 	var value := get_base_stat(stat)
@@ -68,7 +77,7 @@ func get_stat(stat: String) -> int:
 		var equip: Equipment = equipment[slot]
 		value += int(equip.modifiers.get(stat, 0))
 	for buff in buffs:
-		value += buff.get_stat_modifier(stat)
+		value += buff.get_stat_modifier_for_unit(self, stat)
 	var percent := float(percent_mods.get(stat, 0.0))
 	if percent > 0.0:
 		value += roundi(value * percent)
@@ -97,6 +106,23 @@ func get_range_max() -> int:
 
 func get_display_name() -> String:
 	return display_name
+
+func get_tags() -> Array:
+	return tags.duplicate()
+
+static func get_star_multiplier(star_level: int) -> float:
+	return 1.0 + 0.5 * float(maxi(star_level - 1, 0))
+
+static func get_scaled_base_stat(config_data: Dictionary, stat: String, star_level: int = 1) -> int:
+	var key := "atk" if stat == "attack" else stat
+	var base_value := int(config_data.get(key, 0))
+	if stat in ["hp", "attack", "defense"]:
+		base_value = roundi(float(base_value) * get_star_multiplier(star_level))
+	return base_value
+
+static func get_skill_slot_limit(star_level: int) -> int:
+	# 初始 1 格，前两次升星各增加 1 格；未来提高最高星级时仍保持该上限。
+	return 1 + mini(maxi(star_level - 1, 0), 2)
 
 func is_dead() -> bool:
 	return not alive
@@ -237,14 +263,24 @@ func apply_skills(game_db = null) -> void:
 	if innate_id != "":
 		skill_names.append(innate_id)
 	# 通用技能：仅已装备的参与战斗（已学未装备的不生效）
-	skill_names.append_array(equipped_skill_names)
+	var equipped_count := 0
+	for equipped_id in equipped_skill_names:
+		var equipped_data: Dictionary = db.get_skill(str(equipped_id))
+		if not bool(equipped_data.get("common", false)):
+			continue
+		if equipped_count >= get_skill_slot_limit(star):
+			break
+		skill_names.append(str(equipped_id))
+		equipped_count += 1
 	for slot in equipment:
 		var equip: Equipment = equipment[slot]
 		skill_names.append_array(equip.granted_skills)
 	for skill_name in skill_names:
 		var data: Dictionary = db.get_skill(str(skill_name))
 		if not data.is_empty():
-			add_skill(Skill.from_data(data))
+			var skill_data := data.duplicate()
+			skill_data["id"] = str(skill_name)
+			add_skill(Skill.from_data(skill_data))
 
 func _apply_equipment_data(equipment_map: Dictionary, game_db = null) -> void:
 	var db = game_db
@@ -262,3 +298,12 @@ func _has_control(control_type: String) -> bool:
 		if buff.control == control_type:
 			return true
 	return false
+
+static func _string_array(value: Variant) -> Array:
+	var result: Array = []
+	if value is Array:
+		for item in value:
+			var text := str(item).strip_edges()
+			if text != "" and not result.has(text):
+				result.append(text)
+	return result

@@ -3,8 +3,7 @@
 class_name TowerGenerator
 extends RefCounted
 
-const SKILL_POOL := ["Poison Strike", "War Banner", "Counter Stance", "Concussion Blow",
-	"Blood Rush", "Guard Shield"]
+const FALLBACK_SKILL_POOL := ["Power Strike", "Cleave", "Execute", "Lifesteal", "Iron Wall", "Thorns", "Fear"]
 const ENEMY_SPOTS := [Vector2i(10, 1), Vector2i(10, 4), Vector2i(9, 2), Vector2i(9, 3),
 	Vector2i(11, 2), Vector2i(11, 3)]
 const PLAYER_SPOTS := [Vector2i(1, 2), Vector2i(2, 3), Vector2i(3, 2), Vector2i(3, 4)]
@@ -24,11 +23,11 @@ static func generate_enemies(floor: int) -> Array:
 	return enemies
 
 static func _make_enemy(floor: int, index: int, is_boss: bool, elite: bool) -> Dictionary:
-	var type := "Goblin"
+	var type := "Warrior"
 	if floor >= 4:
-		type = "Orc" if index % 2 == 0 else "Goblin"
+		type = "Tank" if index % 2 == 0 else "Archer"
 	if is_boss:
-		type = "Orc"
+		type = "Assassin"
 	# 技能成长：Boss > 精英 > 普通；层数越高越多（上限 3）
 	var skill_count := 0
 	if is_boss:
@@ -39,8 +38,11 @@ static func _make_enemy(floor: int, index: int, is_boss: bool, elite: bool) -> D
 		skill_count = 1 if floor >= 8 else 0
 	skill_count = mini(skill_count, 3)
 	var skills: Array = []
+	var skill_pool: Array = GameDatabase.get_searchable_skill_ids(true)
+	if skill_pool.is_empty():
+		skill_pool = FALLBACK_SKILL_POOL
 	for k in range(skill_count):
-		var skill: String = SKILL_POOL[(floor + k * 3 + index) % SKILL_POOL.size()]
+		var skill: String = str(skill_pool[(floor + k * 3 + index) % skill_pool.size()])
 		if not skills.has(skill):
 			skills.append(skill)
 	return {"type": type, "pos": ENEMY_SPOTS[index % ENEMY_SPOTS.size()], "skills": skills}

@@ -1,54 +1,94 @@
 {
+	"inventory": {
+		"star_items": 99,
+		"skill_books": {
+			"Power Strike": 1,
+			"Cleave": 1,
+			"Execute": 1,
+			"Lifesteal": 1,
+			"Iron Wall": 1,
+			"Toughness": 1,
+			"Revive": 1,
+			"Sharp": 1,
+			"Lethal": 1,
+			"Thorns": 1,
+			"Fear": 1
+		}
+	},
 	"units": [
 		{
-			"allocated_stats": {
-				"attack": 10.0,
-				"defense": 1.0
-			},
-			"equipment": {
-				"accessory": "toxic_charm",
-				"weapon": "bronze_spear"
-			},
-			"equipped_skills": [
-				"Guard Shield",
-				"Blood Rush",
-				"Counter Stance"
-			],
-			"exp": 100,
+			"allocated_stats": {},
+			"equipment": {},
+			"star": 1,
+			"equipped_skills": [],
+			"exp": 0,
 			"extra_skills": [],
 			"id": "hero_001",
-			"learned_skills": [
-				"Poison Strike",
-				"Blood Rush",
-				"Counter Stance",
-				"Concussion Blow"
-			],
-			"level": 6,
-			"skill_points": 5,
-			"stat_points": 4,
+			"learned_skills": [],
+			"level": 1,
+			"skill_points": 0,
+			"stat_points": 0,
 			"type": "Hero"
 		},
 		{
-			"allocated_stats": {
-				"attack": 2.0,
-				"defense": 1.0
-			},
-			"equipment": {
-				"accessory": "swift_boots",
-				"offhand": "wooden_shield",
-				"weapon": "bronze_spear"
-			},
+			"id": "warrior_001",
+			"type": "Warrior",
+			"star": 1,
+			"level": 1,
+			"exp": 0,
+			"stat_points": 0,
+			"skill_points": 0,
+			"allocated_stats": {},
+			"permanent_mods": {},
+			"equipment": {},
+			"learned_skills": [],
 			"equipped_skills": [],
-			"exp": 100.0,
-			"extra_skills": [],
-			"id": "knight_001",
-			"learned_skills": [
-				"Battle Chant"
-			],
-			"level": 2.0,
-			"skill_points": 4.0,
-			"stat_points": 2.0,
-			"type": "Knight"
+			"extra_skills": []
+		},
+		{
+			"id": "tank_001",
+			"type": "Tank",
+			"star": 1,
+			"level": 1,
+			"exp": 0,
+			"stat_points": 0,
+			"skill_points": 0,
+			"allocated_stats": {},
+			"permanent_mods": {},
+			"equipment": {},
+			"learned_skills": [],
+			"equipped_skills": [],
+			"extra_skills": []
+		},
+		{
+			"id": "archer_001",
+			"type": "Archer",
+			"star": 1,
+			"level": 1,
+			"exp": 0,
+			"stat_points": 0,
+			"skill_points": 0,
+			"allocated_stats": {},
+			"permanent_mods": {},
+			"equipment": {},
+			"learned_skills": [],
+			"equipped_skills": [],
+			"extra_skills": []
+		},
+		{
+			"id": "assassin_001",
+			"type": "Assassin",
+			"star": 1,
+			"level": 1,
+			"exp": 0,
+			"stat_points": 0,
+			"skill_points": 0,
+			"allocated_stats": {},
+			"permanent_mods": {},
+			"equipment": {},
+			"learned_skills": [],
+			"equipped_skills": [],
+			"extra_skills": []
 		}
 	]
 }

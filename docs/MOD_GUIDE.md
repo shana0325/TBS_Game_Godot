@@ -109,7 +109,7 @@ mods/
 
 ## 8. 示例
 
-`mods/example_mod/` 是一个完整的示例：包含 mod.json、SampleHero 单位、Power Strike 技能、idle 与 portrait 图片。复制它改成自己的即可。
+`mods/example_mod/` 是一个示例：包含 `mod.json` 与 SampleHero 的素材目录（`art/units/SampleHero/` 下 idle 与 portrait 图片）。当前示例未附单位 JSON（单位数据写法见第 3 节），需要时可自行补充 `units/SampleHero.json` 后复制改造。
 
 > 提示：新增图片后需让 Godot 重新导入（首次启动会自动导入）。
 

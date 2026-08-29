@@ -15,7 +15,7 @@
       "defense": 1
     },
     "granted_skills": [
-      "Counter Stance"
+      "Cleave"
     ]
   },
   "wooden_shield": {
@@ -39,7 +39,7 @@
     "slot": "accessory",
     "modifiers": {},
     "granted_skills": [
-      "Poison Strike"
+      "Fear"
     ]
   }
 }

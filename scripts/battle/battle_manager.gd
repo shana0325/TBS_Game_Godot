@@ -83,7 +83,7 @@ func _spawn_from_deployed(roster_units: Array) -> void:
 
 func _spawn_enemy_units(scenario: Dictionary) -> void:
 	for entry in scenario.get("enemy_units", []):
-		var unit_type := str(entry.get("type", "Goblin"))
+		var unit_type := str(entry.get("type", "Warrior"))
 		var config: Dictionary = GameDatabase.get_unit(unit_type)
 		if config.is_empty():
 			continue
@@ -165,7 +165,7 @@ func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
 		return empty
 	# 攻击前触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_START, {"actor": attacker, "user": attacker, "target": defender})
-	var result := combat_system.perform_attack(attacker, defender)
+	var result := combat_system.perform_attack(attacker, defender, 0, get_final_damage_multiplier())
 	var damage: int = result.get("damage", 0)
 	var crit: bool = result.get("crit", false)
 	# 反射：防御方有反射 buff 时，把部分伤害反射回攻击者
@@ -177,7 +177,7 @@ func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
 			if game != null and game.has_method("add_log"):
 				game.add_log("%s 反射 %d 点伤害给 %s" % [defender.get_display_name(), reflect_damage, attacker.get_display_name()])
 	# 攻击时触发
-	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK, {"actor": attacker, "user": attacker, "target": defender})
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK, {"actor": attacker, "user": attacker, "target": defender, "crit": crit})
 	# 造成伤害后触发（吸血类）
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_HIT, {"actor": attacker, "user": attacker, "target": defender})
 	# 受击触发
@@ -329,7 +329,7 @@ func tick(delta: float) -> Array:
 			})
 		unit.tick_turn_end(game)
 		# 行动结束触发 + 冷却推进
-		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_END, {"user": unit})
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_END, {"actor": unit, "user": unit})
 		_tick_skill_cooldowns(unit)
 		_check_winner()
 		if winner != "":
@@ -379,6 +379,13 @@ func _check_winner() -> void:
 		winner = TurnManager.ENEMY_CAMP
 	elif enemies == 0:
 		winner = TurnManager.PLAYER_CAMP
+
+# 对外提供本场战斗当前的狂暴最终伤害增幅，供 UI 和非普通攻击效果复用。
+func get_final_damage_bonus_percent() -> float:
+	return turn_manager.get_final_damage_bonus_percent() if turn_manager != null else 0.0
+
+func get_final_damage_multiplier() -> float:
+	return turn_manager.get_final_damage_multiplier() if turn_manager != null else 1.0
 
 # 胜利奖励：给所有存活玩家单位加经验并写回 roster，返回 {unit_type, exp_gained, levels_gained} 列表。
 func grant_victory_exp(reward: int = 100) -> Array:

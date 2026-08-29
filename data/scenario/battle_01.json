@@ -52,15 +52,15 @@
   ],
   "enemy_units": [
     {
-      "type": "Goblin",
+      "type": "Warrior",
       "pos": [10, 2]
     },
     {
-      "type": "Goblin",
+      "type": "Warrior",
       "pos": [10, 3]
     },
     {
-      "type": "Orc",
+      "type": "Tank",
       "pos": [9, 2]
     }
   ]
