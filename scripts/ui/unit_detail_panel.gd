@@ -74,6 +74,9 @@ func _build_panel() -> void:
 	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	summary_label.add_theme_font_size_override("font_size", 16)
 	summary_label.add_theme_color_override("font_color", Color("#d8d2e5"))
+	# 给自动换行文本一个最小宽度：首次布局时标签宽度还是 1px，
+	# 会被逐字换行撑成几十行，把信息卡最小高度顶出屏幕。
+	summary_label.custom_minimum_size = Vector2(480.0, 0.0)
 	identity.add_child(summary_label)
 
 	ascend_button = Button.new()
@@ -97,6 +100,9 @@ func _build_panel() -> void:
 	content_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	# 固定滚动区最小高度：内容再多也只在卡片内部滚动，
+	# 避免容器最小尺寸被内容撑大导致信息卡首次展开超出屏幕。
+	content_scroll.custom_minimum_size = Vector2(0.0, 170.0)
 	root_box.add_child(content_scroll)
 	content_box = VBoxContainer.new()
 	content_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -112,6 +118,17 @@ func show_unit(p_unit: Unit) -> void:
 	active_tab = "stats"
 	_refresh_header()
 	_render_tab()
+	_clamp_to_viewport()
+
+# 每次显示前按视口钳制位置与尺寸，避免内容把信息卡撑出屏幕（与调用方时序无关）。
+func _clamp_to_viewport() -> void:
+	var vp := get_viewport_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return
+	var target := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
+	custom_minimum_size = target
+	size = target
+	position = Vector2(maxf(16.0, (vp.x - target.x) / 2.0), maxf(16.0, (vp.y - target.y) / 2.0))
 
 # 刷新当前已打开的信息卡，保留用户正在查看的标签页。
 # 战斗界面只对当前打开的卡片调用，不让未查看的单位产生持续 UI 开销。

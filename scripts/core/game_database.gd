@@ -17,6 +17,7 @@ var skills: Dictionary = {}
 var buffs: Dictionary = {}
 var equipments: Dictionary = {}
 var relics: Dictionary = {}
+var tower_config: Dictionary = {}
 var player_roster: Dictionary = {}
 
 const DATA_PATHS := {
@@ -25,6 +26,7 @@ const DATA_PATHS := {
 	"buffs": "res://data/buff/buffs.json",
 	"equipments": "res://data/equipment/equipments.json",
 	"relics": "res://data/relic/relics.json",
+	"tower_config": "res://data/tower/tower_config.json",
 	"player_roster": "res://data/player/player_roster.json",
 }
 
@@ -34,6 +36,7 @@ func _ready() -> void:
 	buffs = _load_json(DATA_PATHS.buffs)
 	equipments = _load_json(DATA_PATHS.equipments)
 	relics = _load_json(DATA_PATHS.relics)
+	tower_config = _load_json(DATA_PATHS.tower_config)
 	player_roster = _load_json(DATA_PATHS.player_roster)
 	_merge_code_skills()
 	_sync_user_roster()
@@ -256,6 +259,10 @@ func get_equipment(equipment_id: String) -> Dictionary:
 
 func get_relic(relic_id: String) -> Dictionary:
 	return relics.get(relic_id, {})
+
+# 爬塔敌人属性成长率（配置项，默认 1.04；通过战斗模拟调整）。
+func get_enemy_growth_rate() -> float:
+	return float(tower_config.get("enemy_growth_rate", 1.04))
 
 func get_player_units() -> Array:
 	return player_roster.get("units", [])

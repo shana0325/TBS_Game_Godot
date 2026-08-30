@@ -103,6 +103,8 @@ func _layout_overlay_controls() -> void:
 		var panel_size := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
 		info_panel.position = Vector2(maxf(16.0, (vp.x - panel_size.x) / 2.0), maxf(16.0, (vp.y - panel_size.y) / 2.0))
 		info_panel.size = panel_size
+		# 让最小尺寸等于目标尺寸，避免内容把信息卡撑出屏幕（与滚动区最小高度配合）
+		info_panel.custom_minimum_size = panel_size
 
 # 战斗日志：默认隐藏，可点击展开/收起。
 func _build_log_toggle() -> void:

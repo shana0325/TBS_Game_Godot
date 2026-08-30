@@ -13,16 +13,59 @@ static func get_decision(manager: BattleManager, unit: Unit) -> Dictionary:
 	if nearest == null:
 		return {"action": "wait"}
 	var move_tiles := manager.get_move_tiles(unit)
+	if move_tiles.is_empty():
+		return {"action": "wait"}
+	# 以目标为源做障碍感知的 Dijkstra，取真实路径距离最近的可走格；
+	# 绕路第一步虽然曼哈顿距离变远，但真实路径距离是递减的，单位会主动绕行。
+	var dists := _path_distances(manager, nearest.pos, unit.pos)
+	var unreachable := 999999
+	var current_dist: int = dists.get(unit.pos, unreachable)
 	var best := unit.pos
-	var best_dist := _combat_distance(manager, unit.pos, nearest.pos)
+	var best_dist := current_dist
 	for cell in move_tiles:
-		var d := _combat_distance(manager, cell, nearest.pos)
+		var d: int = dists.get(cell, unreachable)
 		if d < best_dist:
 			best = cell
 			best_dist = d
 	if best == unit.pos:
+		# 当前格不可达（被完全堵死）但存在可达邻格时，朝可达方向走
+		for cell in move_tiles:
+			if dists.get(cell, unreachable) < unreachable:
+				best = cell
+				break
+	if best == unit.pos:
 		return {"action": "wait"}
 	return {"action": "move", "to": best}
+
+# 目标格的障碍感知路径距离：从 goal 出发做 Dijkstra，其他存活单位视为不可通行。
+# 返回 { Vector2i: 距离 }。exclude_pos 为移动单位自身位置（不阻挡）。
+static func _path_distances(manager: BattleManager, goal: Vector2i, exclude_pos: Vector2i) -> Dictionary:
+	var result := {}
+	var grid := manager.grid
+	if grid == null:
+		return result
+	var start_tile := grid.get_tile(goal.x, goal.y)
+	if start_tile == null:
+		return result
+	var blocked := {}
+	for u in manager.units:
+		if u is Unit and u.alive and u.pos != goal and u.pos != exclude_pos:
+			blocked[u.pos] = true
+	var dist := {start_tile: 0}
+	var queue: Array = [start_tile]
+	while queue.size() > 0:
+		var current = queue.pop_front()
+		result[current.get_position()] = dist[current]
+		for neighbor in grid.get_neighbors(current):
+			if blocked.has(neighbor.get_position()):
+				continue
+			if not neighbor.passable:
+				continue
+			var nd: int = dist[current] + neighbor.move_cost
+			if not dist.has(neighbor) or nd < dist[neighbor]:
+				dist[neighbor] = nd
+				queue.append(neighbor)
+	return result
 
 # 移动目标：被嘲讽则朝嘲讽者移动；否则朝最近敌人。
 static func _get_move_target(manager: BattleManager, unit: Unit) -> Unit:

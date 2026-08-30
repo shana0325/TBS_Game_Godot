@@ -88,8 +88,11 @@ func _spawn_enemy_units(scenario: Dictionary) -> void:
 		if config.is_empty():
 			continue
 		var pos := Vector2i(int(entry.pos[0]), int(entry.pos[1]))
-		# 敌人技能走"装备技能"通道（塔层生成器按层配技能）
-		var roster_data: Dictionary = {"equipped_skills": entry.get("skills", [])}
+		# 敌人技能走"装备技能"通道（塔层生成器按层配技能）；属性倍率用于按层成长
+		var roster_data: Dictionary = {
+			"equipped_skills": entry.get("skills", []),
+			"stat_multiplier": float(entry.get("stat_multiplier", 1.0)),
+		}
 		units.append(Unit.create_from_config(unit_type, TurnManager.ENEMY_CAMP, pos, config, roster_data))
 
 func get_unit_at(cell: Vector2i) -> Unit:

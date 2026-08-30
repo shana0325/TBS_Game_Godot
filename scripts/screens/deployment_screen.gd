@@ -233,6 +233,8 @@ func _layout_ui() -> void:
 		var panel_size := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
 		info_panel.position = Vector2(maxf(16.0, (vp.x - panel_size.x) / 2.0), maxf(16.0, (vp.y - panel_size.y) / 2.0))
 		info_panel.size = panel_size
+		# 让最小尺寸等于目标尺寸，避免内容把信息卡撑出屏幕（与滚动区最小高度配合）
+		info_panel.custom_minimum_size = panel_size
 	if skill_replace_panel != null and skill_replace_panel.visible:
 		var replace_size := Vector2(minf(440.0, vp.x - 32.0), minf(360.0, vp.y - 32.0))
 		skill_replace_panel.position = (vp - replace_size) / 2.0

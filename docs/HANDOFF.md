@@ -86,6 +86,7 @@ data/skill/skills.json               # 技能与 effect 列表（common=true 通
 data/buff/buffs.json                 # Buff 配置
 data/equipment/equipments.json       # 装备配置
 data/relic/relics.json               # 遗物配置（爬塔局内成长）
+data/tower/tower_config.json         # 爬塔配置（enemy_growth_rate 敌方属性成长率等）
 data/player/player_roster.json       # 玩家编成、成长、技能、装备、permanent_mods 永久强化、inventory 背包
 ```
 
@@ -217,12 +218,13 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 
 - **入口**：主菜单新增"爬塔模式"（与快速对战并存）；沿用当前编成自动部署。
 - **会话**：`GameSession` 新增 `mode / tower_floor / run_relics / run_blessings` 与 `scenario_override`（运行时覆盖关卡字典）。
-- **层生成**：`TowerGenerator` 按层生成敌人（普通/精英(每3层)/Boss(每5层)，使用四种职业模板，敌人按层配技能成长）。
+- **层生成**：`TowerGenerator` 按层生成敌人（使用四种职业模板，敌人按层配技能成长；精英/Boss 机制已移除，待重设计）。
 - **背包**：部署界面右侧操作区提供“背包”按钮。悬浮窗以网格显示升星道具与技能书，点击/悬停显示名称和简介；技能书可直接拖到我方单位，满槽时弹出替换列表，取消不消耗技能书。点击背包外区域自动关闭。首次存档发放 99 个升星道具和每种可学习通用技能书 1 本用于测试。
 - **技能详情**：`skill_detail_formatter.gd` 统一生成单位信息卡和背包技能书使用的技能详情；部署底部未上场角色卡也可直接接收技能书。
 - **奖励**：胜利进入 `reward_screen` 三选一（技能书/装备/祝福/遗物，`RewardGenerator` 生成与应用）；技能书和装备奖励写回编成/背包。
 - **狂暴**：`TurnManager` 在 60 秒后每 30 秒将双方最终伤害提高 50%；`BattleScreen` 在战斗时间右侧显示当前增幅，普攻、技能、百分比伤害和持续伤害统一应用。
 - **遗物系统**：`data/relic/relics.json` 首期 5 个（战神徽章/急速披风/鲜血吊坠/不灭徽记/荆棘之心）；`RelicSystem` 战斗开始应用（stat_percent / turn_speed / 永久反射 Buff），事件钩子 on_kill 回血、on_first_death 复活（每场一次）。Unit 新增 `percent_mods`（百分比属性）、Buff 新增 `permanent` 标记（不衰减）。
+- **敌方数值成长（配置化）**：`data/tower/tower_config.json` 提供 `enemy_growth_rate`（默认 1.04，第一轮测试参数，按战斗模拟结果调整）；敌人属性倍率 `Multiplier = rate^(层数-1)` 作用于 HP/ATK/DEF（Unit 新增 `stat_multiplier`）；技能数量按层段生成（1-10:0 / 11-20:1 / 21-30:2 / 31+:3，上限 3）。技能 tags 暂不参与抽取（仅预留）。参考 `docs/爬塔敌方数值设计文档_V1.md`。
 
 已知边界：不灭徽记复活仅挂"攻击致死"路径（DOT/技能间接致死暂不触发）；商店/事件/31+ 无限层未做。
 

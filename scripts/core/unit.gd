@@ -25,6 +25,7 @@ var turn_timer: float = 0.0
 var allocated_stats: Dictionary = {}
 var permanent_mods: Dictionary = {}
 var percent_mods: Dictionary = {}
+var stat_multiplier: float = 1.0
 var skills: Array = []
 var buffs: Array = []
 var equipment: Dictionary = {}
@@ -53,6 +54,8 @@ static func create_from_config(
 	unit.turn_interval = float(config_data.get("turn_interval", 4.0))
 	unit.allocated_stats = roster_data.get("allocated_stats", {})
 	unit.permanent_mods = roster_data.get("permanent_mods", {})
+	# 敌方属性倍率（爬塔敌人按层成长用，玩家为 1.0）
+	unit.stat_multiplier = float(roster_data.get("stat_multiplier", 1.0))
 	unit.learned_skill_names = roster_data.get("learned_skills", [])
 	unit.equipped_skill_names = roster_data.get("equipped_skills", [])
 	unit.max_hp = unit.get_base_stat("hp") + int(unit.permanent_mods.get("hp", 0))
@@ -68,6 +71,7 @@ func get_base_stat(stat: String) -> int:
 	var base_value := int(config.get(key, 0))
 	if stat in ["hp", "attack", "defense"]:
 		base_value = roundi(float(base_value) * get_star_multiplier(star))
+		base_value = roundi(float(base_value) * stat_multiplier)
 	return base_value + int(allocated_stats.get(stat, 0))
 
 func get_stat(stat: String) -> int:
