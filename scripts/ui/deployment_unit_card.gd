@@ -65,6 +65,13 @@ func set_tile_size(p_tile_size: int) -> void:
 		unit_view.tile_size = tile_size
 		_update_unit_position()
 		unit_view.refresh()
+	queue_redraw()
+
+# 在单位预览下方绘制统一的深紫色卡片与细金边。
+func _draw() -> void:
+	var card_rect := Rect2(Vector2.ZERO, size).grow(-2.0)
+	draw_rect(card_rect, Color(0.10, 0.095, 0.18, 0.96))
+	draw_rect(card_rect, Color(0.68, 0.56, 0.37, 0.9), false, 1.5)
 
 func _update_unit_position() -> void:
 	if unit_view == null:

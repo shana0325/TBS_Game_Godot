@@ -100,11 +100,7 @@ func _layout_overlay_controls() -> void:
 		log_panel.size = Vector2(minf(520.0, vp.x - 48.0), 232.0)
 	_layout_roster_panel(vp)
 	if info_panel != null:
-		var panel_size := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
-		info_panel.position = Vector2(maxf(16.0, (vp.x - panel_size.x) / 2.0), maxf(16.0, (vp.y - panel_size.y) / 2.0))
-		info_panel.size = panel_size
-		# 让最小尺寸等于目标尺寸，避免内容把信息卡撑出屏幕（与滚动区最小高度配合）
-		info_panel.custom_minimum_size = panel_size
+		info_panel.fit_to_viewport()
 
 # 战斗日志：默认隐藏，可点击展开/收起。
 func _build_log_toggle() -> void:
@@ -370,7 +366,6 @@ func _create_unit_view(unit: Unit) -> void:
 func _build_info_panel() -> void:
 	info_panel = UnitDetailPanel.new()
 	info_panel.name = "UnitInfoPanel"
-	info_panel.custom_minimum_size = Vector2(680.0, 420.0)
 	add_child(info_panel)
 	info_panel.visible = false
 
@@ -390,6 +385,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if manager == null:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if info_panel != null and info_panel.visible and info_panel.get_global_rect().has_point(event.position):
+			return
 		var unit := _unit_at_screen_position(event.position)
 		if unit != null:
 			_show_unit_info(unit)

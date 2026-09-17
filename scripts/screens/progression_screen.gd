@@ -122,6 +122,7 @@ func _build_top_bar() -> void:
 	var title := Label.new()
 	title.text = "队伍编成"
 	title.add_theme_font_size_override("font_size", 40)
+	title.add_theme_color_override("font_color", Color("#f3d99d"))
 	title.position = Vector2(60, 20)
 	add_child(title)
 
@@ -134,6 +135,7 @@ func _build_top_bar() -> void:
 	start_button = Button.new()
 	start_button.name = "StartGameButton"
 	start_button.text = "保存并开始游戏"
+	MenuStyle.apply_primary(start_button)
 	start_button.custom_minimum_size = Vector2(220, 44)
 	start_button.pressed.connect(_start_game)
 	add_child(start_button)

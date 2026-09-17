@@ -15,6 +15,7 @@ func _ready() -> void:
 	quit_button.pressed.connect(_on_quit_pressed)
 	quit_button.add_theme_color_override("font_color", Color(0.92, 0.48, 0.42, 1.0))
 	quit_button.add_theme_color_override("font_hover_color", Color(1.0, 0.68, 0.56, 1.0))
+	MenuStyle.apply_primary(start_button)
 	continue_button.disabled = not GameDatabase.has_user_save()
 
 func _on_continue_pressed() -> void:

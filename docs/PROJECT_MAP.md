@@ -37,6 +37,7 @@
 | `assets/fonts/` | 当前运行时字体 | 字体/UI 任务时读取 |
 | `assets/skills/` | 当前运行时技能图标 | 技能图标或美术任务时读取 |
 | `assets/units/` | 当前运行时单位图片和立绘 | 单位表现任务时读取 |
+| `assets/ui/` | 当前运行时界面背景与装饰图片 | UI 美术任务时读取 |
 | `assets/reference/ui_material/` | 原 `material` 目录及未接入 UI 候选素材 | 仅视觉素材任务明确需要时读取 |
 | `mods/` | Mod 示例、清单和外部内容入口 | Mod 任务时读取 |
 | `docs/` | 设计、交接、索引和制作说明 | 按任务读取相关文档 |

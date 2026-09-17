@@ -1,4 +1,4 @@
-## 大型角色信息面板：参考 LC2 !ve 角色面板，统一展示立绘、属性、装备和技能。
+# 全屏角色资料页：左侧目录导航，中间立绘，右侧连续滚动属性、装备和技能。
 class_name UnitDetailPanel
 extends PanelContainer
 
@@ -7,15 +7,21 @@ const SKILL_DETAIL_FORMATTER = preload("res://scripts/ui/skill_detail_formatter.
 
 var unit: Unit
 var portrait: TextureRect
+var right_panel: PanelContainer
 var name_label: Label
 var summary_label: Label
 var content_scroll: ScrollContainer
 var content_box: VBoxContainer
-var tab_buttons: Array[Button] = []
-var active_tab := "stats"
+var section_box: VBoxContainer
+var section_nodes: Dictionary = {}
+var nav_buttons: Dictionary = {}
+var active_section := "overview"
+var stat_value_labels: Dictionary = {}
 var ascension_enabled := false
 var ascend_button: Button
 var skill_detail_dialog: AcceptDialog
+
+const SECTIONS := [["overview", "角色概览"], ["stats", "基础属性"], ["equipment", "装备"], ["skills", "技能"]]
 
 signal ascension_requested(unit: Unit)
 
@@ -24,90 +30,98 @@ func _ready() -> void:
 		_build_panel()
 
 func _build_panel() -> void:
-	custom_minimum_size = Vector2(680.0, 420.0)
+	custom_minimum_size = Vector2(980.0, 600.0)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#191827")
-	style.border_color = Color("#b58a4a")
+	style.bg_color = Color("#121526")
+	style.border_color = Color("#8d749f")
 	style.set_border_width_all(2)
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
+	style.set_corner_radius_all(10)
 	style.shadow_color = Color(0, 0, 0, 0.55)
 	style.shadow_size = 12
 	add_theme_stylebox_override("panel", style)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_bottom", 16)
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_bottom", 20)
 	add_child(margin)
 
 	var root_box := VBoxContainer.new()
-	root_box.add_theme_constant_override("separation", 10)
+	root_box.add_theme_constant_override("separation", 14)
 	margin.add_child(root_box)
 
 	var header := HBoxContainer.new()
-	header.custom_minimum_size.y = 172
-	header.add_theme_constant_override("separation", 18)
+	header.custom_minimum_size.y = 54
 	root_box.add_child(header)
 
+	name_label = Label.new()
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.add_theme_font_size_override("font_size", 32)
+	name_label.add_theme_color_override("font_color", Color("#f2d08b"))
+	header.add_child(name_label)
+	var close_button := Button.new()
+	close_button.text = "关闭  ×"
+	close_button.custom_minimum_size = Vector2(110, 42)
+	close_button.pressed.connect(hide)
+	header.add_child(close_button)
+
+	var columns := HBoxContainer.new()
+	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	columns.add_theme_constant_override("separation", 18)
+	root_box.add_child(columns)
+
+	var nav := VBoxContainer.new()
+	nav.custom_minimum_size.x = 166
+	nav.add_theme_constant_override("separation", 10)
+	columns.add_child(nav)
+	for section in SECTIONS:
+		var nav_button := Button.new()
+		nav_button.text = str(section[1])
+		nav_button.custom_minimum_size.y = 48
+		nav_button.add_theme_font_size_override("font_size", 18)
+		nav_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		nav_button.pressed.connect(_jump_to_section.bind(str(section[0])))
+		nav.add_child(nav_button)
+		nav_buttons[str(section[0])] = nav_button
+
+	var portrait_panel := PanelContainer.new()
+	portrait_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	portrait_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	portrait_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	columns.add_child(portrait_panel)
 	portrait = TextureRect.new()
-	portrait.custom_minimum_size = Vector2(172, 172)
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	header.add_child(portrait)
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait_panel.add_child(portrait)
 
-	var identity := VBoxContainer.new()
-	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	identity.add_theme_constant_override("separation", 6)
-	header.add_child(identity)
-
-	name_label = Label.new()
-	name_label.add_theme_font_size_override("font_size", 30)
-	name_label.add_theme_color_override("font_color", Color("#f2d08b"))
-	identity.add_child(name_label)
+	right_panel = PanelContainer.new()
+	right_panel.custom_minimum_size.x = 600
+	right_panel.size_flags_horizontal = Control.SIZE_FILL
+	columns.add_child(right_panel)
 
 	summary_label = Label.new()
 	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	summary_label.add_theme_font_size_override("font_size", 16)
+	summary_label.add_theme_font_size_override("font_size", 18)
 	summary_label.add_theme_color_override("font_color", Color("#d8d2e5"))
-	# 给自动换行文本一个最小宽度：首次布局时标签宽度还是 1px，
-	# 会被逐字换行撑成几十行，把信息卡最小高度顶出屏幕。
-	summary_label.custom_minimum_size = Vector2(480.0, 0.0)
-	identity.add_child(summary_label)
 
 	ascend_button = Button.new()
-	ascend_button.custom_minimum_size = Vector2(220, 34)
+	ascend_button.custom_minimum_size = Vector2(220, 42)
 	ascend_button.visible = ascension_enabled
 	ascend_button.pressed.connect(_on_ascend_pressed)
-	identity.add_child(ascend_button)
-
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 6)
-	root_box.add_child(tabs)
-	for tab_data in [["stats", "属性"], ["equipment", "装备"], ["skills", "技能"]]:
-		var button := Button.new()
-		button.text = tab_data[1]
-		button.custom_minimum_size = Vector2(116, 38)
-		button.pressed.connect(_on_tab_pressed.bind(str(tab_data[0])))
-		tabs.add_child(button)
-		tab_buttons.append(button)
 
 	content_scroll = ScrollContainer.new()
+	content_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	# 固定滚动区最小高度：内容再多也只在卡片内部滚动，
-	# 避免容器最小尺寸被内容撑大导致信息卡首次展开超出屏幕。
-	content_scroll.custom_minimum_size = Vector2(0.0, 170.0)
-	root_box.add_child(content_scroll)
+	right_panel.add_child(content_scroll)
 	content_box = VBoxContainer.new()
 	content_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_box.add_theme_constant_override("separation", 8)
+	content_box.add_theme_constant_override("separation", 30)
 	content_scroll.add_child(content_box)
+	content_scroll.get_v_scroll_bar().value_changed.connect(_sync_nav_to_scroll)
 
 func show_unit(p_unit: Unit) -> void:
 	if content_box == null:
@@ -115,28 +129,31 @@ func show_unit(p_unit: Unit) -> void:
 	unit = p_unit
 	if unit == null:
 		return
-	active_tab = "stats"
+	active_section = "overview"
 	_refresh_header()
-	_render_tab()
-	_clamp_to_viewport()
+	_render_all_sections()
+	fit_to_viewport()
+	content_scroll.scroll_vertical = 0
+	_set_active_section("overview")
 
-# 每次显示前按视口钳制位置与尺寸，避免内容把信息卡撑出屏幕（与调用方时序无关）。
-func _clamp_to_viewport() -> void:
+# 每次显示前让资料页占用视口大部分空间，留出安全边距。
+func fit_to_viewport() -> void:
 	var vp := get_viewport_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return
-	var target := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
+	var target := Vector2(maxf(320.0, vp.x - 48.0), maxf(400.0, vp.y - 48.0))
+	if right_panel != null:
+		right_panel.custom_minimum_size.x = minf(600.0, maxf(360.0, vp.x * 0.38))
 	custom_minimum_size = target
 	size = target
-	position = Vector2(maxf(16.0, (vp.x - target.x) / 2.0), maxf(16.0, (vp.y - target.y) / 2.0))
+	position = (vp - target) / 2.0
 
-# 刷新当前已打开的信息卡，保留用户正在查看的标签页。
-# 战斗界面只对当前打开的卡片调用，不让未查看的单位产生持续 UI 开销。
+# 战斗中只刷新动态属性，避免重新构建列表导致滚动位置跳动。
 func refresh_current() -> void:
 	if unit == null or not visible:
 		return
 	_refresh_header()
-	_render_tab()
+	_refresh_stat_values()
 
 func _refresh_header() -> void:
 	portrait.texture = ArtManager.get_portrait(unit.unit_type)
@@ -172,32 +189,106 @@ func _on_ascend_pressed() -> void:
 	if ascension_enabled and unit != null:
 		ascension_requested.emit(unit)
 
-func _on_tab_pressed(tab: String) -> void:
-	active_tab = tab
-	_render_tab()
-
-func _render_tab() -> void:
+# 构建连续章节，使右侧滚动时无需切换互斥标签页。
+func _render_all_sections() -> void:
+	if summary_label.get_parent() != null:
+		summary_label.get_parent().remove_child(summary_label)
+	if ascend_button.get_parent() != null:
+		ascend_button.get_parent().remove_child(ascend_button)
 	for child in content_box.get_children():
 		child.queue_free()
-	for button in tab_buttons:
-		button.modulate = Color("#fff0c2") if button.text == _tab_title(active_tab) else Color("#b4afc4")
-	match active_tab:
-		"equipment":
-			_render_equipment()
-		"skills":
-			_render_skills()
-		_:
-			_render_stats()
+	section_nodes.clear()
+	stat_value_labels.clear()
+	_start_section("overview", "角色概览")
+	section_box.add_child(summary_label)
+	section_box.add_child(ascend_button)
+	_start_section("stats", "基础属性")
+	_render_stats()
+	_start_section("equipment", "装备")
+	_render_equipment()
+	_start_section("skills", "技能")
+	_render_skills()
+	# 为最后一节保留滚动空间，使目录点击后也能把它对齐到顶部。
+	var trailing_space := Control.new()
+	trailing_space.custom_minimum_size.y = 740.0
+	content_box.add_child(trailing_space)
+	_set_active_section("overview")
+
+# 创建可被左侧目录定位的右侧章节。
+func _start_section(section_id: String, heading: String) -> void:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_box.add_child(panel)
+	section_nodes[section_id] = panel
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 14)
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	panel.add_child(margin)
+	section_box = VBoxContainer.new()
+	section_box.add_theme_constant_override("separation", 12)
+	margin.add_child(section_box)
+	_add_section_title(heading)
+
+# 点击目录时将对应章节滚动到右侧内容区顶部。
+func _jump_to_section(section_id: String) -> void:
+	var target := section_nodes.get(section_id) as Control
+	if target == null:
+		return
+	content_scroll.scroll_vertical = roundi(target.position.y)
+	_set_active_section(section_id)
+
+# 根据右侧滚动位置更新左侧目录高亮。
+func _sync_nav_to_scroll(_value: float) -> void:
+	if section_nodes.is_empty():
+		return
+	var last_section := section_nodes.get("skills") as Control
+	if last_section == null or last_section.position.y <= 0.0:
+		return
+	var selected := "overview"
+	for section in SECTIONS:
+		var key := str(section[0])
+		var node := section_nodes.get(key) as Control
+		if node != null and node.position.y <= content_scroll.scroll_vertical + 80.0:
+			selected = key
+	_set_active_section(selected)
+
+# 集中更新目录选中态，避免重复设置所有按钮样式。
+func _set_active_section(section_id: String) -> void:
+	active_section = section_id
+	for key in nav_buttons:
+		var button := nav_buttons[key] as Button
+		button.modulate = Color("#f6d998") if key == section_id else Color("#a9a8bd")
 
 func _render_stats() -> void:
-	_add_section_title("基础属性")
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 24)
 	grid.add_theme_constant_override("v_separation", 8)
+	for item in _stat_rows():
+		var key := Label.new()
+		key.text = str(item[0])
+		key.add_theme_font_size_override("font_size", 18)
+		key.add_theme_color_override("font_color", Color("#b9a5d8"))
+		grid.add_child(key)
+		var value := Label.new()
+		value.text = str(item[1])
+		value.add_theme_font_size_override("font_size", 18)
+		value.add_theme_color_override("font_color", Color("#f1edf8"))
+		grid.add_child(value)
+		stat_value_labels[str(item[0])] = value
+	section_box.add_child(grid)
+	if not unit.permanent_mods.is_empty():
+		_add_section_title("永久强化")
+		for stat in unit.permanent_mods:
+			_add_body_label("%s  +%d" % [_stat_text(str(stat)), int(unit.permanent_mods[stat])])
+
+# 汇总当前单位的动态属性，供首次渲染与战斗中刷新共用。
+func _stat_rows() -> Array:
 	var armor_percent := COMBAT_FORMULA.armor_reduction_percent(unit.get_defense())
-	var values := [
+	return [
 		["星级", "%d / %d" % [unit.star, Unit.MAX_STARS]],
 		["生命", "%d / %d" % [unit.hp, unit.max_hp]],
 		["攻击", "%d" % unit.get_attack()],
@@ -209,23 +300,15 @@ func _render_stats() -> void:
 		["通用技能槽", "%d / %d" % [unit.equipped_skill_names.size(), Unit.get_skill_slot_limit(unit.star)]],
 		["当前状态", "存活" if unit.alive else "已阵亡"]
 	]
-	for item in values:
-		var key := Label.new()
-		key.text = str(item[0])
-		key.add_theme_color_override("font_color", Color("#b9a5d8"))
-		grid.add_child(key)
-		var value := Label.new()
-		value.text = str(item[1])
-		value.add_theme_color_override("font_color", Color("#f1edf8"))
-		grid.add_child(value)
-	content_box.add_child(grid)
-	if not unit.permanent_mods.is_empty():
-		_add_section_title("永久强化")
-		for stat in unit.permanent_mods:
-			_add_body_label("%s  +%d" % [_stat_text(str(stat)), int(unit.permanent_mods[stat])])
+
+# 更新已存在的数值标签，不触碰滚动容器中的节点结构。
+func _refresh_stat_values() -> void:
+	for item in _stat_rows():
+		var value := stat_value_labels.get(str(item[0])) as Label
+		if value != null:
+			value.text = str(item[1])
 
 func _render_equipment() -> void:
-	_add_section_title("装备栏")
 	if unit.equipment.is_empty():
 		_add_body_label("暂无装备")
 		return
@@ -245,13 +328,13 @@ func _render_equipment() -> void:
 		text_box.add_child(title)
 		var details := Label.new()
 		details.text = _modifier_text(equipment.modifiers)
+		details.add_theme_font_size_override("font_size", 17)
 		details.add_theme_color_override("font_color", Color("#d8d2e5"))
 		text_box.add_child(details)
 		line.add_child(text_box)
-		content_box.add_child(line)
+		section_box.add_child(line)
 
 func _render_skills() -> void:
-	_add_section_title("技能")
 	if unit.skills.is_empty():
 		_add_body_label("暂无技能")
 		return
@@ -288,12 +371,13 @@ func _render_skills() -> void:
 		text_box.add_child(title)
 		var desc := Label.new()
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc.add_theme_font_size_override("font_size", 17)
 		desc.add_theme_color_override("font_color", Color("#d8d2e5"))
 		desc.text = "%s\n点击查看完整技能详情" % str(skill.desc)
 		desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		text_box.add_child(desc)
 		row_box.add_child(text_box)
-		content_box.add_child(row)
+		section_box.add_child(row)
 
 # 技能详情弹窗与背包技能书共用同一份格式化文本。
 func _show_skill_details(skill_id: String) -> void:
@@ -309,16 +393,17 @@ func _show_skill_details(skill_id: String) -> void:
 func _add_section_title(text: String) -> void:
 	var title := Label.new()
 	title.text = text
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 23)
 	title.add_theme_color_override("font_color", Color("#f2d08b"))
-	content_box.add_child(title)
+	section_box.add_child(title)
 
 func _add_body_label(text: String) -> void:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 18)
 	label.add_theme_color_override("font_color", Color("#d8d2e5"))
-	content_box.add_child(label)
+	section_box.add_child(label)
 
 func _role_text(role: String) -> String:
 	return {
@@ -342,6 +427,3 @@ func _modifier_text(modifiers: Dictionary) -> String:
 	for key in modifiers:
 		parts.append("%s %+d" % [_stat_text(str(key)), int(modifiers[key])])
 	return "，".join(parts)
-
-func _tab_title(tab: String) -> String:
-	return {"stats": "属性", "equipment": "装备", "skills": "技能"}.get(tab, "属性")

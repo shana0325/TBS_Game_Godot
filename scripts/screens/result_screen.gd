@@ -11,6 +11,7 @@ func _ready() -> void:
 	var title := Label.new()
 	title.text = "胜利！" if GameSession.is_winner() else "失败…"
 	title.add_theme_font_size_override("font_size", 56)
+	title.add_theme_color_override("font_color", Color("#f3d99d") if GameSession.is_winner() else Color("#e8a3aa"))
 	title.position = Vector2(80, 120)
 	title.size = Vector2(1120, 70)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

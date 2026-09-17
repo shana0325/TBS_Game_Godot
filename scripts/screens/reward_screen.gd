@@ -215,6 +215,7 @@ func _build_title() -> void:
 	title.name = "RewardTitle"
 	title.text = "%s 通关！选择奖励" % GameSession.get_floor_label()
 	title.add_theme_font_size_override("font_size", 36)
+	title.add_theme_color_override("font_color", Color("#f3d99d"))
 	title.position = Vector2(60, 30)
 	add_child(title)
 

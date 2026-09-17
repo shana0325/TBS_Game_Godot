@@ -37,6 +37,7 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "选择模式"
 	title.add_theme_font_size_override("font_size", 42)
+	title.add_theme_color_override("font_color", Color("#f3d99d"))
 	title.position = Vector2(130, 112)
 	add_child(title)
 
@@ -51,6 +52,7 @@ func _build_ui() -> void:
 	tower_btn.text = "◆ %s" % GameSession.get_tower_entry_label()
 	tower_btn.custom_minimum_size = Vector2(520, 56)
 	tower_btn.position = Vector2(130, 210)
+	MenuStyle.apply_primary(tower_btn)
 	tower_btn.pressed.connect(_on_tower_pressed)
 	add_child(tower_btn)
 

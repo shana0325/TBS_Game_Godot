@@ -123,6 +123,7 @@ func _build_ui(scenario: Dictionary) -> void:
 	var title := Label.new()
 	title.text = "部署 - %s" % str(scenario.get("name", scenario_id))
 	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_color_override("font_color", Color("#f3d99d"))
 	title.position = Vector2(20, 12)
 	add_child(title)
 
@@ -186,6 +187,7 @@ func _build_ui(scenario: Dictionary) -> void:
 
 	start_button = Button.new()
 	start_button.text = "开始战斗"
+	MenuStyle.apply_primary(start_button)
 	start_button.custom_minimum_size = Vector2(220, 48)
 	start_button.position = Vector2(20, 150)
 	start_button.disabled = true
@@ -230,11 +232,7 @@ func _layout_ui() -> void:
 		roster_panel.size = Vector2(maxf(320.0, vp.x - 48.0), tray_height)
 	_layout_action_buttons(vp)
 	if info_panel != null:
-		var panel_size := Vector2(minf(760.0, vp.x - 32.0), minf(440.0, vp.y - 32.0))
-		info_panel.position = Vector2(maxf(16.0, (vp.x - panel_size.x) / 2.0), maxf(16.0, (vp.y - panel_size.y) / 2.0))
-		info_panel.size = panel_size
-		# 让最小尺寸等于目标尺寸，避免内容把信息卡撑出屏幕（与滚动区最小高度配合）
-		info_panel.custom_minimum_size = panel_size
+		info_panel.fit_to_viewport()
 	if skill_replace_panel != null and skill_replace_panel.visible:
 		var replace_size := Vector2(minf(440.0, vp.x - 32.0), minf(360.0, vp.y - 32.0))
 		skill_replace_panel.position = (vp - replace_size) / 2.0
@@ -265,11 +263,10 @@ func _layout_action_buttons(vp: Vector2) -> void:
 func _tray_height() -> float:
 	return DeploymentUnitCard.tray_height_for_tile(tile_size)
 
-# 构建悬浮单位信息卡，内容过长时在卡片内部滚动。
+# 构建占据视口大部分空间的角色资料页。
 func _build_info_panel() -> void:
 	info_panel = UnitDetailPanel.new()
 	info_panel.name = "DeploymentUnitInfoPanel"
-	info_panel.custom_minimum_size = Vector2(680.0, 420.0)
 	info_panel.ascension_requested.connect(_on_info_panel_ascension_requested)
 	add_child(info_panel)
 	info_panel.visible = false
