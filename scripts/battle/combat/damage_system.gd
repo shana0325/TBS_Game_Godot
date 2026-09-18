@@ -43,6 +43,16 @@ static func apply(source: Unit, target: Unit, config: Dictionary, battle = null,
 	elif game != null and game.has_method("get_final_damage_multiplier"):
 		multiplier = float(game.get_final_damage_multiplier())
 	damage = maxi(1, roundi(float(damage) * maxf(multiplier, 1.0)))
+	# 单位级伤害倍率：按来源/目标/伤害种类叠加（遗物与技能伤害加成）。
+	# 只对普攻与非特效伤害生效，特效伤害不享受（避免伤害类效果无限联动）。
+	if kind != EFFECT:
+		var unit_bonus := 0.0
+		if battle != null and battle.has_method("get_damage_bonus_percent"):
+			unit_bonus += float(battle.get_damage_bonus_percent(source, target, kind))
+		if game != null and game.has_method("get_damage_bonus_percent"):
+			unit_bonus += float(game.get_damage_bonus_percent(source, target, kind))
+		if unit_bonus > 0.0:
+			damage = maxi(1, roundi(float(damage) * (1.0 + unit_bonus)))
 	var reduction := clampf(target.get_reduce_percent(), 0.0, 1.0)
 	damage = maxi(0, roundi(float(damage) * (1.0 - reduction)))
 	var result := target.take_damage(damage, game)

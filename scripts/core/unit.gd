@@ -31,6 +31,8 @@ var buffs: Array = []
 var equipment: Dictionary = {}
 var equipped_skill_names: Array = []
 var learned_skill_names: Array = []
+# 战斗运行时状态库（叠层/按目标计数/限流/时间窗），由技能/遗物/装备共用。
+var runtime: UnitRuntimeState = UnitRuntimeState.new()
 
 static func create_from_config(
 	unit_type: String,
@@ -176,6 +178,7 @@ func take_damage(amount: int, game = null) -> Dictionary:
 func heal(amount: int, source: Unit = null) -> int:
 	if not alive or amount <= 0:
 		return 0
+	amount = _amplify_player_vital(source, amount)
 	var old_hp := hp
 	hp = mini(max_hp, hp + amount)
 	var healed := hp - old_hp
@@ -183,9 +186,34 @@ func heal(amount: int, source: Unit = null) -> int:
 	heal_src.healing_done += healed
 	return healed
 
+# 愈心祭司：我方单位施加的治疗/护盾数值 +10%；目标低于 40% 生命时改为 +20%。
+func _amplify_player_vital(source: Unit, amount: int) -> int:
+	if source == null or source.camp != TurnManager.PLAYER_CAMP or camp != TurnManager.PLAYER_CAMP:
+		return amount
+	if not GameSession.run_relics.has("revitalize_amp"):
+		return amount
+	var amp := 0.10
+	if float(hp) / float(maxi(max_hp, 1)) < 0.4:
+		amp = 0.20
+	return maxi(1, roundi(float(amount) * (1.0 + amp)))
+
 func add_buff(buff: Buff) -> void:
 	if buff != null:
 		buffs.append(buff)
+
+# 统一护盾入口：护盾数值被愈心祭司放大后写入 buff，并累计到 runtime 供"获盾后追加伤害"类技能使用。
+func gain_shield(amount: int, shield_name: String = "护盾") -> int:
+	if not alive or amount <= 0:
+		return 0
+	if camp == TurnManager.PLAYER_CAMP and GameSession.run_relics.has("revitalize_amp"):
+		var amp := 0.10
+		if float(hp) / float(maxi(max_hp, 1)) < 0.4:
+			amp = 0.20
+		amount = maxi(1, roundi(float(amount) * (1.0 + amp)))
+	var data := {"name": shield_name, "duration": -1, "shield": amount, "permanent": true, "is_beneficial": true}
+	add_buff(Buff.from_data(data))
+	runtime.bump("shield_credit", amount)
+	return amount
 
 # 推进回合开始状态，并把战斗上下文传给持续伤害结算。
 func tick_turn_start(game = null, battle = null) -> void:
@@ -260,7 +288,7 @@ func add_skill(skill: Skill) -> void:
 
 func has_skill(skill_name: String) -> bool:
 	for skill in skills:
-		if skill.name == skill_name:
+		if skill.name == skill_name or skill.skill_id == skill_name:
 			return true
 	return false
 

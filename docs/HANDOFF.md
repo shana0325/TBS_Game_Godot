@@ -1,4 +1,4 @@
-# TBS_Game_Godot 交接文档
+﻿# TBS_Game_Godot 交接文档
 
 > 交接时间：2026-08-28（UI/流程同步）
 > 项目路径：`D:\Shana Program\文档\TBS_Game_Godot`
@@ -227,6 +227,20 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 - **敌方数值成长（配置化）**：`data/tower/tower_config.json` 提供 `enemy_growth_rate`（默认 1.04，第一轮测试参数，按战斗模拟结果调整）；敌人属性倍率 `Multiplier = rate^(层数-1)` 作用于 HP/ATK/DEF（Unit 新增 `stat_multiplier`）；技能数量按层段生成（1-10:0 / 11-20:1 / 21-30:2 / 31+:3，上限 3）。技能 tags 暂不参与抽取（仅预留）。参考 `docs/爬塔敌方数值设计文档_V1.md`。
 
 已知边界：不灭徽记复活仅挂"攻击致死"路径（DOT/技能间接致死暂不触发）；商店/事件/31+ 无限层未做。
+
+### 遗物体系重做 + 通用技能数据（2026-09-18）
+
+依据 `docs/LoL符文_遗物一一对应表.md`：旧 5 个遗物全部删除，`data/relic/relics.json` 重写为 17 个 LoL 符文对应遗物；`data/skill/skills.json` 在原有 12 个技能后追加 16 个通用技能（`effects:[]`，待挂机制）。
+
+**遗物机制实现状态（已完成）**：
+
+- **伤害倍率聚合**：`DamageSystem` 增加单位级伤害倍率钩子，`BattleManager.get_damage_bonus_percent` 委托 `RelicSystem.get_damage_bonus_percent(source,target,kind,state)`。覆盖：处决（<40%+12%）、先手（>60%+12%）、背水为战（<50%+10%/<25%+20%）、层积风暴（每层+1%）、猎魔嗅探（标记目标+20%）。特效伤害不享受，避免无限联动。
+- **跨层成长**：`RelicSystem._apply_effects` 支持 `glayer_stat_percent`（叠攻/沉淀韧甲，按 tower_floor 累计到 percent_mods）与 `glayer_haste`（冷却刻印，按 haste=100·r/(1-r) 折算 actual）。
+- **击杀触发**：`on_kill` 实现凯旋号角（全队回已损+击杀者额外）与噬骸成长（全队+1 永久 HP）。
+- **战斗运行时**（新钩子，状态存 `manager.relic_state`，由 `setup_battle`/`tick`/`on_damage_resolved`/`on_turn` 分发）：`begin_battle`/`tick_battle`/`on_hit`/`on_taken_damage`/`on_turn_start`。覆盖：行军口粮（前10秒每秒5%最大回血）、猎魔嗅探（标记最高攻敌）、守护精灵（低血→30%ATK特效 / 否则最低血友军护盾，每敌6秒）、灵能循环（3次技能伤害→+1%max cap8%，满后回已损3%）、不朽血契（每4秒强化下普攻3%max真实+等量回复，击杀永久+5）、守护之盾（单次损失≥10%max→8%max护盾，每回合一次）、收割之魂（低血首击特效 +每目标每场一次 +成长值）。
+- **愈心祭司**：`Unit.heal` + `EffectSystem._apply_shield` + `RelicSystem._apply_shield_to` 三处放大治疗/护盾 +10%（目标<40% 时 +20%）。
+
+**待办（下一阶段）**：实现 16 个通用技能的机制。方式是各写一个继承 `CodeSkill` 的技能脚本并登记进 `scripts/battle/skills/skill_code_registry.gd`（`id -> res://path`），`SkillCodeRegistry.get_entries()` 返回表，`GameDatabase._merge_code_skills` 会把代码技能元数据覆盖进技能表。技能脚本需在 `_init` 里设置 name/desc/trigger/common/searchable 等元数据并覆写 `check_condition`/`resolve_targets`/`execute`。涉及持续百分比伤害修正（破军追击/骁勇累积/盈血之力）时，可在 `BattleManager.get_damage_bonus_percent` 中按单位技能状态追加。
 
 > 已取消：i18n（仅中文版）。文档见 `docs/skills/SKILL_SYSTEM.md`（含触发时机/效果实现状态与待办）。
 

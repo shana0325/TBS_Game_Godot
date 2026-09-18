@@ -82,7 +82,12 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null,
 static func _apply_damage(user: Unit, target: Unit, config: Dictionary, game, battle = null) -> int:
 	if user == null or target == null or not target.alive:
 		return 0
-	var resolved := DamageSystem.apply(user, target, config, battle, game)
+	# JSON 技能的 damage 效果默认是主动技能直伤，未显式指定时归为技能伤害；
+	# 想要特效/普攻语义由配置里的 damage_kind 显式覆盖。
+	var damage_config := config.duplicate()
+	if not damage_config.has("damage_kind"):
+		damage_config["damage_kind"] = DamageSystem.SKILL
+	var resolved := DamageSystem.apply(user, target, damage_config, battle, game)
 	var damage: int = resolved.get("damage", 0)
 	var crit: bool = resolved.get("crit", false)
 	if game != null and game.has_method("add_log"):
@@ -111,6 +116,12 @@ static func _apply_shield(target: Unit, config: Dictionary, game) -> int:
 	if target == null:
 		return 0
 	var amount := int(config.get("amount", 0))
+	# 愈心祭司：我方单位获得的护盾数值 +10%，目标低于 40% 生命时 +20%。
+	if amount > 0 and target.camp == TurnManager.PLAYER_CAMP and GameSession.run_relics.has("revitalize_amp"):
+		var amp := 0.10
+		if float(target.hp) / float(maxi(target.max_hp, 1)) < 0.4:
+			amp = 0.20
+		amount = maxi(1, roundi(float(amount) * (1.0 + amp)))
 	if amount <= 0:
 		return 0
 	var data := {
@@ -121,6 +132,8 @@ static func _apply_shield(target: Unit, config: Dictionary, game) -> int:
 	}
 	var buff := Buff.from_data(data)
 	target.add_buff(buff)
+	# 记录护盾信用：供"获盾后追加伤害"类技能（盾辉反击）读取。
+	target.runtime.bump("shield_credit", amount)
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 获得 %d 点护罩" % [target.get_display_name(), amount])
 	return amount

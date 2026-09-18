@@ -187,8 +187,12 @@ func _merge_code_skills() -> void:
 			push_error("代码技能必须继承 CodeSkill: %s" % skill_id)
 			continue
 		var meta: Dictionary = (inst as CodeSkill).export_meta()
-		meta["code_script"] = script
-		skills[skill_id] = meta
+		# 保留 JSON 元数据（中文 name/desc/interval_seconds/mechanic 等），
+		# 代码元数据覆盖行为字段（trigger/condition/cooldown…），并挂接脚本。
+		var base: Dictionary = skills.get(skill_id, {}).duplicate()
+		base.merge(meta, true)
+		base["code_script"] = script
+		skills[skill_id] = base
 
 func _load_json(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):

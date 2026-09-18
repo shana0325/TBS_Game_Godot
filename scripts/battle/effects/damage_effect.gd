@@ -2,11 +2,13 @@
 class_name DamageEffect
 extends RefCounted
 
-# 通过统一伤害系统执行一段技能倍率伤害。
-static func apply(user: Unit, target: Unit, power: float, terrain_bonus: int = 0, game = null, battle = null) -> int:
+# 通过统一伤害系统执行一段倍率伤害。
+# kind 决定伤害分类：默认技能伤害(SKILL)，代码技能可传 effect/attack 表达特效或普攻语义。
+static func apply(user: Unit, target: Unit, power: float, terrain_bonus: int = 0,
+		game = null, battle = null, kind: String = DamageSystem.SKILL) -> int:
 	if user == null or target == null or not target.alive:
 		return 0
-	var resolved := DamageSystem.apply(user, target, {"damage_kind": DamageSystem.SKILL,
+	var resolved := DamageSystem.apply(user, target, {"damage_kind": kind,
 		"power": power, "terrain_bonus": terrain_bonus}, battle, game)
 	var damage := int(resolved.get("damage", 0))
 	if game != null and game.has_method("add_log"):
