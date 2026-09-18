@@ -11,17 +11,21 @@ var desc: String = ""
 var trigger: String = "on_attack"
 var condition: Dictionary = {}
 var cooldown: int = 0
+var interval_seconds: float = 0.0
 var priority: int = 0
 var min_range: int = 1
 var max_range: int = 1
 var effects: Array = []
 var cooldown_remaining: int = 0
+var interval_remaining: float = 0.0
 var common: bool = false
 var tags: Array = []
 var searchable: bool = true
 var code_script: GDScript = null
 var once: bool = false
 var triggered: bool = false
+# 所属单位：用于 on_timer 定时技能按单位技能急速折算实际施放间隔。
+var owner: Unit = null
 
 static func from_data(data: Dictionary) -> Skill:
 	var skill: Skill
@@ -38,6 +42,8 @@ static func from_data(data: Dictionary) -> Skill:
 	skill.trigger = str(data.get("trigger", "on_attack"))
 	skill.condition = data.get("condition", {})
 	skill.cooldown = int(data.get("cooldown", 0))
+	skill.interval_seconds = maxf(0.0, float(data.get("interval_seconds", 0.0)))
+	skill.interval_remaining = skill.interval_seconds
 	skill.priority = int(data.get("priority", 0))
 	skill.min_range = int(data.get("min_range", 1))
 	skill.max_range = int(data.get("max_range", 1))
@@ -61,17 +67,30 @@ static func _string_array(value: Variant) -> Array:
 
 # 判断技能当前是否可触发（不在冷却中）。
 func is_ready() -> bool:
+	if trigger == "on_timer":
+		return interval_seconds > 0.0 and interval_remaining <= 0.0 and not (once and triggered)
 	return cooldown_remaining <= 0 and not (once and triggered)
 
 # 触发后进入冷却，回合推进时由外部调用 tick_cooldown() 减少。
 func start_cooldown() -> void:
-	cooldown_remaining = cooldown
+	if trigger == "on_timer":
+		interval_remaining = interval_seconds
+	else:
+		cooldown_remaining = cooldown
 	if once:
 		triggered = true
 
 func tick_cooldown() -> void:
 	if cooldown_remaining > 0:
 		cooldown_remaining -= 1
+
+# 按战斗经过的秒数推进定时技能的施放准备。受单位技能急速加速：
+# 每 1 点技能急速 = 施放频率 +1%，等价于实际间隔 = 基础间隔 × 100/(100+技能急速)（线性收益）。
+func tick_interval(delta: float) -> void:
+	if trigger == "on_timer" and interval_seconds > 0.0 and not (once and triggered):
+		var haste := owner.get_ability_haste() if owner != null else 0
+		var scale := (100.0 + float(haste)) / 100.0
+		interval_remaining = maxf(0.0, interval_remaining - maxf(delta, 0.0) * scale)
 
 # --- 可覆写钩子：触发条件 ---
 # 默认按 JSON condition 字典判断；代码技能可完全覆写（血量/护盾/任意自定义）。
@@ -129,10 +148,11 @@ func resolve_targets(battle, user: Unit, context: Dictionary) -> Array:
 	return targets
 
 # 执行技能：默认对目标列表逐一应用 effect 列表；代码技能可覆写。
-func execute(user: Unit, targets: Array, game = null) -> Array:
+# 对解析出的目标执行技能效果，并把战斗上下文交给统一伤害系统。
+func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	var reports: Array = []
 	for target in targets:
-		var r := EffectSystem.apply_effects(user, target, effects, game)
+		var r := EffectSystem.apply_effects(user, target, effects, game, battle)
 		reports.append({"target": target, "report": r})
 	return reports
 

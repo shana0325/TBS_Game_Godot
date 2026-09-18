@@ -20,6 +20,7 @@ const ON_ALLY_DEATH := "on_ally_death"
 const ON_TURN_END := "on_turn_end"
 const ON_ROUND_START := "on_round_start"
 const PASSIVE := "passive"
+const ON_TIMER := "on_timer"
 
 # 分发一次触发：只检查指定单位（context.actor）中 trigger 匹配的技能，满足条件则施放。
 # 受击类触发由调用方以被攻击单位为 actor 传入。
@@ -34,8 +35,14 @@ static func dispatch(battle, trigger: String, context: Dictionary) -> Array:
 		if not (item is Skill):
 			continue
 		var skill: Skill = item
+		if context.has("skill_filter") and context["skill_filter"] != skill:
+			continue
 		if skill.trigger != trigger:
 			continue
+		if trigger == ON_HIT and context.has("proc_chain"):
+			var used: Array = context["proc_chain"].get("used", [])
+			if used.has(skill):
+				continue
 		if not skill.is_ready():
 			continue
 		if not skill.check_condition(battle, context):
@@ -43,7 +50,9 @@ static func dispatch(battle, trigger: String, context: Dictionary) -> Array:
 		var targets := skill.resolve_targets(battle, actor, context)
 		if targets.is_empty():
 			continue
-		var reports: Array = skill.execute(actor, targets, battle.game)
+		if trigger == ON_HIT and context.has("proc_chain"):
+			context["proc_chain"]["used"].append(skill)
+		var reports: Array = skill.execute(actor, targets, battle.game, battle)
 		skill.start_cooldown()
 		casted.append(skill)
 		var skill_damage := 0
@@ -60,7 +69,7 @@ static func dispatch(battle, trigger: String, context: Dictionary) -> Array:
 				battle.game.record_skill_damage(actor, target, damage, skill.name)
 		if battle.game != null and battle.game.has_method("add_log"):
 			if skill_damage > 0:
-				battle.game.add_log("%s 使用技能 %s，造成 %d 点技能伤害" % [actor.get_display_name(), skill.name, skill_damage])
+				battle.game.add_log("%s 使用技能 %s，造成 %d 点伤害" % [actor.get_display_name(), skill.name, skill_damage])
 			else:
 				battle.game.add_log("%s 触发技能 %s" % [actor.get_display_name(), skill.name])
 	return casted

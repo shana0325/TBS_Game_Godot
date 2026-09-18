@@ -3,7 +3,6 @@ class_name UnitDetailPanel
 extends PanelContainer
 
 const COMBAT_FORMULA = preload("res://scripts/core/combat_formula.gd")
-const SKILL_DETAIL_FORMATTER = preload("res://scripts/ui/skill_detail_formatter.gd")
 
 var unit: Unit
 var portrait: TextureRect
@@ -19,15 +18,35 @@ var active_section := "overview"
 var stat_value_labels: Dictionary = {}
 var ascension_enabled := false
 var ascend_button: Button
-var skill_detail_dialog: AcceptDialog
+var skill_detail_dialog: SkillDetailPopup
 
 const SECTIONS := [["overview", "角色概览"], ["stats", "基础属性"], ["equipment", "装备"], ["skills", "技能"]]
 
 signal ascension_requested(unit: Unit)
 
 func _ready() -> void:
+	# 资料页高于战斗操作按钮、底部单位栏和部署浮层。
+	z_index = 300
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	if content_box == null:
 		_build_panel()
+
+# ESC 或鼠标右键优先关闭技能详情，再关闭角色资料页。
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	var close_requested: bool = false
+	if event is InputEventKey:
+		close_requested = event.pressed and not event.echo and event.keycode == KEY_ESCAPE
+	elif event is InputEventMouseButton:
+		close_requested = event.pressed and event.button_index == MOUSE_BUTTON_RIGHT
+	if not close_requested:
+		return
+	if skill_detail_dialog != null and skill_detail_dialog.visible:
+		skill_detail_dialog.hide()
+	else:
+		hide()
+	get_viewport().set_input_as_handled()
 
 func _build_panel() -> void:
 	custom_minimum_size = Vector2(980.0, 600.0)
@@ -126,9 +145,12 @@ func _build_panel() -> void:
 func show_unit(p_unit: Unit) -> void:
 	if content_box == null:
 		_build_panel()
+	if skill_detail_dialog != null:
+		skill_detail_dialog.hide()
 	unit = p_unit
 	if unit == null:
 		return
+	move_to_front()
 	active_section = "overview"
 	_refresh_header()
 	_render_all_sections()
@@ -379,16 +401,13 @@ func _render_skills() -> void:
 		row_box.add_child(text_box)
 		section_box.add_child(row)
 
-# 技能详情弹窗与背包技能书共用同一份格式化文本。
+# 点击技能时打开带遮罩、图标和数据摘要的详情弹窗。
 func _show_skill_details(skill_id: String) -> void:
 	if skill_detail_dialog == null:
-		skill_detail_dialog = AcceptDialog.new()
+		skill_detail_dialog = SkillDetailPopup.new()
 		skill_detail_dialog.name = "SkillDetailDialog"
-		skill_detail_dialog.min_size = Vector2(620, 420)
 		add_child(skill_detail_dialog)
-	skill_detail_dialog.title = str(GameDatabase.get_skill(skill_id).get("name", skill_id))
-	skill_detail_dialog.dialog_text = SKILL_DETAIL_FORMATTER.build(skill_id)
-	skill_detail_dialog.popup_centered(Vector2(620, 420))
+	skill_detail_dialog.show_skill(skill_id)
 
 func _add_section_title(text: String) -> void:
 	var title := Label.new()

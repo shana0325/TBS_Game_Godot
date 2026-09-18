@@ -33,7 +33,7 @@ const SKILL_TRIGGER_LABELS := {
 	"on_attack": "攻击时", "on_attack_end": "攻击结束后", "on_hit": "造成伤害后",
 	"on_be_attacked": "受到攻击后", "on_taken_damage": "受到伤害后", "on_kill": "击杀敌人后",
 	"on_death": "阵亡时", "on_ally_death": "友军阵亡时", "on_turn_end": "行动结束时",
-	"on_round_start": "首回合开始时", "passive": "常驻被动",
+	"on_round_start": "首回合开始时", "passive": "常驻被动", "on_timer": "按战斗时间自动释放",
 }
 const SKILL_STAT_LABELS := {"hp": "生命", "attack": "攻击", "defense": "防御", "move": "移动"}
 
@@ -485,9 +485,7 @@ func _skill_effect_text(effect: Dictionary) -> String:
 	var text := ""
 	match etype:
 		"damage":
-			text = "造成 %.1f 倍攻击伤害" % float(effect.get("power", 1.0))
-			if bool(effect.get("ignore_defense", false)):
-				text += "（无视防御）"
+			text = SKILL_DETAIL_FORMATTER._effect_text(effect)
 		"heal":
 			text = "恢复 %d 点生命" % int(effect.get("amount", 0))
 		"shield":
@@ -534,7 +532,7 @@ func _skill_effect_text(effect: Dictionary) -> String:
 		"protect":
 			text = "受到伤害减少 %.0f%%%s" % [float(effect.get("reduction", 0.3)) * 100.0, _duration_text(int(effect.get("duration", 0)))]
 		"ignore":
-			text = "攻击无视目标防御/护罩%s" % _duration_text(int(effect.get("duration", 0)))
+			text = "攻击无视目标防御%s" % _duration_text(int(effect.get("duration", 0)))
 		"mark":
 			text = "标记目标（供其他技能作条件）%s" % _duration_text(int(effect.get("duration", 0)))
 		"lifesteal":

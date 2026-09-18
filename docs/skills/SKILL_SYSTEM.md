@@ -39,9 +39,18 @@
 | `desc` | string | 技能描述 |
 | `trigger` | string | 触发时机（见第 3 节） |
 | `condition` | dict | 触发条件（见第 4 节） |
-| `cooldown` | int | 冷却回合数（0=无冷却） |
+| `cooldown` | int | 现有事件技能的冷却行动次数（0=无冷却） |
+| `interval_seconds` | float | 仅 `on_timer` 使用；每次成功施放后的间隔秒数，必须大于 0 |
 | `target` | dict | 目标选择（见第 5 节） |
 | `effects` | array | 效果列表（见第 6 节） |
+
+伤害效果可另外声明 `damage_kind`（`attack` / `skill` / `effect`）和 `true_damage`（布尔值）。未声明类别的效果伤害默认为 `effect`；伤害由技能、遗物或装备产生，并不自动成为技能伤害。只有明确写为 `skill` 时，才参与“造成伤害时”的后续联动。`true_damage` 与类别可以组合，旧字段 `ignore_defense` 仍按真实伤害处理。
+
+统一结算顺序：攻击力或固定值 → 护甲（真实伤害跳过）→ 暴击和效果倍率 → 狂暴 → 目标百分比伤害减免 → 护盾与生命。特效伤害不触发新的造成伤害联动；同一条伤害链中同一个联动技能只执行一次。
+
+```json
+{"type": "damage", "power": 0.5, "damage_kind": "effect"}
+```
 
 ---
 
@@ -88,7 +97,7 @@ B 受击后 ── on_be_attacked（受到攻击后触发）→ 用于反击/免
 
 ## 3. 触发时机（trigger）
 
-技能通过 `trigger` 字段声明何时自动释放。全部为事件驱动。
+技能通过 `trigger` 字段声明何时自动释放。事件技能沿用原有触发规则；`on_timer` 按战斗时间独立触发。
 
 | trigger 值 | 含义 | 触发方 | 实现状态 |
 |---|---|---|---|
@@ -106,11 +115,25 @@ B 受击后 ── on_be_attacked（受到攻击后触发）→ 用于反击/免
 | `on_turn_end` | 该单位行动结束时 | 当前行动单位 | ✅ |
 | `on_round_start` | 战斗首回合开始 | 所有单位 | ✅（仅首回合） |
 | `passive` | 常驻被动（无条件持续生效） | 拥有者 | ✅（战斗开始即生效） |
+| `on_timer` | 每隔 `interval_seconds` 秒自动尝试释放 | 拥有者 | ✅（不等待行动） |
 
 **技能触发规则**
 - 一个单位每个时机只能触发一次对应技能（除非配置 `repeat`）。
 - 同一单位同一时机有多个技能时，按技能 `priority` 字段排序依次触发。
 - 触发后技能进入 `cooldown`，冷却中的技能不触发。
+- `on_timer` 使用独立的秒数计时，不读取 `cooldown`，也不会被行动结束时的冷却推进影响。战斗开始后先等待一个完整间隔；没有合法目标或条件不满足时保持就绪，条件满足后立即施放并重新计时。默认目标为 `target` 时，选技能射程内的第一个敌人。
+
+定时技能数据示例（效果和目标规则复用现有格式）：
+
+```json
+{
+  "name": "定时护盾",
+  "trigger": "on_timer",
+  "interval_seconds": 6.0,
+  "condition": {"target_type": "self"},
+  "effects": [{"type": "shield", "amount": 100}]
+}
+```
 
 ---
 

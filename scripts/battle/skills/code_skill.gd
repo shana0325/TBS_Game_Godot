@@ -16,6 +16,7 @@ func export_meta() -> Dictionary:
 		"trigger": trigger,
 		"condition": condition,
 		"cooldown": cooldown,
+		"interval_seconds": interval_seconds,
 		"priority": priority,
 		"min_range": min_range,
 		"max_range": max_range,

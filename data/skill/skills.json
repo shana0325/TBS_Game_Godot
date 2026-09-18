@@ -37,6 +37,7 @@
     "effects": [
       {
         "type": "damage",
+        "damage_kind": "effect",
         "power": 1.0
       }
     ]
@@ -57,6 +58,7 @@
     "effects": [
       {
         "type": "damage",
+        "damage_kind": "effect",
         "power": 0.5
       }
     ]
@@ -80,6 +82,7 @@
     "effects": [
       {
         "type": "damage",
+        "damage_kind": "effect",
         "power": 1.5
       }
     ]

@@ -15,6 +15,7 @@ var scenario_override: Dictionary = {}
 var deployed_units: Array = []
 var winner: String = ""
 var relic_revive_used: bool = false
+var active_damage_chain: Dictionary = {}
 
 func _init(p_scenario_id: String = "battle_01", p_game = null, p_deployed_units: Array = [], p_scenario_override: Dictionary = {}) -> void:
 	scenario_id = p_scenario_id
@@ -29,7 +30,7 @@ func setup() -> void:
 	_spawn_enemy_units(scenario)
 	turn_manager = TurnManager.new(units)
 	event_system = EventSystem.new(units, game)
-	combat_system = CombatSystem.new(game, event_system, grid)
+	combat_system = CombatSystem.new(game, event_system, grid, self)
 
 func _load_scenario() -> Dictionary:
 	# 优先使用运行时覆盖的场景（爬塔分层生成），否则读关卡文件
@@ -175,34 +176,59 @@ func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
 	if defender.alive and defender.get_reflect_percent() > 0.0 and damage > 0:
 		var reflect_damage := roundi(damage * defender.get_reflect_percent())
 		if reflect_damage > 0:
-			var reflect_result := attacker.take_damage(reflect_damage, game)
-			defender.damage_dealt += int(reflect_result.get("hp_lost", 0))
+			DamageSystem.apply(defender, attacker, {"damage_kind": DamageSystem.EFFECT,
+				"raw_damage": reflect_damage, "true_damage": true}, self, game)
 			if game != null and game.has_method("add_log"):
 				game.add_log("%s 反射 %d 点伤害给 %s" % [defender.get_display_name(), reflect_damage, attacker.get_display_name()])
 	# 攻击时触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK, {"actor": attacker, "user": attacker, "target": defender, "crit": crit})
-	# 造成伤害后触发（吸血类）
-	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_HIT, {"actor": attacker, "user": attacker, "target": defender})
+	# 普攻的伤害联动在攻击技能结算后发出，维持原有攻击事件顺序。
+	if int(result.get("actual_damage", 0)) > 0:
+		on_damage_resolved(attacker, defender, result)
 	# 受击触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_BE_ATTACKED, {"actor": defender, "user": defender, "target": attacker})
-	# 受到伤害触发
-	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TAKEN_DAMAGE, {"actor": defender, "user": defender, "target": attacker})
-	# 击杀/死亡触发
-	if not defender.alive:
-		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_KILL, {"actor": attacker, "user": attacker, "target": defender})
-		# 遗物触发：击杀回血（鲜血吊坠）
-		RelicSystem.on_kill(self, attacker, game)
-		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_DEATH, {"actor": defender, "user": defender, "target": attacker})
-		# 队友死亡触发（复活类技能）：给死亡单位的同阵营存活单位触发
-		for ally in units:
-			if ally is Unit and ally.alive and ally.camp == defender.camp and ally != defender:
-				SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ALLY_DEATH, {"actor": ally, "user": ally, "target": defender})
-		# 遗物触发：首次死亡复活（不灭徽记）
-		RelicSystem.on_death(self, defender, game)
 	# 攻击后触发（附带技能伤害阶段）
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_END, {"actor": attacker, "user": attacker, "target": defender})
 	_check_winner()
 	return result
+
+# 统一分发伤害后的联动；特效伤害只结算击杀和死亡，不触发新的伤害附加效果。
+func on_damage_resolved(source: Unit, target: Unit, report: Dictionary) -> void:
+	var kind := str(report.get("damage_kind", DamageSystem.EFFECT))
+	var damage := int(report.get("actual_damage", 0))
+	if damage <= 0:
+		return
+	if kind != DamageSystem.EFFECT:
+		var previous_chain := active_damage_chain
+		active_damage_chain = previous_chain if not previous_chain.is_empty() else {"used": []}
+		var context := {"actor": source, "user": source, "target": target,
+			"damage": damage, "damage_kind": kind, "crit": bool(report.get("crit", false)),
+			"proc_chain": active_damage_chain}
+		if event_system != null:
+			event_system.dispatch(BattleEvent.new(EventTypes.ON_HIT, source, target, context))
+		if source != null:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_HIT, context)
+		if target.alive:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TAKEN_DAMAGE,
+				{"actor": target, "user": target, "target": source, "damage": damage,
+				"damage_kind": kind, "proc_chain": active_damage_chain})
+		active_damage_chain = previous_chain
+	if not bool(report.get("result", {}).get("lethal", false)):
+		return
+	if event_system != null:
+		event_system.dispatch(BattleEvent.new(EventTypes.ON_KILL, source, target,
+			{"damage": damage, "damage_kind": kind}))
+	if source != null:
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_KILL,
+			{"actor": source, "user": source, "target": target})
+		RelicSystem.on_kill(self, source, game)
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_DEATH,
+		{"actor": target, "user": target, "target": source})
+	for ally in units:
+		if ally is Unit and ally.alive and ally.camp == target.camp and ally != target:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ALLY_DEATH,
+				{"actor": ally, "user": ally, "target": target})
+	RelicSystem.on_death(self, target, game)
 
 func is_damage_skill(skill: Skill) -> bool:
 	for effect in skill.effects:
@@ -234,7 +260,7 @@ func can_cast_skill(user: Unit, skill: Skill, target: Unit) -> bool:
 func cast_skill(user: Unit, skill: Skill, target: Unit) -> void:
 	if not can_cast_skill(user, skill, target):
 		return
-	skill.execute(user, [target], game)
+	skill.execute(user, [target], game, self)
 	if event_system != null:
 		event_system.dispatch(BattleEvent.new(EventTypes.ON_SKILL_CAST, user, target, {"skill": skill.name}))
 	_check_winner()
@@ -292,6 +318,11 @@ func setup_battle() -> void:
 	RelicSystem.apply_run_bonuses(self)
 	if turn_manager != null:
 		turn_manager.setup()
+	for unit in units:
+		if unit is Unit:
+			for skill in unit.skills:
+				if skill is Skill and skill.trigger == SkillTriggerSystem.ON_TIMER:
+					skill.interval_remaining = skill.interval_seconds
 	# on_battle_start：所有单位各触发一次
 	for unit in units:
 		if unit is Unit and unit.alive:
@@ -312,11 +343,14 @@ func tick(delta: float) -> Array:
 		return []
 	var due_units: Array = turn_manager.tick(delta)
 	var events: Array = []
+	_tick_timed_skills(delta)
 	for unit in due_units:
+		if winner != "":
+			break
 		if not unit.alive:
 			continue
 		# 行动开始 tick
-		unit.tick_turn_start(game)
+		unit.tick_turn_start(game, self)
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_START, {"actor": unit, "user": unit})
 		var prev_pos: Vector2i = unit.pos
 		var acted := _auto_act(unit)
@@ -330,7 +364,7 @@ func tick(delta: float) -> Array:
 				"damage": acted.get("damage", 0),
 				"crit": acted.get("crit", false)
 			})
-		unit.tick_turn_end(game)
+		unit.tick_turn_end(game, self)
 		# 行动结束触发 + 冷却推进
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_END, {"actor": unit, "user": unit})
 		_tick_skill_cooldowns(unit)
@@ -342,8 +376,28 @@ func tick(delta: float) -> Array:
 # 推进单位技能冷却。
 func _tick_skill_cooldowns(unit: Unit) -> void:
 	for skill in unit.skills:
-		if skill is Skill:
+		if skill is Skill and skill.trigger != SkillTriggerSystem.ON_TIMER:
 			skill.tick_cooldown()
+
+# 每帧检查定时技能；到点立即尝试施放，无合法目标时保持就绪。
+func _tick_timed_skills(delta: float) -> void:
+	for unit in units:
+		if winner != "":
+			return
+		if not (unit is Unit) or not unit.alive:
+			continue
+		for skill in unit.skills:
+			if not (skill is Skill) or skill.trigger != SkillTriggerSystem.ON_TIMER:
+				continue
+			skill.tick_interval(delta)
+			if not skill.is_ready():
+				continue
+			var context := {"actor": unit, "user": unit, "skill_filter": skill}
+			var targets := Skill.units_in_range(self, unit, "enemy", skill.min_range, skill.max_range)
+			if not targets.is_empty():
+				context["target"] = targets[0]
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TIMER, context)
+			_check_winner()
 
 # 单位自动行动：射程内有敌人则攻击；否则移动（可能因嘲讽被引导），移动后再尝试攻击。
 func _auto_act(unit: Unit) -> Dictionary:

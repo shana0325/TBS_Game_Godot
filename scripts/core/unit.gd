@@ -102,6 +102,10 @@ func get_crit_rate() -> int:
 func get_crit_damage() -> int:
 	return get_stat("crit_damage")
 
+# 技能急速：每 1 点 = on_timer 定时技能施放频率 +1%（作用于真实秒冷却）。
+func get_ability_haste() -> int:
+	return get_stat("ability_haste")
+
 func get_range_min() -> int:
 	return int(config.get("range_min", 1))
 
@@ -183,13 +187,15 @@ func add_buff(buff: Buff) -> void:
 	if buff != null:
 		buffs.append(buff)
 
-func tick_turn_start(game = null) -> void:
+# 推进回合开始状态，并把战斗上下文传给持续伤害结算。
+func tick_turn_start(game = null, battle = null) -> void:
 	for buff in buffs.duplicate():
-		buff.on_turn_start(self, game)
+		buff.on_turn_start(self, game, battle)
 
-func tick_turn_end(game = null) -> void:
+# 推进回合结束状态，并把战斗上下文传给持续伤害结算。
+func tick_turn_end(game = null, battle = null) -> void:
 	for buff in buffs.duplicate():
-		buff.on_turn_end(self, game)
+		buff.on_turn_end(self, game, battle)
 	remove_expired_buffs()
 
 func remove_expired_buffs() -> void:
@@ -219,7 +225,7 @@ func get_reflect_percent() -> float:
 		total += buff.reflect_percent
 	return total
 
-# 减伤比例（防护罩）。
+# 汇总所有状态提供的百分比伤害减免；由 DamageSystem 对全部伤害类别统一应用。
 func get_reduce_percent() -> float:
 	var total := 0.0
 	for buff in buffs:
@@ -249,6 +255,7 @@ func has_mark() -> bool:
 
 func add_skill(skill: Skill) -> void:
 	if skill != null and not has_skill(skill.name):
+		skill.owner = self
 		skills.append(skill)
 
 func has_skill(skill_name: String) -> bool:

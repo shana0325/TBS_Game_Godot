@@ -17,7 +17,7 @@ const HANDLERS := {
 }
 
 # 对单个目标应用一组效果，返回汇总报告。
-static func apply_effects(user: Unit, target: Unit, effects: Array, game = null) -> Dictionary:
+static func apply_effects(user: Unit, target: Unit, effects: Array, game = null, battle = null) -> Dictionary:
 	var report := {"damage": 0, "heal": 0, "buffs": [], "shield": 0, "revived": false}
 	for effect in effects:
 		if not (effect is Dictionary):
@@ -25,7 +25,7 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 		var effect_type := str(effect.get("type", ""))
 		match effect_type:
 			"damage":
-				report["damage"] += _apply_damage(user, target, effect, game)
+				report["damage"] += _apply_damage(user, target, effect, game, battle)
 			"heal":
 				report["heal"] += _apply_heal(user, target, effect, game)
 			"buff":
@@ -68,9 +68,9 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 			"teleport":
 				_apply_teleport(user, target, effect, game)
 			"percentage_damage":
-				report["damage"] += _apply_percentage_damage(user, target, effect, game)
+				report["damage"] += _apply_percentage_damage(user, target, effect, game, battle)
 			"chain_damage":
-				report["damage"] += _apply_chain_damage(user, target, effect, game)
+				report["damage"] += _apply_chain_damage(user, target, effect, game, battle)
 			"permanent_stat":
 				_apply_permanent_stat(user, target, effect, game)
 			_:
@@ -79,16 +79,12 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null)
 
 # --- 各效果实现（可独立注册/扩展） ---
 
-static func _apply_damage(user: Unit, target: Unit, config: Dictionary, game) -> int:
+static func _apply_damage(user: Unit, target: Unit, config: Dictionary, game, battle = null) -> int:
 	if user == null or target == null or not target.alive:
 		return 0
-	var power := float(config.get("power", 1.0))
-	var terrain_bonus := int(config.get("terrain_bonus", 0))
-	var calc := DamageCalculator.calculate_skill_damage(user, target, power, terrain_bonus, _get_final_damage_multiplier(game))
-	var damage: int = calc.get("damage", 0)
-	var crit: bool = calc.get("crit", false)
-	var result := target.take_damage(damage, game)
-	user.damage_dealt += int(result.get("hp_lost", 0))
+	var resolved := DamageSystem.apply(user, target, config, battle, game)
+	var damage: int = resolved.get("damage", 0)
+	var crit: bool = resolved.get("crit", false)
 	if game != null and game.has_method("add_log"):
 		var prefix := "暴击！" if crit else ""
 		game.add_log("%s 对 %s%s 造成 %d 点伤害" % [user.get_display_name(), target.get_display_name(), prefix, damage])
@@ -368,26 +364,27 @@ static func _is_cell_walkable(battle, cell: Vector2i) -> bool:
 	return true
 
 # 百分比伤害：按目标生命上限百分比造成伤害（无视攻击/防御）。
-static func _apply_percentage_damage(user: Unit, target: Unit, config: Dictionary, game) -> int:
+static func _apply_percentage_damage(user: Unit, target: Unit, config: Dictionary, game, battle = null) -> int:
 	if target == null or not target.alive:
 		return 0
 	var percent := float(config.get("percent", 0.1))
 	var max_damage := int(config.get("max", 999999))
 	var damage := mini(roundi(target.max_hp * percent), max_damage)
 	damage = maxi(1, damage)
-	damage = maxi(1, roundi(damage * _get_final_damage_multiplier(game)))
-	var result := target.take_damage(damage, game)
-	if user != null:
-		user.damage_dealt += int(result.get("hp_lost", 0))
+	var damage_config := config.duplicate()
+	damage_config["raw_damage"] = damage
+	if not damage_config.has("true_damage") and not damage_config.has("ignore_defense"):
+		damage_config["true_damage"] = true
+	var resolved := DamageSystem.apply(user, target, damage_config, battle, game)
+	damage = int(resolved.get("damage", 0))
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 受到 %d 点百分比伤害" % [target.get_display_name(), damage])
 	return damage
 
 # 连锁伤害：对目标造成伤害后，向附近敌人连锁 N 次，每次伤害递减。
-static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, game) -> int:
+static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, game, battle = null) -> int:
 	if user == null or target == null:
 		return 0
-	var battle = game
 	if battle == null:
 		return 0
 	var power := float(config.get("power", 1.0))
@@ -399,11 +396,11 @@ static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, ga
 	for i in range(chain):
 		if current_target == null or not current_target.alive:
 			break
-		var calc := DamageCalculator.calculate_skill_damage(user, current_target, power, 0, _get_final_damage_multiplier(game))
-		var damage: int = calc.get("damage", 0)
-		var crit: bool = calc.get("crit", false)
-		var hop_result := current_target.take_damage(damage, game)
-		user.damage_dealt += int(hop_result.get("hp_lost", 0))
+		var damage_config := config.duplicate()
+		damage_config["power"] = power
+		var resolved := DamageSystem.apply(user, current_target, damage_config, battle, game)
+		var damage: int = resolved.get("damage", 0)
+		var crit: bool = resolved.get("crit", false)
 		total += damage
 		if game != null and game.has_method("add_log"):
 			var prefix := "暴击！" if crit else ""
@@ -426,11 +423,6 @@ static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, ga
 		if current_target != null:
 			hit.append(current_target)
 	return total
-
-static func _get_final_damage_multiplier(game) -> float:
-	if game != null and game.has_method("get_final_damage_multiplier"):
-		return maxf(float(game.get_final_damage_multiplier()), 1.0)
-	return 1.0
 
 # 永久属性强化：提升属性（跨战斗全局永久或本局永久）。
 # config: { stat, amount, persist }。persist=true 写回编成（全局永久），false 仅本局生效。

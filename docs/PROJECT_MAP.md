@@ -61,6 +61,7 @@ project.godot
 ### 主要边界
 
 - `scripts/core/` 和 `scripts/battle/` 负责状态、规则和事件，不应直接依赖具体 UI 场景节点。
+- `scripts/battle/combat/damage_system.gd` 是伤害结算入口，统一处理伤害类别、真实伤害、百分比减免、护盾及伤害后的事件；`damage_calculator.gd` 只计算基础护甲与暴击数值。
 - `scripts/screens/` 负责页面流程和输入协调，通过 `GameSession`、`BattleManager` 等接口驱动显示。
 - `scripts/ui/` 负责表现和交互组件；部署与战斗需要一致的单位信息时，优先复用已有组件和文本格式。
 - 数据平衡优先修改 `data/` 与对应设计文档，不把可配置数值硬编码到界面脚本。

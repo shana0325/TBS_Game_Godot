@@ -63,13 +63,15 @@ func _condition_matches(unit: Unit) -> bool:
 	var ratio := float(unit.hp) / float(maxi(unit.max_hp, 1))
 	return Skill.compare_num(ratio, conditional_hp_percent)
 
-func on_turn_start(unit, game) -> void:
+# 单位行动开始时结算状态效果。
+func on_turn_start(unit, game, battle = null) -> void:
 	if tick_phase == "turn_start":
-		_apply_tick(unit, game)
+		_apply_tick(unit, game, battle)
 
-func on_turn_end(unit, game) -> void:
+# 单位行动结束时结算状态效果并推进持续时间。
+func on_turn_end(unit, game, battle = null) -> void:
 	if tick_phase == "turn_end":
-		_apply_tick(unit, game)
+		_apply_tick(unit, game, battle)
 	if not permanent:
 		duration -= 1
 
@@ -90,12 +92,12 @@ func is_expired() -> bool:
 		return false
 	return duration <= 0
 
-func _apply_tick(unit, game) -> void:
+func _apply_tick(unit, game, battle = null) -> void:
 	if tick_damage > 0:
 		var damage := tick_damage
-		if game != null and game.has_method("get_final_damage_multiplier"):
-			damage = maxi(1, roundi(float(damage) * float(game.get_final_damage_multiplier())))
-		unit.take_damage(damage, game)
+		var resolved := DamageSystem.apply(null, unit, {"damage_kind": DamageSystem.EFFECT,
+			"raw_damage": damage, "true_damage": true}, battle, game)
+		damage = int(resolved.get("damage", 0))
 		if game != null and game.has_method("add_log"):
 			game.add_log("%s 受到 %s 的 %d 点持续伤害" % [unit.get_display_name(), name, damage])
 	if tick_heal > 0:
