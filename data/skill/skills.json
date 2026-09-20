@@ -442,6 +442,7 @@
     "common": true,
     "searchable": true,
     "cooldown": 0,
+    "interval_seconds": 5.0,
     "condition": {
       "target_type": "self"
     },

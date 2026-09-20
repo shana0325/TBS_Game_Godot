@@ -17,8 +17,9 @@ func _init() -> void:
 func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	if battle == null:
 		return []
-	var t: Unit = targets[0] if targets.size() > 0 else null
-	if t == null:
+	# 声明 target_type 为 self，targets[0] 是施放者自身；真正的命中目标在 active_hit 里查询。
+	var t := battle.get_active_hit().get("target") as Unit
+	if t == null or not t.alive:
 		return []
 	var rt := user.runtime
 	var now := SkillKit.now_of(battle)

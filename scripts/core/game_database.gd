@@ -190,7 +190,11 @@ func _merge_code_skills() -> void:
 		# 保留 JSON 元数据（中文 name/desc/interval_seconds/mechanic 等），
 		# 代码元数据覆盖行为字段（trigger/condition/cooldown…），并挂接脚本。
 		var base: Dictionary = skills.get(skill_id, {}).duplicate()
+		var json_interval := float(base.get("interval_seconds", 0.0))
 		base.merge(meta, true)
+		# 代码技能未显式设置按秒计时间隔时（默认为 0），保留 JSON 里由数据调优的 interval_seconds
+		if float(meta.get("interval_seconds", 0.0)) <= 0.0 and json_interval > 0.0:
+			base["interval_seconds"] = json_interval
 		base["code_script"] = script
 		skills[skill_id] = base
 
