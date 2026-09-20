@@ -14,7 +14,7 @@ func _init() -> void:
 	max_range = 2
 	tags = ["通用", "冷却", "加速"]
 
-func execute(user, targets, game, battle) -> Array:
+func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	var rt := user.runtime
 	if rt.bump("transcend_row") % 3 == 0:
 		SkillKit.shorten_timed_percent(user, 0.30, self)

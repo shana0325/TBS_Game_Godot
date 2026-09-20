@@ -14,10 +14,10 @@ func _init() -> void:
 	max_range = 2
 	tags = ["通用", "冷却", "加速"]
 
-func execute(user, targets, game, battle) -> Array:
+func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	if battle == null:
 		return []
-	var hit := battle.get_active_hit()
+	var hit: Dictionary = battle.get_active_hit()
 	if str(hit.get("damage_kind", "")) != DamageSystem.SKILL:
 		return []
 	var rt := user.runtime

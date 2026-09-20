@@ -14,7 +14,7 @@ func _init() -> void:
 	max_range = 2
 	tags = ["通用", "生存", "击杀"]
 
-func execute(user, targets, game, battle) -> Array:
+func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	if not user.alive:
 		return []
 	var healed := user.heal(roundi(user.max_hp * 0.6), user)

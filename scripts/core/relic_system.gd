@@ -102,9 +102,9 @@ static func on_kill(manager: BattleManager, killer: Unit, game) -> void:
 		var relic := GameDatabase.get_relic(str(relic_id))
 		match str(relic_id):
 			"triumph_horn":
-				_apply_triumph_horn(manager: BattleManager, killer, game)
+				_apply_triumph_horn(manager, killer, game)
 			"overgrowth":
-				_apply_overgrowth(manager: BattleManager, game)
+				_apply_overgrowth(manager, game)
 		for trigger in relic.get("triggers", []):
 			if trigger is Dictionary and str(trigger.get("event", "")) == "on_kill":
 				var heal_percent := float(trigger.get("heal_percent", 0.0))
@@ -274,12 +274,12 @@ static func on_hit(manager: BattleManager, source: Unit, target: Unit, kind: Str
 	# 收割之魂、守护精灵：仅在普攻/技能伤害时判断
 	if kind == DamageSystem.ATTACK or kind == DamageSystem.SKILL:
 		if relics.has("harvest_soul"):
-			_apply_harvest_soul(manager: BattleManager, source, target, game)
+			_apply_harvest_soul(manager, source, target, game)
 		if relics.has("airy_guardian"):
-			_apply_airy_guardian(manager: BattleManager, source, target, game)
+			_apply_airy_guardian(manager, source, target, game)
 	# 灵能循环：技能伤害计数成长
 	if kind == DamageSystem.SKILL and relics.has("manaflow_band"):
-		_apply_manaflow(manager: BattleManager, source, game)
+		_apply_manaflow(manager, source, game)
 
 # 收割之魂：对生命<25%的敌人首次造成普攻/技能伤害时加 10+成长点特效伤害，每目标每场一次。
 static func _apply_harvest_soul(manager: BattleManager, source: Unit, target: Unit, game) -> void:

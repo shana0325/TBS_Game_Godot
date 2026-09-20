@@ -14,7 +14,7 @@ func _init() -> void:
 	max_range = 2
 	tags = ["通用", "攻击", "爆发"]
 
-func execute(user, targets, game, battle) -> Array:
+func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	if battle == null:
 		return []
 	var t: Unit = targets[0] if targets.size() > 0 else null

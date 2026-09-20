@@ -14,7 +14,7 @@ func _init() -> void:
 	max_range = 2
 	tags = ["通用", "生存", "恢复"]
 
-func execute(user, targets, game, battle) -> Array:
+func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	if battle == null or not battle.has_method("get_active_hit"):
 		return []
 	var hp_lost := int(battle.get_active_hit().get("hp_lost", 0))
