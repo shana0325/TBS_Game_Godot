@@ -41,12 +41,16 @@
 | `condition` | dict | 触发条件（见第 4 节） |
 | `cooldown` | int | 现有事件技能的冷却行动次数（0=无冷却） |
 | `interval_seconds` | float | 仅 `on_timer` 使用；每次成功施放后的间隔秒数，必须大于 0 |
+| `shield_cap_percent` | float | 单位护盾上限相对最大生命的倍率，默认 1.0；取当前技能中的最高值 |
+| `unlimited_shield` | bool | 为 true 时取消该单位的护盾上限 |
 | `target` | dict | 目标选择（见第 5 节） |
 | `effects` | array | 效果列表（见第 6 节） |
 
 伤害效果可另外声明 `damage_kind`（`attack` / `skill` / `effect`）和 `true_damage`（布尔值）。未声明类别的效果伤害默认为 `effect`；伤害由技能、遗物或装备产生，并不自动成为技能伤害。只有明确写为 `skill` 时，才参与“造成伤害时”的后续联动。`true_damage` 与类别可以组合，旧字段 `ignore_defense` 仍按真实伤害处理。
 
 统一结算顺序：攻击力或固定值 → 护甲（真实伤害跳过）→ 暴击和效果倍率 → 狂暴 → 目标百分比伤害减免 → 护盾与生命。特效伤害不触发新的造成伤害联动；同一条伤害链中同一个联动技能只执行一次。
+
+护盾默认上限为单位最大生命的 100%，所有来源共享该上限。技能可通过 `shield_cap_percent` 提高上限，或通过 `unlimited_shield` 取消上限。各份限时护盾独立计算持续时间，战斗结束后不保留。
 
 ```json
 {"type": "damage", "power": 0.5, "damage_kind": "effect"}

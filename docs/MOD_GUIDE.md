@@ -45,13 +45,14 @@ mods/
 {
   "MyHero": {
     "display_name": "新英雄",
-    "hp": 24,
-    "atk": 8,
-    "defense": 5,
-    "move": 4,
+    "hp": 1400,
+    "atk": 100,
+    "defense": 25,
+    "move": 1,
     "range_min": 1,
     "range_max": 1,
-    "skills": ["Power Strike"]
+    "innate_skill": "Power Slash",
+    "tags": ["战士"]
   }
 }
 ```
@@ -63,7 +64,8 @@ mods/
 | `display_name` | 中文显示名（缺省显示键名） |
 | `hp` / `atk` / `defense` / `move` | 基础属性 |
 | `range_min` / `range_max` | 攻击射程 |
-| `skills` | 自带技能名列表（引用 skills.json 中的技能） |
+| `innate_skill` | 固有技能 ID，可为空 |
+| `tags` | 单位标签数组 |
 
 ## 4. 技能数据（skills/*.json）
 
@@ -71,6 +73,9 @@ mods/
 {
   "Power Slash": {
     "name": "Power Slash",
+    "desc": "攻击时造成一次技能伤害",
+    "trigger": "on_attack",
+    "common": false,
     "min_range": 1,
     "max_range": 2,
     "effects": [
@@ -81,7 +86,7 @@ mods/
 }
 ```
 
-效果类型：`damage`（伤害，`power` 倍率）、`heal`（治疗，`amount`）、`buff`（附加状态，`buff` 指定 buffs.json 中的 id）。
+效果类型和字段以 [技能体系设计文档](skills/SKILL_SYSTEM.md) 为准。复杂技能可使用 `CodeSkill`，但需要同时完成脚本注册和运行验证。
 
 ## 5. 图片规格
 

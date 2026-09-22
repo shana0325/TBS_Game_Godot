@@ -12,7 +12,7 @@
 - **引擎**：Godot 4.7 + GDScript（GL Compatibility 渲染）
 - **核心玩法**：时间驱动独立回合 + 事件触发技能，全自动战斗
 - **完整流程**：主菜单（继续游戏/开始新游戏）→ 选关 → 部署 → 自动战斗 → 结算/爬塔奖励
-- **成长**：属性/技能/装备 + 永久强化（击杀成长等跨战斗保留）+ 背包道具
+- **成长**：升星、技能书、装备、Run 遗物与跨战斗永久强化
 - **内容**：12×6 单战场、单位动作图、中文字体、可扩展 mod
 
 ## 2. 设计原则
@@ -52,10 +52,10 @@ docs/       设计/交接/技能规范/mod 指南
 - 单位模板可通过 `tags` 配置 0 个或多个标签，角色信息面板展示这些标签。
 - 当前数值模板：`Warrior` 战士（1400/100/25/1格）、`Tank` 坦克（2000/80/50/1格）、`Archer` 射手（1000/130/10/2格）、`Assassin` 刺客（800/160/5/1格）；另保留 Hero 作为固有技能测试单位。
 - 运行时：`pos / camp / acted / moved / alive / turn_interval / turn_timer`、`buffs`、`skills`、`equipment`、`permanent_mods`、`star`、`tags`。
-- 关键方法：`take_damage`（护盾吸收→扣血→致死）、`heal`、`add_buff`、回合 tick、状态查询（stun/silence/taunt/免疫/反射/减伤/无视/标记/反击）、`apply_skills`。
+- 关键方法：`take_damage`、`heal`、`gain_shield`、`get_shield_cap`、回合 tick、状态查询和 `apply_skills`。护盾默认上限为最大生命，技能可提高或取消上限。
 
 ### Skill（技能基类，双轨）
-- 数据字段：`name / desc / trigger / condition / cooldown / priority / min_range / max_range / effects / common / once`。
+- 数据字段：`name / desc / trigger / condition / cooldown / interval_seconds / priority / min_range / max_range / effects / common / once / shield_cap_percent / unlimited_shield`。
 - 三个可覆写钩子：
   - `check_condition(battle, context)`：触发条件（默认数据驱动）
   - `resolve_targets(battle, user, context)`：目标解析（默认按 target_type）
@@ -67,7 +67,7 @@ docs/       设计/交接/技能规范/mod 指南
 - 生命周期：回合 tick 递减，`duration <= 0` 移除；触发型（吸血）、护盾吸收、反击、光环等按语义生效。
 
 ### Equipment
-- 槽位：weapon / offhand / accessory；字段：槽位、属性修正 `modifiers`、授予技能 `granted_skills`。
+- 槽位：weapon / offhand / accessory；装备当前只提供属性修正 `modifiers`，不提供技能。
 
 ## 5. 战斗系统（自走棋）
 
@@ -166,15 +166,15 @@ docs/       设计/交接/技能规范/mod 指南
 ### 7.1 ProgressManager（纯逻辑）
 - 升星：`ascend_unit` 消耗背包中的可堆叠 `inventory.star_items`，当前最高 3 星；`add_star_items` 供未来奖励/商店等明确来源调用。星级规则集中在 `Unit`，方便未来扩展最高星级。
 - 通用技能槽：`1 + min(star - 1, 2)`；`equip_skill` 与战斗中的 `Unit.apply_skills` 共同限制装备技能数量。
-- 技能：技能书是通用技能的学习材料；人物详情和部署背包均可使用。装备槽已满时，部署拖拽流程可选择覆盖一个已装备技能；装备与卸下受通用技能槽限制。
+- 技能：技能书是通用技能的学习材料；角色详情提供学习和遗忘入口。槽位已满时必须先遗忘一个通用技能。
 - 装备：三槽位校验装配/卸下。
 - 永久强化：`add_permanent_stat(unit_id, stat, amount)` 累加 `permanent_mods` 并写回 player_roster.json。
 - 持久化：`save_roster()` 写回 JSON。
 
 ### 7.2 队伍编成界面（progression_screen）
-- 两段式：先选角色，再在 属性 / 技能 / 装备 三个子页成长。
-- 技能页：固有技能锁定区（金色标注 + 完整详情）+ 通用技能池（点击查看详情：描述/触发时机/冷却/射程/目标/效果含持续时间；冒泡式操作：学习并装备/装备/卸下）。
-- 总览面板：整体属性（含永久强化）、装备、带进战斗的技能（固有 + 已装备 + 装备授予）。
+- 角色详情：左侧章节导航、中间立绘、右侧连续滚动属性、装备和技能。
+- 技能区：固有技能与已学习通用技能统一展示，并提供学习、遗忘和完整详情。
+- 基础属性显示永久强化、通用技能槽、当前护盾与护盾上限。
 
 ## 8. 关卡与部署
 
@@ -184,7 +184,7 @@ docs/       设计/交接/技能规范/mod 指南
 ## 9. 战斗表现（UI）
 
 - GridView：棋盘格深浅交替 + 边框（自动战斗下移动/攻击高亮已不用，保留选中/悬停）。
-- UnitView：动作图（stand/move/attack/death）填满格子、顶部名称、底部血条、血条上方蓝色护盾条（剩余/初始比例）；行动后（acted）变暗。
+- UnitView：动作图填满格子、底部血条和蓝色护盾条；护盾条按总护盾/最大生命显示，超过 100% 后保持满条。
 - 动画：移动逐格补间；"移动后攻击"链条化（移动结束接攻击冲刺），攻击动画不被吞。
 - 信息面板：点击单位显示属性/射程/行动间隔/护盾/永久强化/装备/技能/Buff；战斗中仅对当前打开的信息卡约每 0.1 秒刷新一次，未打开单位不持续创建 UI。
 - 布局：BattleLayout 按视口自适应格子大小并居中；日志面板最多 100 条。
@@ -201,7 +201,7 @@ docs/       设计/交接/技能规范/mod 指南
 - 无头检查：`Godot_v4.7.1-stable_win64_console.exe --headless --path <项目> --quit`
 - 冒烟：`--quit-after N res://scenes/battle_screen.tscn`
 - 新增 `class_name` 后先 `--import` 刷新全局类缓存。
-- 预期输出：`GameDatabase loaded: units=5 skills=12 buffs=11 equipments=5`
+- 当前预期数据规模：`units=5 skills=28 buffs=11 equipments=5 relics=20`。
 
 ## 12. 待办与演进方向
 

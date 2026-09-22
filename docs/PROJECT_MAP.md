@@ -18,6 +18,8 @@
 | 系统设计 | `docs/tbs_game_system_design_v2.md` | 总体玩法、系统和架构意图 |
 | 数值技能设计 | `docs/数值与技能设计文档_V1.md` | 职业模板、技能与数值方向 |
 | 爬塔方向 | `docs/爬塔模式设计方向.md` | 爬塔流程、奖励和局内成长方向 |
+| 遗物与技能映射 | `docs/LoL符文_遗物一一对应表.md` | 当前机制遗物与通用技能的设计清单 |
+| 视觉规范 | `视觉风格设计.md` | 当前画风、组件和交互验收规则 |
 | 当前交接 | `docs/HANDOFF.md` | 已完成内容、恢复步骤和后续优先级 |
 | Mod 制作 | `docs/MOD_GUIDE.md` | 单位、技能、素材 Mod 的数据格式 |
 | LC2 参考 | `docs/LC2参考索引.md` | 外部参考项目的目录级索引；不等于源码副本 |
@@ -36,6 +38,7 @@
 | `scripts/ui/` | 战场显示、单位视图、信息卡、背包弹窗和可复用 UI 组件 | UI 任务时读取 |
 | `assets/fonts/` | 当前运行时字体 | 字体/UI 任务时读取 |
 | `assets/skills/` | 当前运行时技能图标 | 技能图标或美术任务时读取 |
+| `assets/relics/` | 当前运行时遗物图标 | 遗物图标或遗物界面任务时读取 |
 | `assets/units/` | 当前运行时单位图片和立绘 | 单位表现任务时读取 |
 | `assets/ui/` | 当前运行时界面背景与装饰图片 | UI 美术任务时读取 |
 | `assets/reference/ui_material/` | 原 `material` 目录及未接入 UI 候选素材 | 仅视觉素材任务明确需要时读取 |
@@ -62,6 +65,8 @@ project.godot
 
 - `scripts/core/` 和 `scripts/battle/` 负责状态、规则和事件，不应直接依赖具体 UI 场景节点。
 - `scripts/battle/combat/damage_system.gd` 是伤害结算入口，统一处理伤害类别、真实伤害、百分比减免、护盾及伤害后的事件；`damage_calculator.gd` 只计算基础护甲与暴击数值。
+- `scripts/core/relic_system.gd` 统一向战斗单位和部署预览应用 Run 遗物、叠层与跨战斗成长。
+- `Unit.get_shield_cap()` 是护盾上限规则入口，默认最大生命 100%，技能可提高或取消上限。
 - `scripts/screens/` 负责页面流程和输入协调，通过 `GameSession`、`BattleManager` 等接口驱动显示。
 - `scripts/ui/` 负责表现和交互组件；部署与战斗需要一致的单位信息时，优先复用已有组件和文本格式。
 - 数据平衡优先修改 `data/` 与对应设计文档，不把可配置数值硬编码到界面脚本。
@@ -74,6 +79,7 @@ project.godot
 | 修改战斗规则 | `scripts/battle/` | `scripts/core/`、对应 `data/` |
 | 修改单位/技能数值 | `data/`、数值技能设计文档 | `GameDatabase`、实体脚本 |
 | 修改单位信息卡 | `scripts/ui/unit_detail_panel.gd` | 部署/战斗调用处 |
+| 修改遗物奖励或叠层 | `scripts/core/reward_generator.gd`、`relic_system.gd` | `game_session.gd`、`data/relic/relics.json` |
 | 修改背包弹窗 | `scripts/ui/backpack_panel.gd` | 部署界面调用处、`ProgressManager` 背包接口 |
 | 修改技能图标 | `scripts/core/art_manager.gd` | `assets/skills/`、技能数据 |
 | 修改单位图片 | `scripts/core/art_manager.gd` | `assets/units/`、单位数据 |
