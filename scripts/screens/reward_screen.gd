@@ -12,7 +12,6 @@ var stats_tab: String = "damage"
 var embedded: bool = false
 var popup_panel: PanelContainer
 var dimmer: ColorRect
-var reward_toggle_button: Button
 const STAT_TABS := {"damage": "伤害输出", "taken": "承伤", "heal": "治疗"}
 
 func setup_embedded() -> void:
@@ -40,13 +39,6 @@ func _layout_screen() -> void:
 	if popup_panel != null:
 		popup_panel.size = Vector2(minf(vp.x - 96.0, maxf(640.0, vp.x * 0.78)), minf(vp.y - 100.0, maxf(440.0, vp.y * 0.78)))
 		popup_panel.position = Vector2((vp.x - popup_panel.size.x) / 2.0, (vp.y - popup_panel.size.y) / 2.0)
-		if reward_toggle_button != null:
-			reward_toggle_button.size = Vector2(136.0, 34.0)
-			if embedded:
-				# 奖励开关放在悬浮窗中线下方、贴近底边，避免与战斗右上角控件抢位置。
-				reward_toggle_button.position = popup_panel.position + Vector2((popup_panel.size.x - 136.0) / 2.0, popup_panel.size.y - 42.0)
-			else:
-				reward_toggle_button.position = Vector2(maxf(20.0, vp.x - 164.0), 12.0)
 		if embedded:
 			var popup_pos := popup_panel.position
 			var popup_size := popup_panel.size
@@ -81,6 +73,7 @@ func _layout_screen() -> void:
 
 func _build_embedded_shell() -> void:
 	# 半透明遮罩保留四周战场轮廓，避免奖励选择看起来像切换了场景。
+	z_index = 500
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	dimmer = ColorRect.new()
 	dimmer.name = "RewardDimmer"
@@ -90,36 +83,28 @@ func _build_embedded_shell() -> void:
 	add_child(dimmer)
 	popup_panel = PanelContainer.new()
 	popup_panel.name = "RewardPopupPanel"
-	popup_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	popup_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(popup_panel)
-	reward_toggle_button = Button.new()
-	reward_toggle_button.name = "RewardToggleButton"
-	reward_toggle_button.text = "隐藏奖励"
-	reward_toggle_button.custom_minimum_size = Vector2(136, 34)
-	reward_toggle_button.size = Vector2(136, 34)
-	reward_toggle_button.z_index = 100
-	reward_toggle_button.mouse_filter = Control.MOUSE_FILTER_STOP
-	reward_toggle_button.pressed.connect(_toggle_embedded_rewards)
-	add_child(reward_toggle_button)
 
-func _toggle_embedded_rewards() -> void:
+# 切换嵌入式奖励内容，并把当前可见状态返回给外部顶层按钮。
+func toggle_embedded_rewards() -> bool:
 	if not embedded or popup_panel == null:
-		return
+		return false
 	var showing := not popup_panel.visible
 	popup_panel.visible = showing
 	if dimmer != null:
 		dimmer.visible = showing
-	# 隐藏奖励时完全让出底层战场和按钮的鼠标输入；开回时再接管悬浮窗区域。
+	# 隐藏后让出整层鼠标输入；显示时由奖励内容自身接收输入。
 	mouse_filter = Control.MOUSE_FILTER_PASS if showing else Control.MOUSE_FILTER_IGNORE
 	for child in get_children():
-		if child == popup_panel or child == dimmer or child == reward_toggle_button:
+		if child == popup_panel or child == dimmer:
 			continue
 		if not showing:
 			child.set_meta("reward_visibility_before_hide", child.visible)
 			child.visible = false
 		else:
 			child.visible = bool(child.get_meta("reward_visibility_before_hide", true))
-	reward_toggle_button.text = "隐藏奖励" if showing else "展开奖励"
+	return showing
 
 # 战斗统计：按钮点击后展开面板（伤害输出/承伤/治疗三个子页，按我方/敌方分组，长度条=本队占比）。
 # 放在右侧，避免遮挡左侧的三选一奖励卡片。
@@ -223,7 +208,7 @@ func _build_summary() -> void:
 	var summary := Label.new()
 	summary.name = "RunSummary"
 	var text := RewardGenerator.run_summary()
-	summary.text = text if text != "" else "尚未获得遗物/祝福"
+	summary.text = text if text != "" else "尚未获得遗物"
 	summary.add_theme_font_size_override("font_size", 18)
 	summary.position = Vector2(60, 96)
 	summary.custom_minimum_size = Vector2(900, 54)
@@ -280,8 +265,6 @@ func _type_text(t: String) -> String:
 			return "◆ 技能书"
 		"equipment":
 			return "◆ 装备"
-		"blessing":
-			return "◆ 祝福"
 		"relic":
 			return "★ 遗物"
 	return t

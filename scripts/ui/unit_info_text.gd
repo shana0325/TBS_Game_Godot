@@ -10,15 +10,9 @@ static func build(unit: Unit) -> String:
 	var lines: Array = []
 	lines.append("%s  Lv.%d  (%s)" % [unit.get_display_name(), unit.level, "玩家" if unit.camp == TurnManager.PLAYER_CAMP else "敌方"])
 	lines.append("HP: %d/%d" % [unit.hp, unit.max_hp])
-	var shield_total := 0
-	for buff in unit.buffs:
-		shield_total += buff.shield
-	if shield_total > 0:
-		var shield_max_all := 0
-		for buff in unit.buffs:
-			if buff.shield > 0:
-				shield_max_all += int(buff.raw_data.get("shield", buff.shield))
-		lines.append("护罩: %d/%d" % [shield_total, shield_max_all])
+	var shield_total := unit.get_total_shield()
+	var shield_cap := unit.get_shield_cap()
+	lines.append("护罩: %d/%s" % [shield_total, "无上限" if shield_cap < 0 else str(shield_cap)])
 	lines.append("攻击: %d   护甲: %d（%.1f%%减伤）   移动: %d" % [unit.get_attack(), unit.get_defense(), COMBAT_FORMULA.armor_reduction_percent(unit.get_defense()), unit.get_move_points()])
 	lines.append("暴击率: %d%%   暴击伤害: %d%%" % [unit.get_crit_rate(), unit.get_crit_damage()])
 	lines.append("射程: %d-%d" % [unit.get_range_min(), unit.get_range_max()])

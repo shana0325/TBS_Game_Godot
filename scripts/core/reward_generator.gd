@@ -1,13 +1,6 @@
-# 爬塔奖励生成：胜利后三选一（技能书 / 装备 / 祝福 / 遗物），应用结果写入会话或编成。
+# 爬塔奖励生成：胜利后三选一（技能书 / 装备 / 遗物），应用结果写入会话或编成。
 class_name RewardGenerator
 extends RefCounted
-
-const BLESSINGS := [
-	{"name": "攻击祝福", "desc": "全体攻击 +10%", "effects": [{"type": "stat_percent", "stat": "attack", "percent": 0.10}]},
-	{"name": "生命祝福", "desc": "全体生命 +20%", "effects": [{"type": "stat_percent", "stat": "hp", "percent": 0.20}]},
-	{"name": "防御祝福", "desc": "全体防御 +10%", "effects": [{"type": "stat_percent", "stat": "defense", "percent": 0.10}]},
-	{"name": "急速祝福", "desc": "全体行动速度 +8%", "effects": [{"type": "turn_speed", "percent": 0.08}]},
-]
 
 # 奖励选项数量：布局支持横向滚动，未来可直接改为 4 或 5。
 const REWARD_OPTION_COUNT := 3
@@ -29,15 +22,14 @@ static func generate_options() -> Array:
 		var data: Dictionary = GameDatabase.get_equipment(equip_id)
 		candidates.append({"type": "equipment", "id": equip_id,
 			"label": str(data.get("name", equip_id)), "desc": "装备（%s）" % str(data.get("slot", ""))})
-	# 祝福
-	for blessing in BLESSINGS:
-		candidates.append({"type": "blessing", "label": str(blessing["name"]),
-			"desc": str(blessing["desc"]), "effects": blessing["effects"]})
-	# 遗物（本局尚未获得）
+	# 普通遗物仅出现一次；可重复遗物在达到层数上限前都可再次出现。
 	for relic_id in GameDatabase.relics.keys():
-		if GameSession.run_relics.has(relic_id):
-			continue
 		var data: Dictionary = GameDatabase.get_relic(relic_id)
+		var current_stack := GameSession.get_relic_stack(str(relic_id))
+		var repeatable := bool(data.get("repeatable", false))
+		var max_stacks := int(data.get("max_stacks", 0))
+		if current_stack > 0 and (not repeatable or (max_stacks > 0 and current_stack >= max_stacks)):
+			continue
 		candidates.append({"type": "relic", "id": relic_id,
 			"label": str(data.get("name", relic_id)), "desc": str(data.get("desc", "遗物"))})
 	candidates.shuffle()
@@ -56,10 +48,8 @@ static func apply_option(option: Dictionary) -> void:
 			if unit != null:
 				ProgressManager.equip_item(unit, slot, str(option.get("id", "")))
 				ProgressManager.save_roster()
-		"blessing":
-			GameSession.run_blessings.append({"name": str(option.get("label", "祝福")), "effects": option.get("effects", [])})
 		"relic":
-			GameSession.run_relics.append(str(option.get("id", "")))
+			GameSession.add_run_relic(str(option.get("id", "")))
 
 static func _party_has_skill(roster: Array, skill_id: String) -> bool:
 	for unit in roster:
@@ -84,11 +74,8 @@ static func run_summary() -> String:
 	if GameSession.run_relics.size() > 0:
 		var relic_names: Array = []
 		for rid in GameSession.run_relics:
-			relic_names.append(str(GameDatabase.get_relic(str(rid)).get("name", rid)))
+			var name := str(GameDatabase.get_relic(str(rid)).get("name", rid))
+			var stacks := GameSession.get_relic_stack(str(rid))
+			relic_names.append("%s ×%d" % [name, stacks] if stacks > 1 else name)
 		lines.append("遗物：%s" % "、".join(relic_names))
-	if GameSession.run_blessings.size() > 0:
-		var blessing_names: Array = []
-		for b in GameSession.run_blessings:
-			blessing_names.append(str(b.get("name", "")))
-		lines.append("祝福：%s" % "、".join(blessing_names))
 	return "\n".join(lines)

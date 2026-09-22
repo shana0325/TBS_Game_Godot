@@ -157,6 +157,9 @@ func show_skill(skill_id: String) -> void:
 	else:
 		_add_metadata("触发间隔", "无冷却" if cooldown <= 0 else "%d 次行动" % cooldown)
 	_add_metadata("技能标签", "、".join(data.get("tags", [])) if not data.get("tags", []).is_empty() else "无")
+	var damage_kinds := _collect_damage_kinds(data)
+	if not damage_kinds.is_empty():
+		_add_metadata("伤害类型", "、".join(damage_kinds))
 	description_label.text = str(data.get("desc", "暂无技能说明"))
 	var extra_condition := SKILL_DETAIL_FORMATTER.extra_condition_text(condition)
 	condition_label.visible = not extra_condition.is_empty()
@@ -164,6 +167,20 @@ func show_skill(skill_id: String) -> void:
 	show()
 	move_to_front()
 	_layout_popup()
+
+# 汇总技能各效果中声明的伤害类型（去重保留顺序）；无伤害效果返回空数组。
+func _collect_damage_kinds(data: Dictionary) -> Array:
+	var kinds: Array = []
+	for effect in data.get("effects", []):
+		if not (effect is Dictionary):
+			continue
+		if not str(effect.get("type", "")) in ["damage", "percentage_damage", "chain_damage"]:
+			continue
+		var label := SKILL_DETAIL_FORMATTER._damage_kind_text(effect)
+		if kinds.has(label):
+			continue
+		kinds.append(label)
+	return kinds
 
 # 在信息网格中添加一项带标题的字段。
 func _add_metadata(title: String, value: String) -> void:

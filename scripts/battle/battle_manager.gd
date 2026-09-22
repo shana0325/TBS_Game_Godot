@@ -16,6 +16,18 @@ var deployed_units: Array = []
 var winner: String = ""
 var relic_revive_used: bool = false
 var active_damage_chain: Dictionary = {}
+# 遗物战斗运行时状态（由 RelicSystem.begin_battle 初始化，tick/伤害/回合钩子读写）。
+var relic_state: Dictionary = {}
+# 战斗经过秒数：供技能限流/时间窗等取时（tick 累加）。
+var battle_time: float = 0.0
+# 最近一次非特效命中的上下文（含 hp_lost/damage_kind/damage），供 on_hit/on_taaken_damage 技能读取。
+var active_hit: Dictionary = {}
+
+func get_battle_time() -> float:
+	return battle_time
+
+func get_active_hit() -> Dictionary:
+	return active_hit
 
 func _init(p_scenario_id: String = "battle_01", p_game = null, p_deployed_units: Array = [], p_scenario_override: Dictionary = {}) -> void:
 	scenario_id = p_scenario_id
@@ -107,7 +119,8 @@ func get_move_tiles(unit: Unit) -> Array:
 	if unit == null or not unit.alive or unit.acted or unit.moved:
 		return result
 	var start := grid.get_tile(unit.pos.x, unit.pos.y)
-	var reachable := Pathfinder.get_reachable_tiles(grid, start, unit.get_move_points())
+	var blocked := get_occupied_cells(unit)
+	var reachable := Pathfinder.get_reachable_tiles(grid, start, unit.get_move_points(), blocked)
 	for tile in reachable:
 		if tile == null:
 			continue
@@ -192,6 +205,14 @@ func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
 	_check_winner()
 	return result
 
+# 收集其他存活单位占据的格子，供移动范围和动画寻路统一避让。
+func get_occupied_cells(excluded_unit: Unit = null) -> Dictionary:
+	var blocked := {}
+	for other in units:
+		if other is Unit and other.alive and other != excluded_unit:
+			blocked[other.pos] = true
+	return blocked
+
 # 统一分发伤害后的联动；特效伤害只结算击杀和死亡，不触发新的伤害附加效果。
 func on_damage_resolved(source: Unit, target: Unit, report: Dictionary) -> void:
 	var kind := str(report.get("damage_kind", DamageSystem.EFFECT))
@@ -203,15 +224,21 @@ func on_damage_resolved(source: Unit, target: Unit, report: Dictionary) -> void:
 		active_damage_chain = previous_chain if not previous_chain.is_empty() else {"used": []}
 		var context := {"actor": source, "user": source, "target": target,
 			"damage": damage, "damage_kind": kind, "crit": bool(report.get("crit", false)),
+			"hp_lost": int(report.get("result", {}).get("hp_lost", 0)),
 			"proc_chain": active_damage_chain}
+		active_hit = context
 		if event_system != null:
 			event_system.dispatch(BattleEvent.new(EventTypes.ON_HIT, source, target, context))
 		if source != null:
 			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_HIT, context)
+			RelicSystem.on_hit(self, source, target, kind, game)
 		if target.alive:
 			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TAKEN_DAMAGE,
 				{"actor": target, "user": target, "target": source, "damage": damage,
-				"damage_kind": kind, "proc_chain": active_damage_chain})
+				"damage_kind": kind, "hp_lost": int(report.get("result", {}).get("hp_lost", 0)),
+				"proc_chain": active_damage_chain})
+			if source != null:
+				RelicSystem.on_taken_damage(self, target, source, damage, game)
 		active_damage_chain = previous_chain
 	if not bool(report.get("result", {}).get("lethal", false)):
 		return
@@ -312,10 +339,12 @@ func _find_empty_adjacent(near_pos: Vector2i) -> Vector2i:
 					return cell
 	return Vector2i(-1, -1)
 
-# 初始化战斗：应用遗物/祝福效果，启动每个单位的独立行动计时器，并触发战斗开始技能。
+# 初始化战斗：应用遗物效果，启动每个单位的独立行动计时器，并触发战斗开始技能。
 func setup_battle() -> void:
-	# 爬塔局内成长（遗物/祝福）先应用到玩家单位
+	# Run 遗物与跨战斗成长先应用到玩家单位。
 	RelicSystem.apply_run_bonuses(self)
+	# 遗物战斗运行时状态初始化（标记/计时/计数类效果）
+	RelicSystem.begin_battle(self)
 	if turn_manager != null:
 		turn_manager.setup()
 	for unit in units:
@@ -341,9 +370,11 @@ func setup_battle() -> void:
 func tick(delta: float) -> Array:
 	if turn_manager == null or winner != "":
 		return []
+	battle_time += maxf(delta, 0.0)
 	var due_units: Array = turn_manager.tick(delta)
 	var events: Array = []
 	_tick_timed_skills(delta)
+	RelicSystem.tick_battle(self, delta)
 	for unit in due_units:
 		if winner != "":
 			break
@@ -352,6 +383,7 @@ func tick(delta: float) -> Array:
 		# 行动开始 tick
 		unit.tick_turn_start(game, self)
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_START, {"actor": unit, "user": unit})
+		RelicSystem.on_turn_start(self, unit, game)
 		var prev_pos: Vector2i = unit.pos
 		var acted := _auto_act(unit)
 		if acted:
@@ -396,7 +428,10 @@ func _tick_timed_skills(delta: float) -> void:
 			var targets := Skill.units_in_range(self, unit, "enemy", skill.min_range, skill.max_range)
 			if not targets.is_empty():
 				context["target"] = targets[0]
-			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TIMER, context)
+			var casted: Array = SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TIMER, context)
+			# 回响节点：每次按秒触发技能实际施放成功后计数，累计 3 次缩短其他定时技能。
+			if not casted.is_empty():
+				SkillKit.register_timed_cast(unit, skill)
 			_check_winner()
 
 # 单位自动行动：射程内有敌人则攻击；否则移动（可能因嘲讽被引导），移动后再尝试攻击。
@@ -444,31 +479,7 @@ func get_final_damage_bonus_percent() -> float:
 func get_final_damage_multiplier() -> float:
 	return turn_manager.get_final_damage_multiplier() if turn_manager != null else 1.0
 
-# 胜利奖励：给所有存活玩家单位加经验并写回 roster，返回 {unit_type, exp_gained, levels_gained} 列表。
-func grant_victory_exp(reward: int = 100) -> Array:
-	var reports: Array = []
-	if winner != TurnManager.PLAYER_CAMP:
-		return reports
-	for unit in units:
-		if not (unit is Unit) or not unit.alive or unit.camp != TurnManager.PLAYER_CAMP:
-			continue
-		if unit.unit_id == "":
-			continue
-		var rd := _find_roster_unit(unit.unit_id)
-		if rd.is_empty():
-			continue
-		var result := ProgressManager.add_exp(rd, reward)
-		reports.append({
-			"unit_type": unit.unit_type,
-			"exp_gained": int(result.get("exp_gained", 0)),
-			"levels_gained": int(result.get("levels_gained", 0)),
-			"level": int(rd.get("level", 1))
-		})
-	ProgressManager.save_roster()
-	return reports
-
-func _find_roster_unit(unit_id: String) -> Dictionary:
-	for rd in GameDatabase.player_roster.get("units", []):
-		if str(rd.get("id", "")) == unit_id:
-			return rd
-	return {}
+# 单位级伤害倍率：委托遗物系统按来源/目标/伤害种类汇总（处决/先手/背水/层积风暴等）。
+func get_damage_bonus_percent(source: Unit, target: Unit, kind: String) -> float:
+	return RelicSystem.get_damage_bonus_percent(source, target, kind, relic_state) \
+		+ SkillKit.passive_damage_bonus(source, target)

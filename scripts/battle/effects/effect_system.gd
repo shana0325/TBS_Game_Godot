@@ -82,7 +82,12 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null,
 static func _apply_damage(user: Unit, target: Unit, config: Dictionary, game, battle = null) -> int:
 	if user == null or target == null or not target.alive:
 		return 0
-	var resolved := DamageSystem.apply(user, target, config, battle, game)
+	# JSON 技能的 damage 效果默认是主动技能直伤，未显式指定时归为技能伤害；
+	# 想要特效/普攻语义由配置里的 damage_kind 显式覆盖。
+	var damage_config := config.duplicate()
+	if not damage_config.has("damage_kind"):
+		damage_config["damage_kind"] = DamageSystem.SKILL
+	var resolved := DamageSystem.apply(user, target, damage_config, battle, game)
 	var damage: int = resolved.get("damage", 0)
 	var crit: bool = resolved.get("crit", false)
 	if game != null and game.has_method("add_log"):
@@ -113,17 +118,11 @@ static func _apply_shield(target: Unit, config: Dictionary, game) -> int:
 	var amount := int(config.get("amount", 0))
 	if amount <= 0:
 		return 0
-	var data := {
-		"name": "护罩",
-		"duration": int(config.get("duration", 2)),
-		"shield": amount,
-		"permanent": bool(config.get("permanent", false)),
-	}
-	var buff := Buff.from_data(data)
-	target.add_buff(buff)
-	if game != null and game.has_method("add_log"):
-		game.add_log("%s 获得 %d 点护罩" % [target.get_display_name(), amount])
-	return amount
+	var gained := target.gain_shield(amount, str(config.get("name", "护罩")),
+		int(config.get("duration", 2)), bool(config.get("permanent", false)))
+	if gained > 0 and game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %d 点护罩" % [target.get_display_name(), gained])
+	return gained
 
 static func _apply_max_hp_shield(target: Unit, config: Dictionary, game) -> int:
 	if target == null or not target.alive:

@@ -14,7 +14,6 @@ var pos: Vector2i = Vector2i.ZERO
 var config: Dictionary = {}
 var level: int = 1
 var star: int = 1
-var exp: int = 0
 var hp: int = 0
 var max_hp: int = 0
 var acted: bool = false
@@ -22,7 +21,6 @@ var moved: bool = false
 var alive: bool = true
 var turn_interval: float = 4.0
 var turn_timer: float = 0.0
-var allocated_stats: Dictionary = {}
 var permanent_mods: Dictionary = {}
 var percent_mods: Dictionary = {}
 var stat_multiplier: float = 1.0
@@ -31,6 +29,8 @@ var buffs: Array = []
 var equipment: Dictionary = {}
 var equipped_skill_names: Array = []
 var learned_skill_names: Array = []
+# 战斗运行时状态库（叠层/按目标计数/限流/时间窗），由技能/遗物/装备共用。
+var runtime: UnitRuntimeState = UnitRuntimeState.new()
 
 static func create_from_config(
 	unit_type: String,
@@ -50,9 +50,7 @@ static func create_from_config(
 	unit.config = config_data
 	unit.level = int(roster_data.get("level", 1))
 	unit.star = clampi(int(roster_data.get("star", 1)), 1, MAX_STARS)
-	unit.exp = int(roster_data.get("exp", 0))
 	unit.turn_interval = float(config_data.get("turn_interval", 4.0))
-	unit.allocated_stats = roster_data.get("allocated_stats", {})
 	unit.permanent_mods = roster_data.get("permanent_mods", {})
 	# 敌方属性倍率（爬塔敌人按层成长用，玩家为 1.0）
 	unit.stat_multiplier = float(roster_data.get("stat_multiplier", 1.0))
@@ -72,7 +70,7 @@ func get_base_stat(stat: String) -> int:
 	if stat in ["hp", "attack", "defense"]:
 		base_value = roundi(float(base_value) * get_star_multiplier(star))
 		base_value = roundi(float(base_value) * stat_multiplier)
-	return base_value + int(allocated_stats.get(stat, 0))
+	return base_value
 
 func get_stat(stat: String) -> int:
 	var value := get_base_stat(stat)
@@ -176,6 +174,7 @@ func take_damage(amount: int, game = null) -> Dictionary:
 func heal(amount: int, source: Unit = null) -> int:
 	if not alive or amount <= 0:
 		return 0
+	amount = _amplify_player_vital(source, amount)
 	var old_hp := hp
 	hp = mini(max_hp, hp + amount)
 	var healed := hp - old_hp
@@ -183,9 +182,57 @@ func heal(amount: int, source: Unit = null) -> int:
 	heal_src.healing_done += healed
 	return healed
 
+# 愈心祭司：我方单位施加的治疗/护盾数值 +10%；目标低于 40% 生命时改为 +20%。
+func _amplify_player_vital(source: Unit, amount: int) -> int:
+	if source == null or source.camp != TurnManager.PLAYER_CAMP or camp != TurnManager.PLAYER_CAMP:
+		return amount
+	if not GameSession.run_relics.has("revitalize_amp"):
+		return amount
+	var amp := 0.10
+	if float(hp) / float(maxi(max_hp, 1)) < 0.4:
+		amp = 0.20
+	return maxi(1, roundi(float(amount) * (1.0 + amp)))
+
 func add_buff(buff: Buff) -> void:
 	if buff != null:
 		buffs.append(buff)
+
+# 当前所有独立护盾实例的剩余总量。
+func get_total_shield() -> int:
+	var total := 0
+	for buff in buffs:
+		total += maxi(0, buff.shield)
+	return total
+
+# 查询当前护盾上限；技能可提高比例，或通过 unlimited_shield 将其改为无上限。
+func get_shield_cap() -> int:
+	var cap_percent := 1.0
+	for skill in skills:
+		if not (skill is Skill):
+			continue
+		if skill.unlimited_shield or skill.shield_cap_percent < 0.0:
+			return -1
+		cap_percent = maxf(cap_percent, skill.shield_cap_percent)
+	return maxi(0, roundi(float(max_hp) * cap_percent))
+
+# 统一护盾入口：各份护盾独立保存持续时间，总量由 get_shield_cap() 的单位规则限制。
+func gain_shield(amount: int, shield_name: String = "护盾", duration: int = -1, permanent: bool = true) -> int:
+	if not alive or amount <= 0:
+		return 0
+	if camp == TurnManager.PLAYER_CAMP and GameSession.run_relics.has("revitalize_amp"):
+		var amp := 0.10
+		if float(hp) / float(maxi(max_hp, 1)) < 0.4:
+			amp = 0.20
+		amount = maxi(1, roundi(float(amount) * (1.0 + amp)))
+	var shield_cap := get_shield_cap()
+	var gained := amount if shield_cap < 0 else mini(amount, maxi(0, shield_cap - get_total_shield()))
+	if gained <= 0:
+		return 0
+	var data := {"name": shield_name, "duration": duration, "shield": gained,
+		"permanent": permanent, "is_beneficial": true}
+	add_buff(Buff.from_data(data))
+	runtime.bump("shield_credit", gained)
+	return gained
 
 # 推进回合开始状态，并把战斗上下文传给持续伤害结算。
 func tick_turn_start(game = null, battle = null) -> void:
@@ -260,7 +307,7 @@ func add_skill(skill: Skill) -> void:
 
 func has_skill(skill_name: String) -> bool:
 	for skill in skills:
-		if skill.name == skill_name:
+		if skill.name == skill_name or skill.skill_id == skill_name:
 			return true
 	return false
 

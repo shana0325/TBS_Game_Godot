@@ -1,4 +1,4 @@
-# TBS_Game_Godot 交接文档
+﻿# TBS_Game_Godot 交接文档
 
 > 交接时间：2026-08-28（UI/流程同步）
 > 项目路径：`D:\Shana Program\文档\TBS_Game_Godot`
@@ -15,7 +15,7 @@
 - **自动战斗**：射程内有敌人→攻击；无→移动再尝试攻击，直到一方全灭
 - **事件触发技能**：技能按触发时机（攻击前/攻击时/受击/行动/击杀等）自动施放，非手动选择
 - 完整流程：主菜单 → 选关 → 部署 → 自动战斗 → 结算
-- 成长：属性/技能/装备三子页、胜利奖励经验写回编成
+- 成长：升星、技能书学习与遗忘、装备和跨战斗永久强化
 - 素材：动作图（站立/移动/攻击/死亡）+ 中文字体 + 可扩展 mod 系统
 
 最近一次验证结果：
@@ -96,7 +96,6 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 
 - 单位模板 `units.json`
 - 玩家编成数据 `player_roster.json`
-- 角色成长点 `allocated_stats`
 - 永久强化 `permanent_mods`（跨战斗保留，如固有技能"以战养战"击杀成长）
 - 固有技能（`innate_skill`，始终生效）与已装备的通用技能
 - 装备属性修正与装备授予技能
@@ -139,7 +138,7 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 
 ### 成长与装备（M4 新增）
 
-- `scripts/core/progress_manager.gd`：成长与背包逻辑（加点/升星/学技能/装备/换装备/技能书/写回 player_roster.json），纯逻辑不依赖 UI。
+- `scripts/core/progress_manager.gd`：成长与背包逻辑（升星、技能书学习/遗忘、技能装备、装备更换、写回 player_roster.json），纯逻辑不依赖 UI。
 - `scripts/core/game_database.gd`：加载/迁移玩家存档；五个基础角色均为持久化角色，旧存档启动时自动补齐缺少的基础角色。
 - `scripts/screens/progression_screen.gd`：成长界面，两段式（先选角色再成长），属性/技能/装备三个子页；右侧整体属性总览面板（含标签、星级、槽位和装备修正）实时刷新。
 - `scenes/progression_screen.tscn`：成长界面场景；主菜单新增"队伍编成"入口。
@@ -194,7 +193,7 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 
 ### 技能体系双轨与养成改造（2026-08-11）
 
-- **固有技能 + 通用技能**：units.json 新增 `innate_skill`（Hero 固有"以战养战"）；skills.json 现有技能标记 `common: true` 归入通用技能池（编成中学习/装备，消耗技能点）。
+- **固有技能 + 通用技能**：units.json 使用 `innate_skill` 定义固有技能；`common: true` 的通用技能通过技能书学习，并受角色通用技能槽限制。
 - **标签与检索**：单位模板支持 `tags`；技能支持 `tags` 与 `searchable`。不可检索技能排除常规学习、敌人随机技能和爬塔随机技能奖励，但可由指定逻辑直接获取。
 - **星级与技能槽**：单位从 1 星开始，当前最高 3 星；每次升星使初始生命/攻击/护甲提高 50%。通用技能槽为 1/2/3 格，升星最多增加 2 格。
 - **永久属性强化**：新效果类型 `permanent_stat`（persist=true 全局永久写回编成；false 仅本局永久）；Unit 新增 `permanent_mods` 字段；一并修复"max_hp 不吃装备/Buff 修正"的旧问题。
@@ -217,16 +216,31 @@ data/player/player_roster.json       # 玩家编成、成长、技能、装备�
 设计方向见 `docs/爬塔模式设计方向.md`；本阶段为最小闭环：
 
 - **入口**：主菜单新增"爬塔模式"（与快速对战并存）；沿用当前编成自动部署。
-- **会话**：`GameSession` 新增 `mode / tower_floor / run_relics / run_blessings` 与 `scenario_override`（运行时覆盖关卡字典）。
+- **会话**：`GameSession` 使用 `mode / tower_floor / run_relics / run_relic_stacks` 与 `scenario_override`；遗物 ID 唯一保存，可重复遗物的层数单独记录。
 - **层生成**：`TowerGenerator` 按层生成敌人（使用四种职业模板，敌人按层配技能成长；精英/Boss 机制已移除，待重设计）。
 - **背包**：部署界面右侧操作区提供“背包”按钮。悬浮窗以网格显示升星道具与技能书，点击/悬停显示名称和简介；技能书可直接拖到我方单位，满槽时弹出替换列表，取消不消耗技能书。点击背包外区域自动关闭。首次存档发放 99 个升星道具和每种可学习通用技能书 1 本用于测试。
 - **技能详情**：`skill_detail_formatter.gd` 统一生成单位信息卡和背包技能书使用的技能详情；部署底部未上场角色卡也可直接接收技能书。
-- **奖励**：胜利进入 `reward_screen` 三选一（技能书/装备/祝福/遗物，`RewardGenerator` 生成与应用）；技能书和装备奖励写回编成/背包。
+- **奖励**：胜利进入 `reward_screen` 三选一（技能书/装备/遗物，`RewardGenerator` 生成与应用）；攻击、防御、生命数值奖励改为可重复遗物，行动速度祝福已删除。
 - **狂暴**：`TurnManager` 在 60 秒后每 30 秒将双方最终伤害提高 50%；`BattleScreen` 在战斗时间右侧显示当前增幅，普攻、技能、百分比伤害和持续伤害统一应用。
-- **遗物系统**：`data/relic/relics.json` 首期 5 个（战神徽章/急速披风/鲜血吊坠/不灭徽记/荆棘之心）；`RelicSystem` 战斗开始应用（stat_percent / turn_speed / 永久反射 Buff），事件钩子 on_kill 回血、on_first_death 复活（每场一次）。Unit 新增 `percent_mods`（百分比属性）、Buff 新增 `permanent` 标记（不衰减）。
+- **遗物系统**：`RelicSystem.apply_run_bonuses_to_unit` 是战斗与部署预览共用的完整数值入口；可重复遗物按层叠加 `stat_percent`，部署阶段即可查看最终攻击、防御和生命。力量、守御、生命祝福不设叠加上限；其他可重复遗物仍可通过可选 `max_stacks` 单独限制。
+- **护盾系统**：所有护盾通过 `Unit.gain_shield` 进入，并由 `Unit.get_shield_cap` 查询上限；默认上限为最大生命的 100%，技能可用 `shield_cap_percent` 提高比例或用 `unlimited_shield` 设为无上限。护盾仅属于本场新建单位，不跨战斗保留；每份护盾仍是独立 Buff，分别计算持续时间，受伤时按获得顺序消耗。战场护盾条统一按“总护盾/最大生命”显示，角色基础属性显示当前护盾与上限。
 - **敌方数值成长（配置化）**：`data/tower/tower_config.json` 提供 `enemy_growth_rate`（默认 1.04，第一轮测试参数，按战斗模拟结果调整）；敌人属性倍率 `Multiplier = rate^(层数-1)` 作用于 HP/ATK/DEF（Unit 新增 `stat_multiplier`）；技能数量按层段生成（1-10:0 / 11-20:1 / 21-30:2 / 31+:3，上限 3）。技能 tags 暂不参与抽取（仅预留）。参考 `docs/爬塔敌方数值设计文档_V1.md`。
 
 已知边界：不灭徽记复活仅挂"攻击致死"路径（DOT/技能间接致死暂不触发）；商店/事件/31+ 无限层未做。
+
+### 遗物体系重做 + 通用技能数据（2026-09-18）
+
+依据 `docs/LoL符文_遗物一一对应表.md`：旧 5 个遗物全部删除，`data/relic/relics.json` 包含 17 个 LoL 符文对应遗物和 3 个可重复数值遗物；`data/skill/skills.json` 在原有 12 个技能后追加 16 个通用技能，机制由 `scripts/battle/skills/code/` 下的代码技能实现。
+
+**遗物机制实现状态（已完成）**：
+
+- **伤害倍率聚合**：`DamageSystem` 增加单位级伤害倍率钩子，`BattleManager.get_damage_bonus_percent` 委托 `RelicSystem.get_damage_bonus_percent(source,target,kind,state)`。覆盖：处决（<40%+12%）、先手（>60%+12%）、背水为战（<50%+10%/<25%+20%）、层积风暴（每层+1%）、猎魔嗅探（标记目标+20%）。特效伤害不享受，避免无限联动。
+- **跨层成长**：`RelicSystem._apply_effects` 支持 `glayer_stat_percent`（叠攻/沉淀韧甲，按 tower_floor 累计到 percent_mods）与 `glayer_haste`（冷却刻印，按 haste=100·r/(1-r) 折算 actual）。
+- **击杀触发**：`on_kill` 实现凯旋号角（全队回已损+击杀者额外）与噬骸成长（全队+1 永久 HP）。
+- **战斗与 Run 状态**：单场计数放在 `manager.relic_state`；收割之魂、灵能循环、不朽血契和噬骸成长的跨战斗成长放在 `GameSession.run_relic_state`，快速战斗、爬塔及后续模式创建单位时都会重新应用，部署预览也使用同一入口。战斗结束时成长随玩家存档写入，重启后点“继续游戏”会恢复；切换或结束模式不会清空成长，仅主菜单“开始新游戏”会清空。行军口粮按第 1~10 秒整秒结算；守护之盾按受击单位自己的行动周期限流。
+- **愈心祭司**：`Unit.heal` + `EffectSystem._apply_shield` + `RelicSystem._apply_shield_to` 三处放大治疗/护盾 +10%（目标<40% 时 +20%）。
+
+**通用技能实现状态（已完成）**：16 个技能均以 `CodeSkill` 实现并登记到 `skill_code_registry.gd`。`tests/skill_relic_verify_test.gd` 会检查全部技能触发，并专项验证跨战斗遗物成长、低生命单位口粮回血和守护之盾限流。
 
 > 已取消：i18n（仅中文版）。文档见 `docs/skills/SKILL_SYSTEM.md`（含触发时机/效果实现状态与待办）。
 
@@ -257,7 +271,7 @@ Test-Path 'D:\Shana Program\文档\TBS_Game_Godot\project.godot'
 
 1. 主菜单 → 选关 → 部署 → 战斗，双方单位按各自 `turn_interval` 自动行动。
 2. 观察动作图切换（站立/移动/攻击）、日志技能触发、中文技能名。
-3. 胜负判定后自动进入结算（胜利发放经验）。
+3. 胜负判定后自动进入结算；爬塔胜利进入奖励选择。
 4. 点击单位查看信息面板（含技能/Buff/装备）。
 
 技能/效果设计规范见 `docs/skills/SKILL_SYSTEM.md`；mod 角色制作见 `docs/MOD_GUIDE.md`。

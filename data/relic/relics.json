@@ -1,42 +1,179 @@
 {
-  "war_badge": {
-    "name": "战神徽章",
-    "desc": "全体攻击 +15%",
-    "rarity": 1,
-    "effects": [
-      { "type": "stat_percent", "stat": "attack", "percent": 0.15 }
-    ]
-  },
-  "swift_cloak": {
-    "name": "急速披风",
-    "desc": "全体行动速度 +10%",
-    "rarity": 1,
-    "effects": [
-      { "type": "turn_speed", "percent": 0.10 }
-    ]
-  },
-  "blood_pendant": {
-    "name": "鲜血吊坠",
-    "desc": "击杀敌人时恢复 10% 生命",
+  "triumph_horn": {
+    "name": "凯旋号角",
+    "desc": "我方单位击杀敌人时，全体存活友军各回复 5% 已损生命；击杀者额外回复 2.5% 最大生命",
     "rarity": 2,
-    "triggers": [
-      { "event": "on_kill", "heal_percent": 0.10 }
-    ]
+    "mechanic": "击杀→全队回已损+击杀者回最大",
+    "effects": [],
+    "triggers": []
   },
-  "undying_emblem": {
-    "name": "不灭徽记",
-    "desc": "首次死亡后复活一次（满血）",
+  "haste_legacy": {
+    "name": "叠攻刻印",
+    "desc": "本局每进入新的一层，全队攻击力 +1%",
     "rarity": 2,
-    "triggers": [
-      { "event": "on_first_death", "revive": true }
-    ]
-  },
-  "thorn_heart": {
-    "name": "荆棘之心",
-    "desc": "受到伤害时反射 30%（反射比例可叠加）",
-    "rarity": 1,
+    "mechanic": "lazy:layer_attack_percent",
     "effects": [
-      { "type": "reflect", "percent": 0.30 }
-    ]
+      { "type": "glayer_stat_percent", "stat": "attack", "percent_per_floor": 0.01 }
+    ],
+    "growth_display": [{ "label": "全队攻击力", "source": "tower_floor", "offset": -1, "scale": 0.01, "format": "percent" }],
+    "triggers": []
+  },
+  "cd_legacy": {
+    "name": "冷却刻印",
+    "desc": "本局每进入新的一层，全队按秒触发技能的间隔缩短 1%（至多 8%）；不影响按行动次数冷却的技能",
+    "rarity": 2,
+    "mechanic": "lazy:layer_haste_cap8",
+    "effects": [
+      { "type": "glayer_haste", "percent_per_floor": 0.01, "cap": 0.08 }
+    ],
+    "growth_display": [{ "label": "按秒技能间隔缩短", "source": "tower_floor", "offset": -1, "scale": 0.01, "cap": 0.08, "format": "percent" }],
+    "triggers": []
+  },
+  "coup_grace": {
+    "name": "处决",
+    "desc": "我方对当前生命低于 40% 的敌人造成的普攻或技能伤害 +12%；特效伤害不享受加成",
+    "rarity": 3,
+    "mechanic": "damage_bonus_low_hp:40%→+12%",
+    "effects": [],
+    "triggers": []
+  },
+  "cut_down": {
+    "name": "先手",
+    "desc": "我方对当前生命高于 60% 的敌人造成的普攻或技能伤害 +12%；特效伤害不享受加成",
+    "rarity": 3,
+    "mechanic": "damage_bonus_high_hp:60%→+12%",
+    "effects": [],
+    "triggers": []
+  },
+  "last_stand": {
+    "name": "背水为战",
+    "desc": "我方单位生命低于 50% 时，普攻与技能伤害 +10%；低于 25% 时改为 +20%（按伤害发生时的生命比例判断）",
+    "rarity": 3,
+    "mechanic": "damage_bonus_self_low_hp:50%→+10%,25%→+20%",
+    "effects": [],
+    "triggers": []
+  },
+  "harvest_soul": {
+    "name": "收割之魂",
+    "desc": "我方对生命低于 25% 的敌人首次造成普攻或技能伤害时，追加 10 点特效伤害；每个目标每场一次。每次触发后追加伤害永久 +10",
+    "rarity": 3,
+    "mechanic": "first_hit_low_hp:25%→age10,永久成长+10",
+    "effects": [],
+    "growth_display": [{ "label": "永久追加伤害", "source": "run", "key": "harvest_bonus", "format": "number", "suffix": " 点" }],
+    "triggers": []
+  },
+  "sixth_sense": {
+    "name": "猎魔嗅探",
+    "desc": "战斗开始时标记敌方攻击力最高的单位 8 秒；我方对该目标造成的普攻和技能伤害 +20%",
+    "rarity": 3,
+    "mechanic": "battle_start->mark_highest_atk +20%",
+    "effects": [],
+    "triggers": []
+  },
+  "airy_guardian": {
+    "name": "守护精灵",
+    "desc": "我方单位造成普攻或技能伤害时，若目标生命低于 40%，追加 30% 攻击力的特效伤害；否则给当前生命比例最低的友军施加施放者攻击力 60% 的护盾。每个敌方单位每 6 秒至多触发一次",
+    "rarity": 3,
+    "mechanic": "on_hit:低血→特效30%ATK / 否则→最低友军护盾60%ATK cd6s",
+    "effects": [],
+    "triggers": []
+  },
+  "manaflow_band": {
+    "name": "灵能循环",
+    "desc": "我方单位每累计 3 次造成技能伤害，本局最大生命 +1%（至多 +8%）；达到上限后，每次再累计 3 次改为回复 3% 已损生命",
+    "rarity": 3,
+    "mechanic": "skill_damage_count:3→hp+1%cap8%",
+    "effects": [],
+    "growth_display": [{ "label": "最大生命", "source": "unit", "key": "manaflow_percent", "format": "percent" }],
+    "triggers": []
+  },
+  "gathering_storm": {
+    "name": "层积风暴",
+    "desc": "本局每进入一层新的塔层，全队普攻与技能伤害永久 +1%",
+    "rarity": 2,
+    "mechanic": "lazy:layer_damage_percent",
+    "effects": [],
+    "growth_display": [{ "label": "全队普攻与技能伤害", "source": "tower_floor", "offset": -1, "scale": 0.01, "format": "percent" }],
+    "triggers": []
+  },
+  "grasp_undying": {
+    "name": "不朽血契",
+    "desc": "我方单位每隔 4 秒获得一次下次普攻强化：该普攻追加自身最大生命 3% 的真实特效伤害并回复等量最大生命；若强化普攻击杀敌人，自身最大生命永久 +5",
+    "rarity": 3,
+    "mechanic": "on_timer4s->empower_next_attack 3%max true + kill永久+5",
+    "effects": [],
+    "growth_display": [{ "label": "最大生命", "source": "unit", "key": "grasp_hp", "format": "number", "suffix": " 点" }],
+    "triggers": []
+  },
+  "guardian_cord": {
+    "name": "守护之盾",
+    "desc": "我方单位一次受到至少自身最大生命 10% 的实际生命损失时，获得自身最大生命 8% 的护盾；每个受击单位每回合至多触发一次",
+    "rarity": 3,
+    "mechanic": "on_taken_damage:loss>=10%→shield8%max per_turn",
+    "effects": [],
+    "triggers": []
+  },
+  "conditioning_late": {
+    "name": "沉淀韧甲",
+    "desc": "本局每进入新的一层，全队基础护甲 +1%（按战斗开始时基础护甲计算，不对已有百分比收益复利）",
+    "rarity": 2,
+    "mechanic": "lazy:layer_defense",
+    "effects": [
+      { "type": "glayer_stat_percent", "stat": "defense", "percent_per_floor": 0.01 }
+    ],
+    "growth_display": [{ "label": "全队基础护甲", "source": "tower_floor", "offset": -1, "scale": 0.01, "format": "percent" }],
+    "triggers": []
+  },
+  "overgrowth": {
+    "name": "噬骸成长",
+    "desc": "本局每个敌人死亡，全队最大生命永久 +1",
+    "rarity": 2,
+    "mechanic": "on_kill_any:enemy→全队hp+1",
+    "effects": [],
+    "growth_display": [{ "label": "全队最大生命", "source": "run", "key": "overgrowth_hp", "format": "number", "suffix": " 点" }],
+    "triggers": []
+  },
+  "revitalize_amp": {
+    "name": "愈心祭司",
+    "desc": "我方施加的治疗和护盾数值 +10%；目标当前生命低于 40% 时改为 +20%（按实际获得的护盾计算）",
+    "rarity": 2,
+    "mechanic": "heal_shield_amp:10%/20%low_40%",
+    "effects": [],
+    "triggers": []
+  },
+  "biscuit_delivery": {
+    "name": "行军口粮",
+    "desc": "每场战斗开始后前 10 秒，全队存活单位每秒回复自身最大生命 5%",
+    "rarity": 1,
+    "mechanic": "battle_start->10s ticks 5%max/s",
+    "effects": [],
+    "triggers": []
+  },
+  "power_blessing": {
+    "name": "力量祝福",
+    "desc": "全体单位攻击力 +10%；可重复获得并叠加",
+    "rarity": 1,
+    "repeatable": true,
+    "mechanic": "repeatable_team_attack_percent",
+    "effects": [{ "type": "stat_percent", "stat": "attack", "percent": 0.10 }],
+    "triggers": []
+  },
+  "guard_blessing": {
+    "name": "守御祝福",
+    "desc": "全体单位防御力 +10%；可重复获得并叠加",
+    "rarity": 1,
+    "repeatable": true,
+    "mechanic": "repeatable_team_defense_percent",
+    "effects": [{ "type": "stat_percent", "stat": "defense", "percent": 0.10 }],
+    "triggers": []
+  },
+  "vitality_blessing": {
+    "name": "生命祝福",
+    "desc": "全体单位最大生命 +20%；可重复获得并叠加",
+    "rarity": 1,
+    "repeatable": true,
+    "mechanic": "repeatable_team_hp_percent",
+    "effects": [{ "type": "stat_percent", "stat": "hp", "percent": 0.20 }],
+    "triggers": []
   }
 }

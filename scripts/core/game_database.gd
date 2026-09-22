@@ -104,6 +104,11 @@ func _sanitize_user_roster() -> void:
 		var old_star := int(unit.get("star", 1))
 		unit["star"] = clampi(old_star, 1, Unit.MAX_STARS)
 		changed = changed or old_star != int(unit["star"])
+		# 旧版经验、加点和技能点机制已经移除，载入时清掉遗留字段及其属性收益。
+		for obsolete_key in ["exp", "stat_points", "skill_points", "allocated_stats"]:
+			if unit.has(obsolete_key):
+				unit.erase(obsolete_key)
+				changed = true
 		for list_key in ["learned_skills", "equipped_skills", "extra_skills"]:
 			var old_list: Array = unit.get(list_key, [])
 			var clean_list: Array = []
@@ -149,10 +154,6 @@ func _default_unit_entry(unit_type: String, unit_id: String) -> Dictionary:
 		"type": unit_type,
 		"star": 1,
 		"level": 1,
-		"exp": 0,
-		"stat_points": 0,
-		"skill_points": 0,
-		"allocated_stats": {},
 		"permanent_mods": {},
 		"equipment": {},
 		"learned_skills": [],
@@ -187,8 +188,16 @@ func _merge_code_skills() -> void:
 			push_error("代码技能必须继承 CodeSkill: %s" % skill_id)
 			continue
 		var meta: Dictionary = (inst as CodeSkill).export_meta()
-		meta["code_script"] = script
-		skills[skill_id] = meta
+		# 保留 JSON 元数据（中文 name/desc/interval_seconds/mechanic 等），
+		# 代码元数据覆盖行为字段（trigger/condition/cooldown…），并挂接脚本。
+		var base: Dictionary = skills.get(skill_id, {}).duplicate()
+		var json_interval := float(base.get("interval_seconds", 0.0))
+		base.merge(meta, true)
+		# 代码技能未显式设置按秒计时间隔时（默认为 0），保留 JSON 里由数据调优的 interval_seconds
+		if float(meta.get("interval_seconds", 0.0)) <= 0.0 and json_interval > 0.0:
+			base["interval_seconds"] = json_interval
+		base["code_script"] = script
+		skills[skill_id] = base
 
 func _load_json(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):

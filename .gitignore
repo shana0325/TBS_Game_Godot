@@ -8,5 +8,8 @@
 # IDE 配置
 .idea/
 
+# 本地沙箱重定向 Godot 用户目录（非项目产物）
+_godot_appdata/
+
 # Web 导出构建产物（仅进入 gh-pages 分支）
 web_build/
