@@ -6,6 +6,7 @@ extends Node
 
 const BUILTIN_DIR := "res://assets/units/"
 const SKILL_ICON_DIR := "res://assets/skills/"
+const RELIC_ICON_DIR := "res://assets/relics/"
 var _skill_icon_files: Array[String] = []
 
 # 技能名到图标文件名关键词的映射。关键词直接对应素材文件名，不依赖图片内容检查。
@@ -57,6 +58,11 @@ func get_skill_icon(skill_id: String, skill_name: String = "") -> Texture2D:
 	if path != "":
 		return load(path)
 	return null
+
+# 获取遗物专用图标；文件名与遗物 id 一一对应。
+func get_relic_icon(relic_id: String) -> Texture2D:
+	var path := RELIC_ICON_DIR + relic_id + ".png"
+	return load(path) if _res_exists(path) else null
 
 func _find_skill_icon_path(skill_id: String, skill_name: String) -> String:
 	var files := _get_skill_icon_files()

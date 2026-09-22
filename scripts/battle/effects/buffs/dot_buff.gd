@@ -31,6 +31,6 @@ func on_turn_start(unit, game, battle = null) -> void:
 	if unit == null or not unit.alive:
 		return
 	DamageSystem.apply(caster, unit, {"damage_kind": DamageSystem.EFFECT,
-		"raw_damage": raw, "true_damage": true}, battle, game)
+		"raw_damage": raw}, battle, game)
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 因 %s 受到 %d 点持续伤害（剩余 %d 次）" % [unit.get_display_name(), base_name, raw, hits_remaining])

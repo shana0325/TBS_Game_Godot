@@ -35,7 +35,8 @@ func run() -> bool:
 	GameSession.mode = GameSession.MODE_TOWER
 	GameSession.tower_floor = 3   # floors=2，激活跨层成长类遗物
 	GameSession.run_relics = RELIC_IDS
-	GameSession.run_blessings = []
+	GameSession.run_relic_stacks = {}
+	GameSession.run_relic_state.clear()
 
 	var scenario := {
 		"width": 12, "height": 8,
@@ -122,11 +123,183 @@ func run() -> bool:
 	if not zero.is_empty():
 		print("未触发技能(条件未满足可能): %s" % "、".join(zero))
 
+	var persistent_ok := _verify_persistent_growth()
+	var biscuit_ok := _verify_biscuit_rounding()
+	var guardian_ok := _verify_guardian_per_unit_turn()
+	var armor_ok := _verify_effect_damage_uses_armor()
+	var grasp_ok := _verify_grasp_base_attack_kill()
 	var pass_ok := p != null and p.skills.size() == CHECK_SKILLS.size() \
-		and p.damage_dealt > 0 and p.healing_done > 0 and not fired.is_empty()
+		and p.damage_dealt > 0 and p.healing_done > 0 and zero.is_empty() \
+		and persistent_ok and biscuit_ok and guardian_ok and armor_ok and grasp_ok
 	if battle.winner == "":
 		print("警告：战斗超时未分出胜负")
 	return pass_ok
+
+# 验证成长写入 Run 状态，并能在下一场新建单位时重新应用。
+func _verify_persistent_growth() -> bool:
+	# 主战斗没有必然产生技能伤害，单独驱动 3 次技能命中验证灵能循环。
+	var source := Unit.new()
+	source.unit_type = "Warrior"
+	source.camp = TurnManager.PLAYER_CAMP
+	source.alive = true
+	source.max_hp = 100
+	source.hp = 100
+	var target := Unit.new()
+	target.unit_type = "Warrior"
+	target.camp = TurnManager.ENEMY_CAMP
+	target.alive = true
+	target.max_hp = 1000
+	target.hp = 1000
+	var trigger_manager := BattleManager.new()
+	trigger_manager.units = [source, target]
+	RelicSystem.begin_battle(trigger_manager)
+	for i in 3:
+		RelicSystem.on_hit(trigger_manager, source, target, DamageSystem.SKILL, self)
+	var state: Dictionary = GameSession.run_relic_state
+	if int(state.get("harvest_bonus", 0)) <= 0 or int(state.get("overgrowth_hp", 0)) <= 0:
+		push_error("收割之魂或噬骸成长没有写入 Run 级状态")
+		return false
+	var units: Dictionary = state.get("units", {})
+	var growth: Dictionary = units.get("type:Warrior", {})
+	if float(growth.get("manaflow_percent", 0.0)) <= 0.0 \
+			and int(growth.get("grasp_hp", 0)) <= 0:
+		push_error("单位遗物成长没有写入 Run 级状态")
+		return false
+	var config: Dictionary = GameDatabase.get_unit("Warrior")
+	var fresh := Unit.create_from_config("Warrior", TurnManager.PLAYER_CAMP,
+		Vector2i.ZERO, config, {}, GameDatabase)
+	var before := fresh.max_hp
+	var manager := BattleManager.new()
+	manager.units = [fresh]
+	RelicSystem.apply_run_bonuses(manager)
+	if fresh.max_hp <= before:
+		push_error("下一场战斗没有重新应用 Run 级生命成长")
+		return false
+	return true
+
+# 验证低生命单位的行军口粮按整秒结算，不受逐帧取整影响。
+func _verify_biscuit_rounding() -> bool:
+	var old_relics := GameSession.run_relics.duplicate()
+	GameSession.run_relics = ["biscuit_delivery"]
+	var unit := Unit.new()
+	unit.camp = TurnManager.PLAYER_CAMP
+	unit.alive = true
+	unit.max_hp = 100
+	unit.hp = 1
+	var manager := BattleManager.new()
+	manager.units = [unit]
+	RelicSystem.begin_battle(manager)
+	RelicSystem.tick_battle(manager, 1.0)
+	GameSession.run_relics = old_relics
+	if unit.hp != 6:
+		push_error("行军口粮首秒应回复 5 点，实际生命=%d" % unit.hp)
+		return false
+	return true
+
+# 验证守护之盾按受击单位自己的行动周期限流。
+func _verify_guardian_per_unit_turn() -> bool:
+	var old_relics := GameSession.run_relics.duplicate()
+	GameSession.run_relics = ["guardian_cord"]
+	var unit := Unit.new()
+	unit.camp = TurnManager.PLAYER_CAMP
+	unit.alive = true
+	unit.max_hp = 100
+	unit.hp = 100
+	var other := Unit.new()
+	other.camp = TurnManager.PLAYER_CAMP
+	other.alive = true
+	var manager := BattleManager.new()
+	manager.units = [unit, other]
+	RelicSystem.begin_battle(manager)
+	RelicSystem.on_taken_damage(manager, unit, null, 10, self)
+	var first := unit.runtime.stack_get("shield_credit")
+	RelicSystem.on_turn_start(manager, other, self)
+	RelicSystem.on_taken_damage(manager, unit, null, 10, self)
+	var after_other_turn := unit.runtime.stack_get("shield_credit")
+	RelicSystem.on_turn_start(manager, unit, self)
+	RelicSystem.on_taken_damage(manager, unit, null, 10, self)
+	var after_own_turn := unit.runtime.stack_get("shield_credit")
+	GameSession.run_relics = old_relics
+	if first <= 0 or after_other_turn != first or after_own_turn <= first:
+		push_error("守护之盾没有按受击单位自己的行动周期限流")
+		return false
+	return true
+
+# 验证收割之魂与灼魂焚身均为受护甲影响的普通特效伤害。
+func _verify_effect_damage_uses_armor() -> bool:
+	var old_relics := GameSession.run_relics.duplicate()
+	var old_state := GameSession.run_relic_state.duplicate(true)
+	GameSession.run_relics = ["harvest_soul"]
+	GameSession.run_relic_state.clear()
+	var source := Unit.new()
+	source.config = {"atk": 100}
+	source.camp = TurnManager.PLAYER_CAMP
+	source.alive = true
+	source.max_hp = 100
+	source.hp = 100
+	var target := Unit.new()
+	target.config = {"defense": 100}
+	target.camp = TurnManager.ENEMY_CAMP
+	target.alive = true
+	target.max_hp = 100
+	target.hp = 20
+	var manager := BattleManager.new()
+	manager.units = [source, target]
+	RelicSystem.begin_battle(manager)
+	RelicSystem.on_hit(manager, source, target, DamageSystem.ATTACK, self)
+	var harvest_loss := 20 - target.hp
+
+	var dot_target := Unit.new()
+	dot_target.config = {"defense": 100}
+	dot_target.camp = TurnManager.ENEMY_CAMP
+	dot_target.alive = true
+	dot_target.max_hp = 100
+	dot_target.hp = 100
+	var dot := DotBuff.new()
+	dot.caster = source
+	dot.atk_percent = 0.08
+	dot.hits_remaining = 1
+	dot.on_turn_start(dot_target, self, manager)
+	var dot_loss := 100 - dot_target.hp
+	GameSession.run_relics = old_relics
+	GameSession.run_relic_state = old_state
+	if harvest_loss <= 0 or harvest_loss >= 10 or dot_loss <= 0 or dot_loss >= 8:
+		push_error("普通特效伤害未正确经过护甲：收割=%d，灼烧=%d" % [harvest_loss, dot_loss])
+		return false
+	return true
+
+# 验证基础普攻先击杀目标时，已充能的不朽血契仍把该次攻击视为强化普攻击杀。
+func _verify_grasp_base_attack_kill() -> bool:
+	var old_relics := GameSession.run_relics.duplicate()
+	var old_state := GameSession.run_relic_state.duplicate(true)
+	GameSession.run_relics = ["grasp_undying"]
+	GameSession.run_relic_state.clear()
+	var source := Unit.new()
+	source.unit_type = "Warrior"
+	source.camp = TurnManager.PLAYER_CAMP
+	source.alive = true
+	source.max_hp = 100
+	source.hp = 50
+	var target := Unit.new()
+	target.unit_type = "Warrior"
+	target.camp = TurnManager.ENEMY_CAMP
+	target.alive = true
+	target.max_hp = 10
+	target.hp = 10
+	var manager := BattleManager.new()
+	manager.units = [source, target]
+	RelicSystem.begin_battle(manager)
+	manager.relic_state["grasp_grant"][source.get_instance_id()]["empowered"] = true
+	DamageSystem.apply(source, target, {"damage_kind": DamageSystem.ATTACK,
+		"raw_damage": 20, "true_damage": true}, manager, self)
+	var growth: Dictionary = GameSession.run_relic_state.get("units", {}).get("type:Warrior", {})
+	var ok := not target.alive and int(growth.get("grasp_hp", 0)) == 5 and source.max_hp == 105
+	GameSession.run_relics = old_relics
+	GameSession.run_relic_state = old_state
+	if not ok:
+		push_error("不朽血契未在基础普攻击杀时永久增加 5 点生命")
+		return false
+	return true
 
 func _equip_all_skills(battle: BattleManager) -> void:
 	for u in battle.units:

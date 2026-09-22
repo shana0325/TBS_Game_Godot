@@ -116,27 +116,13 @@ static func _apply_shield(target: Unit, config: Dictionary, game) -> int:
 	if target == null:
 		return 0
 	var amount := int(config.get("amount", 0))
-	# 愈心祭司：我方单位获得的护盾数值 +10%，目标低于 40% 生命时 +20%。
-	if amount > 0 and target.camp == TurnManager.PLAYER_CAMP and GameSession.run_relics.has("revitalize_amp"):
-		var amp := 0.10
-		if float(target.hp) / float(maxi(target.max_hp, 1)) < 0.4:
-			amp = 0.20
-		amount = maxi(1, roundi(float(amount) * (1.0 + amp)))
 	if amount <= 0:
 		return 0
-	var data := {
-		"name": "护罩",
-		"duration": int(config.get("duration", 2)),
-		"shield": amount,
-		"permanent": bool(config.get("permanent", false)),
-	}
-	var buff := Buff.from_data(data)
-	target.add_buff(buff)
-	# 记录护盾信用：供"获盾后追加伤害"类技能（盾辉反击）读取。
-	target.runtime.bump("shield_credit", amount)
-	if game != null and game.has_method("add_log"):
-		game.add_log("%s 获得 %d 点护罩" % [target.get_display_name(), amount])
-	return amount
+	var gained := target.gain_shield(amount, str(config.get("name", "护罩")),
+		int(config.get("duration", 2)), bool(config.get("permanent", false)))
+	if gained > 0 and game != null and game.has_method("add_log"):
+		game.add_log("%s 获得 %d 点护罩" % [target.get_display_name(), gained])
+	return gained
 
 static func _apply_max_hp_shield(target: Unit, config: Dictionary, game) -> int:
 	if target == null or not target.alive:

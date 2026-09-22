@@ -3,6 +3,7 @@ extends Node
 
 const MODE_QUICK := "quick"
 const MODE_TOWER := "tower"
+const RUN_GROWTH_SAVE_KEY := "run_relic_state"
 
 var mode: String = MODE_QUICK
 var current_scenario: String = "battle_01"
@@ -10,7 +11,6 @@ var scenario_override: Dictionary = {}   # 非空时优先于关卡文件（爬�
 var deployed_units: Array = []
 var deployment_units: Array = []          # 战前部署栏原始单位列表，切入战斗后继续复用
 var last_winner: String = ""
-var victory_rewards: Array = []
 var battle_stats: Array = []             # 本场战斗统计：[{name, camp, damage, heal, taken}]
 var battle_speed: int = 1                # 战斗倍速设置，跨战斗保留
 
@@ -19,7 +19,14 @@ var tower_floor: int = 0
 var tower_scenario: Dictionary = {}   # 当前层场景（部署/战斗共用）
 var tower_deployed: Array = []        # 当前层玩家部署（跨层保留，便于调整）
 var run_relics: Array = []            # 本局获得的遗物 id 列表
-var run_blessings: Array = []         # 本局祝福列表：[{ "name", "effects": [...] }]
+var run_relic_stacks: Dictionary = {} # 可重复遗物层数；普通遗物固定为 1 层
+var run_relic_state: Dictionary = {}  # 跨模式战斗成长：继续游戏时保留，仅开始新游戏时清空
+
+# 自动载入玩家存档中的跨战斗成长，供主菜单“继续游戏”恢复。
+func _ready() -> void:
+	var saved = GameDatabase.player_roster.get(RUN_GROWTH_SAVE_KEY, {})
+	if saved is Dictionary:
+		run_relic_state = saved.duplicate(true)
 
 # 选择关卡并清空旧的部署结果（快速对战模式）。
 func select_scenario(scenario_id: String) -> void:
@@ -29,12 +36,14 @@ func select_scenario(scenario_id: String) -> void:
 	deployed_units.clear()
 	deployment_units.clear()
 	last_winner = ""
-	victory_rewards = []
 	battle_stats = []
 
-# 主菜单“开始新游戏”使用：清空运行中的关卡/爬塔状态，但不触碰玩家角色存档。
+# 主菜单“开始新游戏”使用：清空运行中的关卡、遗物与跨战斗成长，但不触碰玩家角色存档。
 func reset_run_state() -> void:
 	end_tower_run()
+	run_relic_state.clear()
+	GameDatabase.player_roster.erase(RUN_GROWTH_SAVE_KEY)
+	ProgressManager.save_roster()
 	mode = MODE_QUICK
 	current_scenario = "battle_01"
 
@@ -47,9 +56,8 @@ func start_tower() -> void:
 	tower_deployed = TowerGenerator.auto_deploy()
 	scenario_override = tower_scenario
 	run_relics.clear()
-	run_blessings.clear()
+	run_relic_stacks.clear()
 	last_winner = ""
-	victory_rewards = []
 	battle_stats = []
 
 # 当前是否处于进行中的爬塔局。
@@ -69,7 +77,6 @@ func prepare_tower_deployment() -> void:
 	deployed_units.clear()
 	deployment_units.clear()
 	last_winner = ""
-	victory_rewards = []
 
 # 从部署开始战斗：记录部署并保证场景就绪。
 func start_tower_battle(deployed: Array) -> void:
@@ -78,9 +85,8 @@ func start_tower_battle(deployed: Array) -> void:
 	deployed_units = tower_deployed.duplicate(true)
 	scenario_override = tower_scenario
 	last_winner = ""
-	victory_rewards = []
 
-# 结束爬塔局（失败或主动结束）：清空单局状态。
+# 结束爬塔局（失败或主动结束）：清空爬塔状态，跨模式成长继续保留。
 func end_tower_run() -> void:
 	mode = MODE_QUICK
 	current_scenario = "battle_01"
@@ -90,13 +96,36 @@ func end_tower_run() -> void:
 	deployment_units.clear()
 	scenario_override = {}
 	run_relics.clear()
-	run_blessings.clear()
+	run_relic_stacks.clear()
 	last_winner = ""
-	victory_rewards = []
 	battle_stats = []
 
 func get_floor_label() -> String:
 	return "爬塔 第 %d 层" % tower_floor
+
+# 获取遗物当前层数，兼容直接写入 run_relics 的旧代码与测试。
+func get_relic_stack(relic_id: String) -> int:
+	if not run_relics.has(relic_id):
+		return 0
+	return maxi(1, int(run_relic_stacks.get(relic_id, 1)))
+
+# 获得遗物：首次写入唯一列表，可重复遗物再次获得时只增加层数。
+func add_run_relic(relic_id: String) -> bool:
+	var relic: Dictionary = GameDatabase.get_relic(relic_id)
+	if relic.is_empty():
+		return false
+	var current := get_relic_stack(relic_id)
+	if current <= 0:
+		run_relics.append(relic_id)
+		run_relic_stacks[relic_id] = 1
+		return true
+	if not bool(relic.get("repeatable", false)):
+		return false
+	var max_stacks := int(relic.get("max_stacks", 0))
+	if max_stacks > 0 and current >= max_stacks:
+		return false
+	run_relic_stacks[relic_id] = current + 1
+	return true
 
 # 记录部署单位列表：每项 { "type", "pos": Vector2i, "roster_index": int }。
 func set_deployed_units(units: Array) -> void:
@@ -104,8 +133,13 @@ func set_deployed_units(units: Array) -> void:
 
 func record_result(winner_camp: String) -> void:
 	last_winner = winner_camp
-	if winner_camp != TurnManager.PLAYER_CAMP:
-		victory_rewards = []
+	_save_run_growth()
+
+# 把跨战斗成长写入现有玩家存档；快速战斗、爬塔和后续模式共用。
+func _save_run_growth() -> void:
+	GameDatabase.player_roster[RUN_GROWTH_SAVE_KEY] = run_relic_state.duplicate(true)
+	if not ProgressManager.save_roster():
+		push_warning("跨战斗成长保存失败")
 
 func is_winner() -> bool:
 	return last_winner == TurnManager.PLAYER_CAMP

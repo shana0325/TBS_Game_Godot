@@ -24,9 +24,6 @@ func _ready() -> void:
 	retry_btn.pressed.connect(_retry)
 	add_child(retry_btn)
 
-	if GameSession.is_winner():
-		_build_rewards()
-
 	_build_stats_button()
 
 	var menu_btn := Button.new()
@@ -35,22 +32,6 @@ func _ready() -> void:
 	menu_btn.position = Vector2(200, 330)
 	menu_btn.pressed.connect(_go_menu)
 	add_child(menu_btn)
-
-# 胜利时展示各单位获得的经验与升级信息。
-func _build_rewards() -> void:
-	var rewards_label := Label.new()
-	rewards_label.add_theme_font_size_override("font_size", 22)
-	rewards_label.position = Vector2(80, 200)
-	rewards_label.size = Vector2(1120, 200)
-	rewards_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var lines: Array = ["—— 战斗奖励 ——"]
-	for report in GameSession.victory_rewards:
-		var text := "%s：+%d 经验" % [report.get("unit_type", ""), int(report.get("exp_gained", 0))]
-		if int(report.get("levels_gained", 0)) > 0:
-			text += "（升级到 %d 级！）" % int(report.get("level", 1))
-		lines.append(text)
-	rewards_label.text = "\n".join(lines)
-	add_child(rewards_label)
 
 # 战斗统计：按钮点击后展开面板（伤害输出/承伤/治疗三个子页，按我方/敌方分组，长度条=本队占比）。
 func _build_stats_button() -> void:

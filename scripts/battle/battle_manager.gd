@@ -119,7 +119,8 @@ func get_move_tiles(unit: Unit) -> Array:
 	if unit == null or not unit.alive or unit.acted or unit.moved:
 		return result
 	var start := grid.get_tile(unit.pos.x, unit.pos.y)
-	var reachable := Pathfinder.get_reachable_tiles(grid, start, unit.get_move_points())
+	var blocked := get_occupied_cells(unit)
+	var reachable := Pathfinder.get_reachable_tiles(grid, start, unit.get_move_points(), blocked)
 	for tile in reachable:
 		if tile == null:
 			continue
@@ -203,6 +204,14 @@ func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_END, {"actor": attacker, "user": attacker, "target": defender})
 	_check_winner()
 	return result
+
+# 收集其他存活单位占据的格子，供移动范围和动画寻路统一避让。
+func get_occupied_cells(excluded_unit: Unit = null) -> Dictionary:
+	var blocked := {}
+	for other in units:
+		if other is Unit and other.alive and other != excluded_unit:
+			blocked[other.pos] = true
+	return blocked
 
 # 统一分发伤害后的联动；特效伤害只结算击杀和死亡，不触发新的伤害附加效果。
 func on_damage_resolved(source: Unit, target: Unit, report: Dictionary) -> void:
@@ -330,9 +339,9 @@ func _find_empty_adjacent(near_pos: Vector2i) -> Vector2i:
 					return cell
 	return Vector2i(-1, -1)
 
-# 初始化战斗：应用遗物/祝福效果，启动每个单位的独立行动计时器，并触发战斗开始技能。
+# 初始化战斗：应用遗物效果，启动每个单位的独立行动计时器，并触发战斗开始技能。
 func setup_battle() -> void:
-	# 爬塔局内成长（遗物/祝福）先应用到玩家单位
+	# Run 遗物与跨战斗成长先应用到玩家单位。
 	RelicSystem.apply_run_bonuses(self)
 	# 遗物战斗运行时状态初始化（标记/计时/计数类效果）
 	RelicSystem.begin_battle(self)
@@ -474,32 +483,3 @@ func get_final_damage_multiplier() -> float:
 func get_damage_bonus_percent(source: Unit, target: Unit, kind: String) -> float:
 	return RelicSystem.get_damage_bonus_percent(source, target, kind, relic_state) \
 		+ SkillKit.passive_damage_bonus(source, target)
-
-# 胜利奖励：给所有存活玩家单位加经验并写回 roster，返回 {unit_type, exp_gained, levels_gained} 列表。
-func grant_victory_exp(reward: int = 100) -> Array:
-	var reports: Array = []
-	if winner != TurnManager.PLAYER_CAMP:
-		return reports
-	for unit in units:
-		if not (unit is Unit) or not unit.alive or unit.camp != TurnManager.PLAYER_CAMP:
-			continue
-		if unit.unit_id == "":
-			continue
-		var rd := _find_roster_unit(unit.unit_id)
-		if rd.is_empty():
-			continue
-		var result := ProgressManager.add_exp(rd, reward)
-		reports.append({
-			"unit_type": unit.unit_type,
-			"exp_gained": int(result.get("exp_gained", 0)),
-			"levels_gained": int(result.get("levels_gained", 0)),
-			"level": int(rd.get("level", 1))
-		})
-	ProgressManager.save_roster()
-	return reports
-
-func _find_roster_unit(unit_id: String) -> Dictionary:
-	for rd in GameDatabase.player_roster.get("units", []):
-		if str(rd.get("id", "")) == unit_id:
-			return rd
-	return {}

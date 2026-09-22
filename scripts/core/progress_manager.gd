@@ -1,43 +1,14 @@
-# 成长逻辑：负责角色属性加点、技能学习/装备、装备更换，并写回 player_roster.json。
+# 成长逻辑：负责升星、技能书学习、技能装备与遗忘、装备更换，并写回 player_roster.json。
 # 纯逻辑模块，不依赖 UI，供成长界面调用。
 class_name ProgressManager
 extends RefCounted
 
 const ROSTER_PATH := "user://player_roster.json"
 const VALID_SLOTS := ["weapon", "offhand", "accessory"]
-const POINTABLE_STATS := ["attack", "defense", "move", "hp", "crit_rate", "crit_damage"]
+const DISPLAY_STATS := ["attack", "defense", "move", "hp", "crit_rate", "crit_damage"]
 const MAX_STARS := Unit.MAX_STARS
 const BASE_SKILL_SLOTS := 1
 const ASCENSION_SKILL_SLOT_CAP := 2
-
-static func required_exp_for_level(level: int) -> int:
-	return maxi(100, level * 100)
-
-# 增加经验，自动升级并发放属性点/技能点，返回 {exp_gained, levels_gained}。
-static func add_exp(unit: Dictionary, amount: int) -> Dictionary:
-	if amount <= 0:
-		return {"exp_gained": 0, "levels_gained": 0}
-	unit["exp"] = int(unit.get("exp", 0)) + amount
-	var levels := 0
-	while int(unit.get("exp", 0)) >= required_exp_for_level(int(unit.get("level", 1))):
-		unit["exp"] = int(unit.get("exp", 0)) - required_exp_for_level(int(unit.get("level", 1)))
-		unit["level"] = int(unit.get("level", 1)) + 1
-		unit["stat_points"] = int(unit.get("stat_points", 0)) + 2
-		unit["skill_points"] = int(unit.get("skill_points", 0)) + 1
-		levels += 1
-	return {"exp_gained": amount, "levels_gained": levels}
-
-# 消耗属性点给指定属性 +amount，返回是否成功。
-static func add_stat_point(unit: Dictionary, stat_name: String, amount: int = 1) -> bool:
-	if amount <= 0 or not POINTABLE_STATS.has(stat_name):
-		return false
-	if int(unit.get("stat_points", 0)) < amount:
-		return false
-	unit["stat_points"] = int(unit.get("stat_points", 0)) - amount
-	var allocated: Dictionary = unit.get("allocated_stats", {})
-	allocated[stat_name] = int(allocated.get(stat_name, 0)) + amount
-	unit["allocated_stats"] = allocated
-	return true
 
 # 当前星级对应的通用技能槽位：初始 1 格，前两次升星各增加 1 格。
 static func get_skill_slot_limit(star: int) -> int:
@@ -154,19 +125,6 @@ static func use_skill_book(unit: Dictionary, skill_id: String, replaced_skill_id
 	books[skill_id] = count
 	return false
 
-# 消耗技能点学习新技能，返回是否成功。
-static func learn_skill(unit: Dictionary, skill_id: String) -> bool:
-	if skill_id.strip_edges().is_empty() or int(unit.get("skill_points", 0)) < 1:
-		return false
-	var data: Dictionary = GameDatabase.get_skill(skill_id)
-	if data.is_empty() or not bool(data.get("common", false)) or not bool(data.get("searchable", true)):
-		return false
-	if _list(unit, "learned_skills").has(skill_id):
-		return false
-	unit["skill_points"] = int(unit.get("skill_points", 0)) - 1
-	_list(unit, "learned_skills").append(skill_id)
-	return true
-
 # 将已学技能加入装备技能列表，返回是否成功。
 static func equip_skill(unit: Dictionary, skill_id: String) -> bool:
 	if skill_id.strip_edges().is_empty():
@@ -196,6 +154,24 @@ static func unequip_skill(unit: Dictionary, skill_id: String) -> bool:
 		return false
 	equipped.erase(skill_id)
 	return true
+
+# 遗忘一个已学通用技能，同时从装备槽移除；技能书不会返还。
+static func forget_skill(unit: Dictionary, skill_id: String) -> bool:
+	if unit.is_empty() or skill_id.strip_edges().is_empty():
+		return false
+	var learned: Array = _list(unit, "learned_skills")
+	if not learned.has(skill_id):
+		return false
+	var equipped: Array = _list(unit, "equipped_skills")
+	var was_equipped := equipped.has(skill_id)
+	learned.erase(skill_id)
+	equipped.erase(skill_id)
+	if save_roster():
+		return true
+	learned.append(skill_id)
+	if was_equipped:
+		equipped.append(skill_id)
+	return false
 
 # 免费获得技能（爬塔奖励用）：不消耗技能点，直接学习并装备。
 static func grant_skill_free(unit: Dictionary, skill_id: String) -> bool:

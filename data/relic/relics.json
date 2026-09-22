@@ -15,6 +15,7 @@
     "effects": [
       { "type": "glayer_stat_percent", "stat": "attack", "percent_per_floor": 0.01 }
     ],
+    "growth_display": [{ "label": "全队攻击力", "source": "tower_floor", "offset": -1, "scale": 0.01, "format": "percent" }],
     "triggers": []
   },
   "cd_legacy": {
@@ -25,6 +26,7 @@
     "effects": [
       { "type": "glayer_haste", "percent_per_floor": 0.01, "cap": 0.08 }
     ],
+    "growth_display": [{ "label": "按秒技能间隔缩短", "source": "tower_floor", "offset": -1, "scale": 0.01, "cap": 0.08, "format": "percent" }],
     "triggers": []
   },
   "coup_grace": {
@@ -57,6 +59,7 @@
     "rarity": 3,
     "mechanic": "first_hit_low_hp:25%→age10,永久成长+10",
     "effects": [],
+    "growth_display": [{ "label": "永久追加伤害", "source": "run", "key": "harvest_bonus", "format": "number", "suffix": " 点" }],
     "triggers": []
   },
   "sixth_sense": {
@@ -81,6 +84,7 @@
     "rarity": 3,
     "mechanic": "skill_damage_count:3→hp+1%cap8%",
     "effects": [],
+    "growth_display": [{ "label": "最大生命", "source": "unit", "key": "manaflow_percent", "format": "percent" }],
     "triggers": []
   },
   "gathering_storm": {
@@ -89,6 +93,7 @@
     "rarity": 2,
     "mechanic": "lazy:layer_damage_percent",
     "effects": [],
+    "growth_display": [{ "label": "全队普攻与技能伤害", "source": "tower_floor", "offset": -1, "scale": 0.01, "format": "percent" }],
     "triggers": []
   },
   "grasp_undying": {
@@ -97,6 +102,7 @@
     "rarity": 3,
     "mechanic": "on_timer4s->empower_next_attack 3%max true + kill永久+5",
     "effects": [],
+    "growth_display": [{ "label": "最大生命", "source": "unit", "key": "grasp_hp", "format": "number", "suffix": " 点" }],
     "triggers": []
   },
   "guardian_cord": {
@@ -115,6 +121,7 @@
     "effects": [
       { "type": "glayer_stat_percent", "stat": "defense", "percent_per_floor": 0.01 }
     ],
+    "growth_display": [{ "label": "全队基础护甲", "source": "tower_floor", "offset": -1, "scale": 0.01, "format": "percent" }],
     "triggers": []
   },
   "overgrowth": {
@@ -123,6 +130,7 @@
     "rarity": 2,
     "mechanic": "on_kill_any:enemy→全队hp+1",
     "effects": [],
+    "growth_display": [{ "label": "全队最大生命", "source": "run", "key": "overgrowth_hp", "format": "number", "suffix": " 点" }],
     "triggers": []
   },
   "revitalize_amp": {
@@ -139,6 +147,33 @@
     "rarity": 1,
     "mechanic": "battle_start->10s ticks 5%max/s",
     "effects": [],
+    "triggers": []
+  },
+  "power_blessing": {
+    "name": "力量祝福",
+    "desc": "全体单位攻击力 +10%；可重复获得并叠加",
+    "rarity": 1,
+    "repeatable": true,
+    "mechanic": "repeatable_team_attack_percent",
+    "effects": [{ "type": "stat_percent", "stat": "attack", "percent": 0.10 }],
+    "triggers": []
+  },
+  "guard_blessing": {
+    "name": "守御祝福",
+    "desc": "全体单位防御力 +10%；可重复获得并叠加",
+    "rarity": 1,
+    "repeatable": true,
+    "mechanic": "repeatable_team_defense_percent",
+    "effects": [{ "type": "stat_percent", "stat": "defense", "percent": 0.10 }],
+    "triggers": []
+  },
+  "vitality_blessing": {
+    "name": "生命祝福",
+    "desc": "全体单位最大生命 +20%；可重复获得并叠加",
+    "rarity": 1,
+    "repeatable": true,
+    "mechanic": "repeatable_team_hp_percent",
+    "effects": [{ "type": "stat_percent", "stat": "hp", "percent": 0.20 }],
     "triggers": []
   }
 }

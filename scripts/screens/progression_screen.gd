@@ -202,11 +202,8 @@ func _refresh() -> void:
 	var info := Label.new()
 	var star := clampi(int(unit.get("star", 1)), 1, ProgressManager.MAX_STARS)
 	var skill_slots := ProgressManager.get_skill_slot_limit(star)
-	info.text = "%d星  等级 %d  经验 %d/%d  属性点 %d  技能点 %d  通用技能槽 %d/%d  升星道具 %d" % [
+	info.text = "%d星  通用技能槽 %d/%d  升星道具 %d" % [
 		star,
-		int(unit.get("level", 1)), int(unit.get("exp", 0)),
-		ProgressManager.required_exp_for_level(int(unit.get("level", 1))),
-		int(unit.get("stat_points", 0)), int(unit.get("skill_points", 0)),
 		unit.get("equipped_skills", []).size(), skill_slots,
 		ProgressManager.get_star_item_count()
 	]
@@ -279,23 +276,20 @@ func _refresh_overview(unit: Dictionary) -> void:
 # --- 属性子页 ---
 func _build_stats_tab(unit: Dictionary) -> void:
 	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
-	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
 	var perm_mods: Dictionary = unit.get("permanent_mods", {})
 	var labels := {"attack": "攻击", "defense": "护甲", "move": "移动", "hp": "生命",
 		"crit_rate": "暴击率", "crit_damage": "暴击伤害"}
-	for stat in ProgressManager.POINTABLE_STATS:
+	for stat in ProgressManager.DISPLAY_STATS:
 		var base := Unit.get_scaled_base_stat(config, stat, int(unit.get("star", 1)))
-		var alloc := int(allocated.get(stat, 0))
 		var equip := int(equip_mods.get(stat, 0))
 		var perm := int(perm_mods.get(stat, 0))
-		var total := base + alloc + equip + perm
+		var total := base + equip + perm
 		var unit_text := "%d%%" % total if stat == "crit_rate" or stat == "crit_damage" else ("%d（%.1f%%减伤）" % [total, COMBAT_FORMULA.armor_reduction_percent(total)] if stat == "defense" else str(total))
-		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(340, 40)
-		btn.text = "%s: %s  (基础%d +加点%d +装备%d +永久%d)  [加点]" % [labels[stat], unit_text, base, alloc, equip, perm]
-		btn.pressed.connect(_on_add_stat.bind(stat))
-		content_panel.add_child(btn)
+		var row := Label.new()
+		row.add_theme_font_size_override("font_size", 18)
+		row.text = "%s: %s  （基础%d +装备%d +永久%d）" % [labels[stat], unit_text, base, equip, perm]
+		content_panel.add_child(row)
 
 # 汇总角色装备提供的属性修正。
 func _get_equip_modifiers(unit: Dictionary) -> Dictionary:
@@ -313,13 +307,12 @@ func _get_equip_modifiers(unit: Dictionary) -> Dictionary:
 # 计算角色整体属性（基础+加点+装备+永久强化）。
 func _get_total_stats(unit: Dictionary) -> Dictionary:
 	var config: Dictionary = GameDatabase.get_unit(str(unit.get("type", "Hero")))
-	var allocated: Dictionary = unit.get("allocated_stats", {})
 	var equip_mods := _get_equip_modifiers(unit)
 	var perm_mods: Dictionary = unit.get("permanent_mods", {})
 	var result: Dictionary = {}
-	for stat in ProgressManager.POINTABLE_STATS:
+	for stat in ProgressManager.DISPLAY_STATS:
 		result[stat] = Unit.get_scaled_base_stat(config, stat, int(unit.get("star", 1))) \
-			+ int(allocated.get(stat, 0)) + int(equip_mods.get(stat, 0)) \
+			+ int(equip_mods.get(stat, 0)) \
 			+ int(perm_mods.get(stat, 0))
 	return result
 
@@ -349,13 +342,6 @@ func _on_ascend_pressed() -> void:
 		_refresh()
 	else:
 		status_label.text = "升星失败：需要升星道具且不能超过最高星级"
-
-func _on_add_stat(stat: String) -> void:
-	if ProgressManager.add_stat_point(_current_unit(), stat):
-		_refresh()
-		status_label.text = "已为属性 %s +1" % stat
-	else:
-		status_label.text = "属性点不足"
 
 # --- 技能子页（固有技能锁定区 + 通用技能池，点击技能查看详情） ---
 func _build_skills_tab(unit: Dictionary) -> void:
@@ -561,7 +547,7 @@ func _skill_action_label(skill_id: String, unit: Dictionary) -> String:
 		return "卸下技能"
 	if learned.has(skill_id):
 		return "装备技能"
-	return "学习并装备（消耗 1 技能点）"
+	return "需要技能书学习"
 
 # 点击技能行：选中并展开详情。
 func _on_select_skill(skill_id: String) -> void:
@@ -583,11 +569,7 @@ func _on_selected_skill_action() -> void:
 		ProgressManager.equip_skill(unit, skill_id)
 		status_label.text = "已装备技能 %s" % skill_id
 	else:
-		if ProgressManager.learn_skill(unit, skill_id):
-			ProgressManager.equip_skill(unit, skill_id)
-			status_label.text = "已学习并装备技能 %s" % skill_id
-		else:
-			status_label.text = "技能点不足或无法学习"
+		status_label.text = "请在人物详情中使用技能书学习该技能"
 	_refresh()
 
 # --- 装备子页 ---

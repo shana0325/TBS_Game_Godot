@@ -104,6 +104,11 @@ func _sanitize_user_roster() -> void:
 		var old_star := int(unit.get("star", 1))
 		unit["star"] = clampi(old_star, 1, Unit.MAX_STARS)
 		changed = changed or old_star != int(unit["star"])
+		# 旧版经验、加点和技能点机制已经移除，载入时清掉遗留字段及其属性收益。
+		for obsolete_key in ["exp", "stat_points", "skill_points", "allocated_stats"]:
+			if unit.has(obsolete_key):
+				unit.erase(obsolete_key)
+				changed = true
 		for list_key in ["learned_skills", "equipped_skills", "extra_skills"]:
 			var old_list: Array = unit.get(list_key, [])
 			var clean_list: Array = []
@@ -149,10 +154,6 @@ func _default_unit_entry(unit_type: String, unit_id: String) -> Dictionary:
 		"type": unit_type,
 		"star": 1,
 		"level": 1,
-		"exp": 0,
-		"stat_points": 0,
-		"skill_points": 0,
-		"allocated_stats": {},
 		"permanent_mods": {},
 		"equipment": {},
 		"learned_skills": [],

@@ -24,6 +24,9 @@ var searchable: bool = true
 var code_script: GDScript = null
 var once: bool = false
 var triggered: bool = false
+# 护盾上限规则：1.0 表示最大生命 100%；负数或 unlimited_shield 表示无上限。
+var shield_cap_percent: float = 1.0
+var unlimited_shield: bool = false
 # 所属单位：用于 on_timer 定时技能按单位技能急速折算实际施放间隔。
 var owner: Unit = null
 
@@ -52,6 +55,8 @@ static func from_data(data: Dictionary) -> Skill:
 	skill.tags = _string_array(data.get("tags", []))
 	skill.searchable = bool(data.get("searchable", true))
 	skill.once = bool(data.get("once", false))
+	skill.shield_cap_percent = float(data.get("shield_cap_percent", 1.0))
+	skill.unlimited_shield = bool(data.get("unlimited_shield", false))
 	if skill is CodeSkill:
 		(skill as CodeSkill).after_from_data(data)
 	return skill

@@ -21,6 +21,8 @@ var roster_scroll: ScrollContainer
 var back_button: Button
 var start_button: Button
 var backpack_button: Button
+var relic_summary_bar: HBoxContainer
+var relic_detail_popup: RelicDetailPopup
 var action_buttons: Array[Control] = []
 var info_panel: UnitDetailPanel
 var backpack_panel: BackpackPanel
@@ -127,6 +129,13 @@ func _build_ui(scenario: Dictionary) -> void:
 	title.position = Vector2(20, 12)
 	add_child(title)
 
+	# 顶部遗物栏用图标展示持有物，悬停提示名称、效果和当前成长。
+	relic_summary_bar = HBoxContainer.new()
+	relic_summary_bar.position = Vector2(20, 58)
+	relic_summary_bar.add_theme_constant_override("separation", 7)
+	add_child(relic_summary_bar)
+	_refresh_relic_summary()
+
 	back_button = Button.new()
 	back_button.text = "返回选关"
 	back_button.custom_minimum_size = Vector2(220, 48)
@@ -202,6 +211,9 @@ func _build_ui(scenario: Dictionary) -> void:
 	action_buttons = [start_button, back_button, backpack_button]
 	_build_info_panel()
 	_build_backpack_panel()
+	relic_detail_popup = RelicDetailPopup.new()
+	relic_detail_popup.name = "RelicDetailPopup"
+	add_child(relic_detail_popup)
 
 	_refresh_state()
 	_layout_ui()
@@ -224,6 +236,8 @@ func _notification(what: int) -> void:
 # 窗口尺寸变化时重排部署辅助控件，保证主战场、按钮和底部单位栏都留在可视区域。
 func _layout_ui() -> void:
 	var vp := get_viewport_rect().size
+	if relic_summary_bar != null:
+		relic_summary_bar.size = Vector2(maxf(240.0, vp.x - 300.0), 48.0)
 	if roster_panel != null:
 		# 底部保留 24px 安全边距，保证面板和横向滚动条完整可见。
 		var tray_height := _tray_height()
@@ -294,7 +308,59 @@ func _unit_for_slot(slot: int) -> Unit:
 	if roster_index >= 0 and roster_index < roster_units.size():
 		roster_data = roster_units[roster_index]
 	var pos: Vector2i = placements.get(slot, Vector2i.ZERO)
-	return Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, pos, config, roster_data, GameDatabase)
+	var unit := Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, pos, config, roster_data, GameDatabase)
+	RelicSystem.apply_run_bonuses_to_unit(unit)
+	return unit
+
+# 刷新部署页顶部遗物图标，悬停提示包含名称、效果和数据驱动的当前成长。
+func _refresh_relic_summary() -> void:
+	if relic_summary_bar == null:
+		return
+	for child in relic_summary_bar.get_children():
+		child.queue_free()
+	var title := Label.new()
+	title.text = "已有遗物"
+	title.custom_minimum_size = Vector2(76, 44)
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color("#d9c6a0"))
+	relic_summary_bar.add_child(title)
+	if GameSession.run_relics.is_empty():
+		var empty := Label.new()
+		empty.text = "暂无"
+		empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		empty.add_theme_color_override("font_color", Color("#8f89a8"))
+		relic_summary_bar.add_child(empty)
+		return
+	for relic_id in GameSession.run_relics:
+		var relic: Dictionary = GameDatabase.get_relic(str(relic_id))
+		if relic.is_empty():
+			continue
+		var icon := TextureButton.new()
+		icon.custom_minimum_size = Vector2(44, 44)
+		icon.ignore_texture_size = true
+		icon.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_normal = ArtManager.get_relic_icon(str(relic_id))
+		icon.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var tooltip := "%s\n%s" % [str(relic.get("name", relic_id)), str(relic.get("desc", "暂无说明"))]
+		var growth_lines := RelicSystem.get_growth_display_lines(str(relic_id))
+		if not growth_lines.is_empty():
+			tooltip += "\n\n当前成长\n" + "\n".join(growth_lines)
+		icon.tooltip_text = tooltip
+		icon.pressed.connect(_show_relic_details.bind(str(relic_id)))
+		relic_summary_bar.add_child(icon)
+		var stacks := GameSession.get_relic_stack(str(relic_id))
+		if stacks > 1:
+			var stack_label := Label.new()
+			stack_label.text = "×%d" % stacks
+			stack_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			stack_label.add_theme_color_override("font_color", Color("#f2d08b"))
+			relic_summary_bar.add_child(stack_label)
+
+# 点击顶部遗物图标时打开详情弹窗。
+func _show_relic_details(relic_id: String) -> void:
+	if relic_detail_popup != null:
+		relic_detail_popup.show_relic(relic_id)
 
 func _on_unit_card_inspect(slot: int) -> void:
 	_open_unit_info(_unit_for_slot(slot))
@@ -613,16 +679,9 @@ func _refresh_units() -> void:
 	preview_player_units.clear()
 	slot_views.clear()
 	for slot in placements:
-		var unit_type := str(selectable_units[slot].get("type", "Hero"))
-		var config: Dictionary = GameDatabase.get_unit(unit_type)
-		if config.is_empty():
+		var unit := _unit_for_slot(slot)
+		if unit == null:
 			continue
-		var pos: Vector2i = placements[slot]
-		var rd: Dictionary = {}
-		var index := int(selectable_units[slot].get("roster_index", -1))
-		if index >= 0 and index < roster_units.size():
-			rd = roster_units[index]
-		var unit := Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, pos, config, rd, GameDatabase)
 		preview_player_units.append(unit)
 		_create_unit_view(unit)
 		slot_views[slot] = unit_views[unit]

@@ -38,6 +38,9 @@ const INFO_REFRESH_INTERVAL := 0.1
 var log_buffer: Array[String] = []
 var info_refresh_elapsed: float = 0.0
 var skill_damage_queue: Array[Dictionary] = []
+var reward_overlay: Control
+var reward_toggle_layer: CanvasLayer
+var reward_toggle_button: Button
 
 func _ready() -> void:
 	# 暂停时本界面保持可交互（暂停/倍速/信息面板可用）
@@ -101,6 +104,8 @@ func _layout_overlay_controls() -> void:
 	_layout_roster_panel(vp)
 	if info_panel != null:
 		info_panel.fit_to_viewport()
+	if reward_toggle_button != null:
+		reward_toggle_button.position = Vector2((vp.x - reward_toggle_button.size.x) / 2.0, 12.0)
 
 # 战斗日志：默认隐藏，可点击展开/收起。
 func _build_log_toggle() -> void:
@@ -544,7 +549,11 @@ func _animate_unit_move(unit_view: Node2D, from_cell: Vector2i, to_cell: Vector2
 	var start := manager.grid.get_tile(from_cell.x, from_cell.y)
 	var goal := manager.grid.get_tile(to_cell.x, to_cell.y)
 	if start != null and goal != null:
-		path = Pathfinder.find_path(manager.grid, start, goal)
+		var blocked := manager.get_occupied_cells(uv.unit)
+		# 逻辑移动已完成，当前单位位于终点；动画回放时起点和终点都必须可用。
+		blocked.erase(from_cell)
+		blocked.erase(to_cell)
+		path = Pathfinder.find_path(manager.grid, start, goal, blocked)
 	if path.size() <= 1:
 		if follow_up.is_valid():
 			follow_up.call()
@@ -591,8 +600,6 @@ func _check_battle_end() -> void:
 	# 战斗结束：解除暂停与时间缩放，倍速设置本身保留到下一场战斗。
 	get_tree().paused = false
 	Engine.time_scale = 1.0
-	if manager.winner == TurnManager.PLAYER_CAMP:
-		_apply_victory_rewards()
 	GameSession.record_result(manager.winner)
 	GameSession.battle_stats = _collect_battle_stats()
 	var is_tower_win: bool = GameSession.mode == GameSession.MODE_TOWER and manager.winner == TurnManager.PLAYER_CAMP
@@ -611,20 +618,37 @@ func _check_battle_end() -> void:
 
 func _show_reward_overlay() -> void:
 	# 爬塔胜利时在当前战斗场景上方展开奖励弹窗，战场不会跳转或缩放。
-	var reward_overlay := preload("res://scripts/screens/reward_screen.gd").new()
+	reward_overlay = preload("res://scripts/screens/reward_screen.gd").new()
 	reward_overlay.setup_embedded()
 	reward_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(reward_overlay)
+	_build_reward_toggle_button()
 
-# 胜利后发放经验并写回 roster，记录经验/升级到日志与结算摘要。
-func _apply_victory_rewards() -> void:
-	var reports: Array = manager.grant_victory_exp(100)
-	GameSession.victory_rewards = reports
-	for report in reports:
-		var label: String = report.get("unit_type", "")
-		add_log("%s 获得 %d 经验" % [label, int(report.get("exp_gained", 0))])
-		if int(report.get("levels_gained", 0)) > 0:
-			add_log("%s 升级到 %d 级！" % [label, int(report.get("level", 1))])
+# 在独立画布层创建奖励开关，避免被奖励遮罩或战斗控件拦截。
+func _build_reward_toggle_button() -> void:
+	if reward_toggle_layer != null:
+		reward_toggle_layer.queue_free()
+	reward_toggle_layer = CanvasLayer.new()
+	reward_toggle_layer.name = "RewardToggleLayer"
+	reward_toggle_layer.layer = 100
+	add_child(reward_toggle_layer)
+	reward_toggle_button = Button.new()
+	reward_toggle_button.name = "RewardToggleButton"
+	reward_toggle_button.text = "隐藏奖励"
+	reward_toggle_button.custom_minimum_size = Vector2(136, 36)
+	reward_toggle_button.size = Vector2(136, 36)
+	reward_toggle_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	reward_toggle_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	reward_toggle_button.pressed.connect(_on_reward_toggle_pressed)
+	reward_toggle_layer.add_child(reward_toggle_button)
+	_layout_overlay_controls()
+
+# 切换奖励弹窗，并同步按钮文字。
+func _on_reward_toggle_pressed() -> void:
+	if reward_overlay == null or not is_instance_valid(reward_overlay):
+		return
+	var showing := bool(reward_overlay.call("toggle_embedded_rewards"))
+	reward_toggle_button.text = "隐藏奖励" if showing else "展开奖励"
 
 func _update_turn_label() -> void:
 	if manager == null or manager.turn_manager == null:
