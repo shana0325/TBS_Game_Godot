@@ -1,4 +1,4 @@
-# 全屏角色资料页：左侧目录导航，中间立绘，右侧连续滚动属性、装备和技能。
+# 全屏角色资料页：左侧目录导航，中间立绘，右侧连续滚动属性和技能。
 class_name UnitDetailPanel
 extends PanelContainer
 
@@ -24,7 +24,7 @@ var ascension_enabled := false
 var ascend_button: Button
 var skill_detail_dialog: SkillDetailPopup
 
-const SECTIONS := [["overview", "角色概览"], ["stats", "基础属性"], ["equipment", "装备"], ["skills", "技能"]]
+const SECTIONS := [["overview", "角色概览"], ["stats", "基础属性"], ["skills", "技能"]]
 
 signal ascension_requested(unit: Unit)
 
@@ -56,14 +56,7 @@ func _input(event: InputEvent) -> void:
 
 func _build_panel() -> void:
 	custom_minimum_size = Vector2(980.0, 600.0)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#121526")
-	style.border_color = Color("#8d749f")
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(10)
-	style.shadow_color = Color(0, 0, 0, 0.55)
-	style.shadow_size = 12
-	add_theme_stylebox_override("panel", style)
+	add_theme_stylebox_override("panel", MenuStyle.frame_panel_style())
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 24)
@@ -76,14 +69,17 @@ func _build_panel() -> void:
 	root_box.add_theme_constant_override("separation", 14)
 	margin.add_child(root_box)
 
+	var header_frame := PanelContainer.new()
+	header_frame.add_theme_stylebox_override("panel", MenuStyle.header_style())
+	root_box.add_child(header_frame)
 	var header := HBoxContainer.new()
 	header.custom_minimum_size.y = 54
-	root_box.add_child(header)
+	header_frame.add_child(header)
 
 	name_label = Label.new()
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.add_theme_font_size_override("font_size", 32)
-	name_label.add_theme_color_override("font_color", Color("#f2d08b"))
+	name_label.add_theme_color_override("font_color", Color("#f4d8a0"))
 	header.add_child(name_label)
 	var close_button := Button.new()
 	close_button.text = "关闭  ×"
@@ -97,7 +93,7 @@ func _build_panel() -> void:
 	root_box.add_child(columns)
 
 	var nav := VBoxContainer.new()
-	nav.custom_minimum_size.x = 166
+	nav.custom_minimum_size.x = 190
 	nav.add_theme_constant_override("separation", 10)
 	columns.add_child(nav)
 	for section in SECTIONS:
@@ -114,6 +110,7 @@ func _build_panel() -> void:
 	portrait_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	portrait_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	portrait_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait_panel.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
 	columns.add_child(portrait_panel)
 	portrait = TextureRect.new()
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -125,12 +122,16 @@ func _build_panel() -> void:
 	right_panel = PanelContainer.new()
 	right_panel.custom_minimum_size.x = 600
 	right_panel.size_flags_horizontal = Control.SIZE_FILL
+	var right_style := MenuStyle.frame_panel_style()
+	# 右侧滚动区与立绘区从同一高度开始，章节自身负责留白。
+	right_style.set_content_margin_all(0)
+	right_panel.add_theme_stylebox_override("panel", right_style)
 	columns.add_child(right_panel)
 
 	summary_label = Label.new()
 	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	summary_label.add_theme_font_size_override("font_size", 18)
-	summary_label.add_theme_color_override("font_color", Color("#d8d2e5"))
+	summary_label.add_theme_color_override("font_color", Color("#d9d9d5"))
 
 	ascend_button = Button.new()
 	ascend_button.custom_minimum_size = Vector2(220, 42)
@@ -234,8 +235,6 @@ func _render_all_sections() -> void:
 	section_box.add_child(ascend_button)
 	_start_section("stats", "基础属性")
 	_render_stats()
-	_start_section("equipment", "装备")
-	_render_equipment()
 	_start_section("skills", "技能")
 	_render_skills()
 	# 为最后一节保留滚动空间，使目录点击后也能把它对齐到顶部。
@@ -248,6 +247,7 @@ func _render_all_sections() -> void:
 func _start_section(section_id: String, heading: String) -> void:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
 	content_box.add_child(panel)
 	section_nodes[section_id] = panel
 	var margin := MarginContainer.new()
@@ -289,7 +289,7 @@ func _set_active_section(section_id: String) -> void:
 	active_section = section_id
 	for key in nav_buttons:
 		var button := nav_buttons[key] as Button
-		button.modulate = Color("#f6d998") if key == section_id else Color("#a9a8bd")
+		MenuStyle.apply_navigation(button, key == section_id)
 
 func _render_stats() -> void:
 	var grid := GridContainer.new()
@@ -301,19 +301,19 @@ func _render_stats() -> void:
 		var key := Label.new()
 		key.text = str(item[0])
 		key.add_theme_font_size_override("font_size", 18)
-		key.add_theme_color_override("font_color", Color("#b9a5d8"))
+		key.add_theme_color_override("font_color", Color("#b6bac8"))
 		grid.add_child(key)
 		var value := Label.new()
 		value.text = str(item[1])
 		value.add_theme_font_size_override("font_size", 18)
-		value.add_theme_color_override("font_color", Color("#f1edf8"))
+		value.add_theme_color_override("font_color", Color("#f4eadb"))
 		grid.add_child(value)
 		stat_value_labels[str(item[0])] = value
 	section_box.add_child(grid)
 	if not unit.permanent_mods.is_empty():
 		_add_section_title("永久强化")
 		for stat in unit.permanent_mods:
-			_add_body_label("%s  +%d" % [_stat_text(str(stat)), int(unit.permanent_mods[stat])])
+			_add_body_label("%s  +%.2f" % [_stat_text(str(stat)), float(unit.permanent_mods[stat])])
 
 # 汇总当前单位的动态属性，供首次渲染与战斗中刷新共用。
 func _stat_rows() -> Array:
@@ -322,14 +322,14 @@ func _stat_rows() -> Array:
 	var shield_text := "%d / %s" % [unit.get_total_shield(), "无上限" if shield_cap < 0 else str(shield_cap)]
 	return [
 		["星级", "%d / %d" % [unit.star, Unit.MAX_STARS]],
-		["生命", "%d / %d" % [unit.hp, unit.max_hp]],
+		["生命", "%.2f / %.2f" % [unit.hp, unit.max_hp]],
 		["护盾", shield_text],
-		["攻击", "%d" % unit.get_attack()],
-		["护甲", "%d（%.1f%%减伤）" % [unit.get_defense(), armor_percent]],
+		["攻击", "%.2f" % unit.get_attack()],
+		["护甲", "%.2f（%.1f%%减伤）" % [unit.get_defense(), armor_percent]],
 		["射程", "%d - %d" % [unit.get_range_min(), unit.get_range_max()]],
 		["移动", "%d 格" % unit.get_move_points()],
 		["行动间隔", "%.1f 秒" % unit.turn_interval],
-		["暴击", "%d%% / %d%%" % [unit.get_crit_rate(), unit.get_crit_damage()]],
+		["暴击", "%.2f%% / %.2f%%" % [unit.get_crit_rate(), unit.get_crit_damage()]],
 		["通用技能槽", "%d / %d" % [unit.equipped_skill_names.size(), Unit.get_skill_slot_limit(unit.star)]],
 		["当前状态", "存活" if unit.alive else "已阵亡"]
 	]
@@ -341,56 +341,15 @@ func _refresh_stat_values() -> void:
 		if value != null:
 			value.text = str(item[1])
 
-func _render_equipment() -> void:
-	if unit.equipment.is_empty():
-		_add_body_label("暂无装备")
-		return
-	for slot in unit.equipment:
-		var equipment: Equipment = unit.equipment[slot]
-		var line := HBoxContainer.new()
-		line.custom_minimum_size.y = 54
-		var icon := ColorRect.new()
-		icon.custom_minimum_size = Vector2(42, 42)
-		icon.color = Color("#6b4e8e")
-		line.add_child(icon)
-		var text_box := VBoxContainer.new()
-		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var title := Label.new()
-		title.text = "%s  ·  %s" % [_slot_text(str(slot)), equipment.name]
-		title.add_theme_color_override("font_color", Color("#f2d08b"))
-		text_box.add_child(title)
-		var details := Label.new()
-		details.text = _modifier_text(equipment.modifiers)
-		details.add_theme_font_size_override("font_size", 17)
-		details.add_theme_color_override("font_color", Color("#d8d2e5"))
-		text_box.add_child(details)
-		line.add_child(text_box)
-		section_box.add_child(line)
-
 func _render_skills() -> void:
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_END
-	actions.add_theme_constant_override("separation", 10)
-	var learn_button := Button.new()
-	learn_button.text = "学习"
-	learn_button.custom_minimum_size = Vector2(110, 38)
-	learn_button.disabled = _find_roster_unit().is_empty()
-	learn_button.pressed.connect(_show_skill_manage.bind("learn"))
-	actions.add_child(learn_button)
-	var forget_button := Button.new()
-	forget_button.text = "遗忘"
-	forget_button.custom_minimum_size = Vector2(110, 38)
-	forget_button.disabled = _find_roster_unit().is_empty()
-	forget_button.pressed.connect(_show_skill_manage.bind("forget"))
-	actions.add_child(forget_button)
-	section_box.add_child(actions)
 	if unit.skills.is_empty():
 		_add_body_label("暂无技能")
 		return
 	for skill in unit.skills:
 		var skill_id := str(skill.skill_id) if not str(skill.skill_id).is_empty() else str(skill.name)
 		var row := Button.new()
-		row.flat = true
+		row.add_theme_stylebox_override("normal", MenuStyle.section_panel_style())
+		row.add_theme_stylebox_override("hover", MenuStyle.header_style())
 		row.custom_minimum_size = Vector2(0, 82)
 		row.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		row.pressed.connect(_show_skill_details.bind(skill_id))
@@ -404,7 +363,7 @@ func _render_skills() -> void:
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.texture = ArtManager.get_skill_icon("", str(skill.name))
+		icon.texture = ArtManager.get_skill_icon(skill_id, str(skill.name))
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row_box.add_child(icon)
 		var text_box := VBoxContainer.new()
@@ -434,12 +393,7 @@ func _build_skill_manage_overlay() -> void:
 	skill_manage_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	skill_manage_overlay.visible = false
 	skill_manage_overlay.z_index = 5
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.055, 0.065, 0.12, 0.97)
-	style.border_color = Color("#8d749f")
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
-	skill_manage_overlay.add_theme_stylebox_override("panel", style)
+	skill_manage_overlay.add_theme_stylebox_override("panel", MenuStyle.frame_panel_style())
 	portrait_panel.add_child(skill_manage_overlay)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 16)
@@ -580,11 +534,37 @@ func _show_skill_details(skill_id: String) -> void:
 	skill_detail_dialog.show_skill(skill_id)
 
 func _add_section_title(text: String) -> void:
+	var heading := PanelContainer.new()
+	heading.add_theme_stylebox_override("panel", MenuStyle.header_style())
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 8)
+	heading.add_child(line)
 	var title := Label.new()
 	title.text = text
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 23)
-	title.add_theme_color_override("font_color", Color("#f2d08b"))
-	section_box.add_child(title)
+	title.add_theme_color_override("font_color", Color("#f3d79f"))
+	line.add_child(title)
+	if text == "技能":
+		_add_skill_header_actions(line)
+	section_box.add_child(heading)
+
+# 将学习和遗忘入口放在技能标题栏右侧，与标题共用一行。
+func _add_skill_header_actions(line: HBoxContainer) -> void:
+	var can_manage := not _find_roster_unit().is_empty()
+	var learn_button := Button.new()
+	learn_button.text = "学习"
+	learn_button.custom_minimum_size = Vector2(90, 36)
+	learn_button.disabled = not can_manage
+	MenuStyle.apply_primary(learn_button)
+	learn_button.pressed.connect(_show_skill_manage.bind("learn"))
+	line.add_child(learn_button)
+	var forget_button := Button.new()
+	forget_button.text = "遗忘"
+	forget_button.custom_minimum_size = Vector2(90, 36)
+	forget_button.disabled = not can_manage
+	forget_button.pressed.connect(_show_skill_manage.bind("forget"))
+	line.add_child(forget_button)
 
 func _add_body_label(text: String) -> void:
 	var label := Label.new()
@@ -604,15 +584,5 @@ func _role_text(role: String) -> String:
 	}.get(role, role if role != "" else "作战单位")
 
 func _stat_text(stat: String) -> String:
-	return {"hp": "生命上限", "attack": "攻击", "defense": "护甲", "move": "移动"}.get(stat, stat)
-
-func _slot_text(slot: String) -> String:
-	return {"weapon": "武器", "offhand": "副手", "accessory": "饰品"}.get(slot, slot)
-
-func _modifier_text(modifiers: Dictionary) -> String:
-	if modifiers.is_empty():
-		return "无属性修正"
-	var parts: Array[String] = []
-	for key in modifiers:
-		parts.append("%s %+d" % [_stat_text(str(key)), int(modifiers[key])])
-	return "，".join(parts)
+	return {"hp": "生命上限", "attack": "攻击", "defense": "护甲", "move": "移动",
+		"crit_rate": "暴击率", "crit_damage": "暴击伤害"}.get(stat, stat)

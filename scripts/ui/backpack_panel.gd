@@ -15,7 +15,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	z_index = 200
 	dimmer = ColorRect.new()
-	dimmer.color = Color(0.02, 0.02, 0.06, 0.42)
+	dimmer.color = Color(0.01, 0.015, 0.03, 0.7)
 	dimmer.mouse_filter = Control.MOUSE_FILTER_STOP
 	dimmer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dimmer.gui_input.connect(_on_dimmer_gui_input)
@@ -48,12 +48,12 @@ func _build_popup() -> void:
 	var title := Label.new()
 	title.text = "背包"
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color("#f2d08b"))
+	title.add_theme_color_override("font_color", Color("#f3d79f"))
 	root_box.add_child(title)
 
 	var hint := Label.new()
 	hint.text = "点击或悬停查看说明；将技能书拖到部署区的我方单位即可学习并装备。"
-	hint.add_theme_color_override("font_color", Color("#b8b1c7"))
+	hint.add_theme_color_override("font_color", Color("#b6bdc9"))
 	root_box.add_child(hint)
 
 	items_grid = GridContainer.new()

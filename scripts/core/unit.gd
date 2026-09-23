@@ -1,4 +1,4 @@
-# 战斗单位：Unit 组合基础配置、运行时状态、技能、Buff 和装备。
+# 战斗单位：Unit 组合基础配置、运行时状态、技能和 Buff。
 class_name Unit
 extends RefCounted
 
@@ -14,22 +14,22 @@ var pos: Vector2i = Vector2i.ZERO
 var config: Dictionary = {}
 var level: int = 1
 var star: int = 1
-var hp: int = 0
-var max_hp: int = 0
+var hp: float = 0.0
+var max_hp: float = 0.0
 var acted: bool = false
 var moved: bool = false
 var alive: bool = true
 var turn_interval: float = 4.0
 var turn_timer: float = 0.0
 var permanent_mods: Dictionary = {}
+var battle_stat_mods: Dictionary = {}
 var percent_mods: Dictionary = {}
 var stat_multiplier: float = 1.0
 var skills: Array = []
 var buffs: Array = []
-var equipment: Dictionary = {}
 var equipped_skill_names: Array = []
 var learned_skill_names: Array = []
-# 战斗运行时状态库（叠层/按目标计数/限流/时间窗），由技能/遗物/装备共用。
+# 战斗运行时状态库（叠层/按目标计数/限流/时间窗），由技能和遗物共用。
 var runtime: UnitRuntimeState = UnitRuntimeState.new()
 
 static func create_from_config(
@@ -56,9 +56,8 @@ static func create_from_config(
 	unit.stat_multiplier = float(roster_data.get("stat_multiplier", 1.0))
 	unit.learned_skill_names = roster_data.get("learned_skills", [])
 	unit.equipped_skill_names = roster_data.get("equipped_skills", [])
-	unit.max_hp = unit.get_base_stat("hp") + int(unit.permanent_mods.get("hp", 0))
+	unit.max_hp = float(unit.get_base_stat("hp")) + float(unit.permanent_mods.get("hp", 0.0))
 	unit.hp = unit.max_hp
-	unit._apply_equipment_data(roster_data.get("equipment", {}), game_db)
 	unit.apply_skills(game_db)
 	return unit
 
@@ -72,37 +71,49 @@ func get_base_stat(stat: String) -> int:
 		base_value = roundi(float(base_value) * stat_multiplier)
 	return base_value
 
-func get_stat(stat: String) -> int:
-	var value := get_base_stat(stat)
-	value += int(permanent_mods.get(stat, 0))
-	for slot in equipment:
-		var equip: Equipment = equipment[slot]
-		value += int(equip.modifiers.get(stat, 0))
+func get_stat(stat: String) -> float:
+	var value := float(get_base_stat(stat))
+	value += float(permanent_mods.get(stat, 0.0))
 	for buff in buffs:
 		value += buff.get_stat_modifier_for_unit(self, stat)
 	var percent := float(percent_mods.get(stat, 0.0))
-	if percent > 0.0:
-		value += roundi(value * percent)
+	if not is_zero_approx(percent):
+		value += value * percent
+	value += float(battle_stat_mods.get(stat, 0.0))
 	return value
 
-func get_attack() -> int:
+func get_attack() -> float:
 	return get_stat("attack")
 
-func get_defense() -> int:
+func get_defense() -> float:
 	return get_stat("defense")
 
 func get_move_points() -> int:
-	return get_stat("move")
+	return roundi(get_stat("move"))
 
-func get_crit_rate() -> int:
+func get_crit_rate() -> float:
 	return get_stat("crit_rate")
 
-func get_crit_damage() -> int:
+func get_crit_damage() -> float:
 	return get_stat("crit_damage")
 
 # 技能急速：每 1 点 = on_timer 定时技能施放频率 +1%（作用于真实秒冷却）。
 func get_ability_haste() -> int:
-	return get_stat("ability_haste")
+	return roundi(get_stat("ability_haste"))
+
+# 为本场战斗增减属性；生命上限变化时单独处理当前生命并返回实际变化量。
+func add_battle_stat(stat: String, amount: float, grant_current_hp: bool = false) -> float:
+	if is_zero_approx(amount):
+		return 0.0
+	var applied := amount
+	if stat == "hp":
+		applied = maxf(amount, 1.0 - max_hp)
+		max_hp += applied
+		if grant_current_hp and applied > 0.0:
+			hp += applied
+		hp = clampf(hp, 0.0, max_hp)
+	battle_stat_mods[stat] = float(battle_stat_mods.get(stat, 0.0)) + applied
+	return applied
 
 func get_range_min() -> int:
 	return int(config.get("range_min", 1))
@@ -158,12 +169,12 @@ func take_damage(amount: int, game = null) -> Dictionary:
 			buff.shield -= absorbed
 			shield_absorbed += absorbed
 			remaining -= absorbed
-	var hp_lost := mini(remaining, hp)
+	var hp_lost := minf(float(remaining), hp)
 	hp -= hp_lost
 	result["shield_absorbed"] = shield_absorbed
 	result["hp_lost"] = hp_lost
 	# 承伤统计：实际扣血 + 护盾吸收
-	damage_taken += hp_lost + shield_absorbed
+	damage_taken += ceili(hp_lost) + shield_absorbed
 	if hp <= 0:
 		hp = 0
 		alive = false
@@ -176,11 +187,11 @@ func heal(amount: int, source: Unit = null) -> int:
 		return 0
 	amount = _amplify_player_vital(source, amount)
 	var old_hp := hp
-	hp = mini(max_hp, hp + amount)
+	hp = minf(max_hp, hp + float(amount))
 	var healed := hp - old_hp
 	var heal_src := source if source != null else self
-	heal_src.healing_done += healed
-	return healed
+	heal_src.healing_done += ceili(healed)
+	return ceili(healed)
 
 # 愈心祭司：我方单位施加的治疗/护盾数值 +10%；目标低于 40% 生命时改为 +20%。
 func _amplify_player_vital(source: Unit, amount: int) -> int:
@@ -189,7 +200,7 @@ func _amplify_player_vital(source: Unit, amount: int) -> int:
 	if not GameSession.run_relics.has("revitalize_amp"):
 		return amount
 	var amp := 0.10
-	if float(hp) / float(maxi(max_hp, 1)) < 0.4:
+	if hp / maxf(max_hp, 1.0) < 0.4:
 		amp = 0.20
 	return maxi(1, roundi(float(amount) * (1.0 + amp)))
 
@@ -221,7 +232,7 @@ func gain_shield(amount: int, shield_name: String = "护盾", duration: int = -1
 		return 0
 	if camp == TurnManager.PLAYER_CAMP and GameSession.run_relics.has("revitalize_amp"):
 		var amp := 0.10
-		if float(hp) / float(maxi(max_hp, 1)) < 0.4:
+		if hp / maxf(max_hp, 1.0) < 0.4:
 			amp = 0.20
 		amount = maxi(1, roundi(float(amount) * (1.0 + amp)))
 	var shield_cap := get_shield_cap()
@@ -320,6 +331,10 @@ func apply_skills(game_db = null) -> void:
 	var innate_id: String = str(config.get("innate_skill", ""))
 	if innate_id != "":
 		skill_names.append(innate_id)
+	for extra_innate in config.get("innate_skills", []):
+		var extra_id := str(extra_innate)
+		if not extra_id.is_empty() and not skill_names.has(extra_id):
+			skill_names.append(extra_id)
 	# 通用技能：仅已装备的参与战斗（已学未装备的不生效）
 	var equipped_count := 0
 	for equipped_id in equipped_skill_names:
@@ -330,26 +345,12 @@ func apply_skills(game_db = null) -> void:
 			break
 		skill_names.append(str(equipped_id))
 		equipped_count += 1
-	for slot in equipment:
-		var equip: Equipment = equipment[slot]
-		skill_names.append_array(equip.granted_skills)
 	for skill_name in skill_names:
 		var data: Dictionary = db.get_skill(str(skill_name))
 		if not data.is_empty():
 			var skill_data := data.duplicate()
 			skill_data["id"] = str(skill_name)
 			add_skill(Skill.from_data(skill_data))
-
-func _apply_equipment_data(equipment_map: Dictionary, game_db = null) -> void:
-	var db = game_db
-	if db == null:
-		db = GameDatabase
-	equipment.clear()
-	for slot in equipment_map:
-		var equipment_id := str(equipment_map[slot])
-		var data: Dictionary = db.get_equipment(equipment_id)
-		if not data.is_empty():
-			equipment[slot] = Equipment.from_data(equipment_id, data)
 
 func _has_control(control_type: String) -> bool:
 	for buff in buffs:

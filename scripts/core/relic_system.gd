@@ -130,9 +130,9 @@ static func _apply_effects(unit: Unit, effects: Array, game, stacks: int = 1) ->
 				unit.percent_mods[stat] = float(unit.percent_mods.get(stat, 0.0)) + p
 				if stat == "hp":
 					# 生命百分比加成需要同步到生命上限（基础+永久为基数），当前生命跟随
-					var base_max := unit.get_base_stat("hp") + int(unit.permanent_mods.get("hp", 0))
-					var new_max := base_max + roundi(base_max * float(unit.percent_mods.get("hp", 0.0)))
-					unit.hp += maxi(0, new_max - unit.max_hp)
+					var base_max := float(unit.get_base_stat("hp")) + float(unit.permanent_mods.get("hp", 0.0))
+					var new_max := base_max * (1.0 + float(unit.percent_mods.get("hp", 0.0)))
+					unit.hp += maxf(0.0, new_max - unit.max_hp)
 					unit.max_hp = new_max
 			"glayer_stat_percent":
 				# 每进入新一层，指定属性按百分比提升：总加成 = percent_per_floor × 进入过的新层数
@@ -170,13 +170,13 @@ static func get_damage_bonus_percent(source: Unit, target: Unit, kind: String, s
 		var relic := GameDatabase.get_relic(str(relic_id))
 		match str(relic_id):
 			"coup_grace":  # 处决：对生命<40%敌人 +12%
-				if float(target.hp) / float(maxi(target.max_hp, 1)) < 0.4:
+				if float(target.hp) / maxf(target.max_hp, 1.0) < 0.4:
 					bonus += 0.12
 			"cut_down":    # 先手：对生命>60%敌人 +12%
-				if float(target.hp) / float(maxi(target.max_hp, 1)) > 0.6:
+				if float(target.hp) / maxf(target.max_hp, 1.0) > 0.6:
 					bonus += 0.12
 			"last_stand":  # 背水为战：自身低生命判定
-				var ratio := float(source.hp) / float(maxi(source.max_hp, 1))
+				var ratio := float(source.hp) / maxf(source.max_hp, 1.0)
 				if ratio < 0.25:
 					bonus += 0.20
 				elif ratio < 0.50:
@@ -215,7 +215,7 @@ static func _apply_triumph_horn(manager: BattleManager, killer: Unit, game) -> v
 	for unit in manager.units:
 		if not (unit is Unit) or not unit.alive or unit.camp != TurnManager.PLAYER_CAMP:
 			continue
-		var lost: int = unit.max_hp - unit.hp
+		var lost: float = unit.max_hp - unit.hp
 		if lost > 0:
 			var healed: int = unit.heal(roundi(lost * 0.05), killer)
 			if healed > 0 and game != null and game.has_method("add_log"):
@@ -234,7 +234,7 @@ static func _apply_overgrowth(manager: BattleManager, game) -> void:
 		if not (unit is Unit) or not unit.alive or unit.camp != TurnManager.PLAYER_CAMP:
 			continue
 		unit.max_hp += 1
-		unit.hp = mini(unit.hp + 1, unit.max_hp)
+		unit.hp = minf(unit.hp + 1.0, unit.max_hp)
 	if game != null and game.has_method("add_log"):
 		game.add_log("噬骸成长：全体最大生命 +1")
 
@@ -288,10 +288,10 @@ static func begin_battle(manager: BattleManager) -> void:
 # 猎魔嗅探：战斗开始时标记敌方攻击力最高者 8 秒（真实时限按 state 时间判断）。
 static func _apply_sixth_sense_start(manager: BattleManager) -> void:
 	var mark: Unit = null
-	var best := -1
+	var best := -1.0
 	for unit in manager.units:
 		if unit is Unit and unit.alive and unit.camp != TurnManager.PLAYER_CAMP:
-			var a: int = unit.get_attack()
+			var a: float = unit.get_attack()
 			if a > best:
 				best = a
 				mark = unit
@@ -376,7 +376,7 @@ static func on_hit(manager: BattleManager, source: Unit, target: Unit, kind: Str
 				var growth := _unit_growth(source)
 				growth["grasp_hp"] = int(growth.get("grasp_hp", 0)) + 5
 				source.max_hp += 5
-				source.hp = mini(source.hp + 5, source.max_hp)
+				source.hp = minf(source.hp + 5.0, source.max_hp)
 				if game != null and game.has_method("add_log"):
 					game.add_log("不朽血契击杀蔓延：%s 最大生命永久 +5" % source.get_display_name())
 	if not target.alive:
@@ -396,7 +396,7 @@ static func _apply_harvest_soul(manager: BattleManager, source: Unit, target: Un
 	var st: Dictionary = manager.relic_state
 	if not target.alive:
 		return
-	if float(target.hp) / float(maxi(target.max_hp, 1)) >= 0.25:
+	if float(target.hp) / maxf(target.max_hp, 1.0) >= 0.25:
 		return
 	var tid := target.get_instance_id()
 	var hits: Dictionary = st.get("harvest_hits", {})
@@ -425,7 +425,7 @@ static func _apply_airy_guardian(manager: BattleManager, source: Unit, target: U
 	st["airy_last"] = last
 	if not target.alive:
 		return
-	if float(target.hp) / float(maxi(target.max_hp, 1)) < 0.4:
+	if float(target.hp) / maxf(target.max_hp, 1.0) < 0.4:
 		var dmg := roundi(source.get_attack() * 0.30)
 		if dmg > 0:
 			DamageSystem.apply(source, target, {"damage_kind": DamageSystem.EFFECT, "raw_damage": dmg}, manager, game)
@@ -437,7 +437,7 @@ static func _apply_airy_guardian(manager: BattleManager, source: Unit, target: U
 		var lowest_ratio := 1.01
 		for ally in manager.units:
 			if ally is Unit and ally.alive and ally.camp == TurnManager.PLAYER_CAMP:
-				var r := float(ally.hp) / float(maxi(ally.max_hp, 1))
+				var r := float(ally.hp) / maxf(ally.max_hp, 1.0)
 				if r < lowest_ratio:
 					lowest_ratio = r
 					lowest = ally
@@ -468,7 +468,7 @@ static func _apply_manaflow(manager: BattleManager, source: Unit, game) -> void:
 		var add := roundi(float(base_hp) * inc)
 		if add > 0:
 			source.max_hp += add
-			source.hp = mini(source.hp + add, source.max_hp)
+			source.hp = minf(source.hp + add, source.max_hp)
 		if game != null and game.has_method("add_log"):
 			game.add_log("灵能循环：%s 最大生命 +%d" % [source.get_display_name(), add])
 	else:

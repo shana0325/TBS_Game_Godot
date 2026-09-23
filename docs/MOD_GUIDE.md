@@ -1,6 +1,6 @@
 # MOD 开发指南（新建角色）
 
-> 当前 Mod 接口以数据和素材扩展为主。Mod 可以添加单位、技能、Buff、装备和角色图片；不建议直接替换核心战斗脚本或界面控制器。
+> 当前 Mod 接口以数据和素材扩展为主。Mod 可以添加单位、技能、Buff 和角色图片；不建议直接替换核心战斗脚本或界面控制器。
 
 > 目标：任何人无需 Godot 编辑器，只要**放文件夹 + 图片 + JSON**，就能为游戏添加新角色。
 
@@ -15,17 +15,16 @@ mods/
     units/<角色名>.json        # 可选：单位数据
     skills/<技能名>.json       # 可选：技能数据
     buffs/<buff名>.json        # 可选：Buff 数据
-    equipments/<装备名>.json   # 可选：装备数据
     art/units/<角色名>/        # 角色素材
-      idle.png                 # 必填：战场站立图
-      attack.png               # 可选：攻击动作（缺省回退 idle）
-      hurt.png                 # 可选：受击动作（缺省回退 idle）
-      death.png                # 可选：死亡动作（缺省回退 idle）
-      skill.png                # 可选：技能动作（缺省回退 idle）
+      stand.png                # 必填：战场站立图
+      move.png                 # 可选：移动动作（缺省回退 stand）
+      attack.png               # 可选：攻击动作（缺省回退 stand）
+      death.png                # 可选：死亡动作（缺省回退 stand）
+      skill.png                # 可选：技能动作（缺省回退 stand）
       portrait.png             # 可选：立绘（信息面板/成长界面显示）
 ```
 
-游戏启动时自动扫描并合并，无需任何手动配置。同名的单位/技能/Buff/装备会**覆盖原版数据**。
+游戏启动时自动扫描并合并，无需任何手动配置。同名的单位/技能/Buff 会**覆盖原版数据**。
 
 ## 2. mod.json（元数据）
 
@@ -90,7 +89,7 @@ mods/
 
 ## 5. 图片规格
 
-- **idle/attack/hurt/death/skill**：战斗小人，建议正方形透明 PNG（32 或 64 像素均可，游戏中会自动缩放）。只需一张 `idle.png` 即可运行。
+- **stand/move/attack/death/skill**：战斗小人，建议正方形透明 PNG（32 或 64 像素均可，游戏中会自动缩放）。只需一张 `stand.png` 即可运行。
 - **portrait**：立绘，建议 256×256 以上，透明背景，信息面板与成长界面会居中显示。
 
 ## 6. 安装方式
@@ -114,7 +113,7 @@ mods/
 
 ## 8. 示例
 
-`mods/example_mod/` 是一个示例：包含 `mod.json` 与 SampleHero 的素材目录（`art/units/SampleHero/` 下 idle 与 portrait 图片）。当前示例未附单位 JSON（单位数据写法见第 3 节），需要时可自行补充 `units/SampleHero.json` 后复制改造。
+`mods/example_mod/` 是一个素材示例；`mods/hero/` 是完整实例，包含 Hero 单位数据、战斗图片、立绘与代码固有技能。
 
 > 提示：新增图片后需让 Godot 重新导入（首次启动会自动导入）。
 
@@ -125,12 +124,15 @@ mods/
 1. 新建脚本继承 `CodeSkill`（基类：`res://scripts/battle/skills/code_skill.gd`），并按需覆写：
    - `check_condition(battle, context)`：触发条件（缺省按 JSON `condition` 判断）
    - `resolve_targets(battle, user, context)`：目标解析（缺省按 `target_type` 与射程）
-   - `execute(user, targets, game)`：效果执行（缺省把 `effects` 交给效果库；可直接调用 `EffectSystem.apply_effects`）
+   - `execute(user, targets, game, battle)`：效果执行（缺省把 `effects` 交给效果库；可直接调用 `EffectSystem.apply_effects`）
 2. 元数据（名称/描述/触发时机/冷却/射程/common 标记）在脚本 `_init` 中设置。
-3. 在集中注册文件 `scripts/battle/skills/skill_code_registry.gd` 的 `get_entries()` 里注册一行：
-   ```gdscript
-   "My Skill Name": "res://scripts/你脚本的路径.gd",
+3. 对项目内置代码技能，在 `scripts/battle/skills/skill_code_registry.gd` 注册。对 Mod 代码技能，在 `mod.json` 中加入：
+   ```json
+   "code_skills": {"My Skill Name": "code_skills/my_skill.gd"}
    ```
-4. 脚本需声明 `class_name`；新增后运行一次 Godot `--import` 刷新全局类缓存（或启动游戏自动扫描导入）。
+   路径必须位于该 Mod 的 `code_skills/` 目录。脚本放在对应目录，继承 `CodeSkill` 即可，无须修改项目的集中注册文件。
+4. 新增脚本后运行一次 Godot 编辑器扫描以完成导入；代码技能与单位数据会在玩家存档校验前一起注册。
 
 代码技能与 JSON 技能统一并入技能表，编成界面、战斗触发、单位创建均自动生效。
+
+`mods/hero/` 展示了两个固有代码技能：`innate_skill` 保留“以战养战”，`innate_skills` 追加“属性汲取”。后者通过 `on_hit` 筛选普攻命中，在本场按目标记录偷取次数，战斗结束信号触发时将存活角色偷取总量的 20% 写入编成永久属性。生命、攻击、护甲与暴击属性支持小数存储，最终伤害仍按现有伤害结算规则取整。

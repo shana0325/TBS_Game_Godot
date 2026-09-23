@@ -90,11 +90,11 @@ func _draw() -> void:
 	# 护盾条以最大生命为统一刻度；满条代表护盾达到 100% 最大生命。
 	var shield_amount := unit.get_total_shield()
 	if shield_amount > 0:
-		var shield_ratio := clampf(float(shield_amount) / float(maxi(unit.max_hp, 1)), 0.0, 1.0)
+		var shield_ratio := clampf(float(shield_amount) / maxf(unit.max_hp, 1.0), 0.0, 1.0)
 		var shield_h := 4
 		var shield_pos := Vector2(bar_pos.x, bar_pos.y - shield_h - 1)
 		draw_rect(Rect2(shield_pos, Vector2(bar_width, shield_h)), Color(0.10, 0.13, 0.22))
 		draw_rect(Rect2(shield_pos, Vector2(bar_width * shield_ratio, shield_h)), Color(0.42, 0.72, 1.00))
 	if show_hp_text:
-		draw_string(ThemeDB.fallback_font, Vector2(-40, tile_size / 2.0 + 12.0), "%d/%d" % [unit.hp, unit.max_hp], \
+		draw_string(ThemeDB.fallback_font, Vector2(-40, tile_size / 2.0 + 12.0), "%.1f/%.1f" % [unit.hp, unit.max_hp], \
 			HORIZONTAL_ALIGNMENT_CENTER, 80, 12, Color.WHITE)

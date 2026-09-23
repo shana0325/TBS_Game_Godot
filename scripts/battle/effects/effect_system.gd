@@ -433,11 +433,11 @@ static func _apply_permanent_stat(user: Unit, target: Unit, config: Dictionary, 
 	var amount := int(config.get("amount", 1))
 	if amount == 0:
 		return
-	owner.permanent_mods[stat] = int(owner.permanent_mods.get(stat, 0)) + amount
+	owner.permanent_mods[stat] = float(owner.permanent_mods.get(stat, 0.0)) + amount
 	if stat == "hp":
 		# 生命上限永久 +amount，当前生命同步跟随（不超过新的上限）
 		owner.max_hp += amount
-		owner.hp = mini(owner.hp + amount, owner.max_hp)
+		owner.hp = minf(owner.hp + amount, owner.max_hp)
 	if bool(config.get("persist", false)):
 		# 全局永久：写回编成存档；无编成 id（如敌方单位）时仅本局生效
 		ProgressManager.add_permanent_stat(owner.unit_id, stat, amount)

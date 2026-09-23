@@ -1,10 +1,9 @@
-# 成长逻辑：负责升星、技能书学习、技能装备与遗忘、装备更换，并写回 player_roster.json。
+# 成长逻辑：负责升星、技能书学习、技能槽装配与遗忘，并写回 player_roster.json。
 # 纯逻辑模块，不依赖 UI，供成长界面调用。
 class_name ProgressManager
 extends RefCounted
 
 const ROSTER_PATH := "user://player_roster.json"
-const VALID_SLOTS := ["weapon", "offhand", "accessory"]
 const DISPLAY_STATS := ["attack", "defense", "move", "hp", "crit_rate", "crit_damage"]
 const MAX_STARS := Unit.MAX_STARS
 const BASE_SKILL_SLOTS := 1
@@ -188,37 +187,22 @@ static func grant_skill_free(unit: Dictionary, skill_id: String) -> bool:
 		equipped.append(skill_id)
 	return true
 
-# 将装备放入指定槽位（校验槽位匹配），返回是否成功。
-static func equip_item(unit: Dictionary, slot: String, equipment_id: String) -> bool:
-	if not VALID_SLOTS.has(slot) or equipment_id.strip_edges().is_empty():
-		return false
-	var data: Dictionary = GameDatabase.get_equipment(equipment_id)
-	if data.is_empty() or str(data.get("slot", "")) != slot:
-		return false
-	var equipment: Dictionary = unit.get("equipment", {})
-	equipment[slot] = equipment_id
-	unit["equipment"] = equipment
-	return true
+# 给编成角色的永久强化累加小数数值并写回存档。
+static func add_permanent_stat(unit_id: String, stat: String, amount: float) -> bool:
+	return add_permanent_stats(unit_id, {stat: amount})
 
-# 卸下指定槽位装备，返回是否成功。
-static func unequip_item(unit: Dictionary, slot: String) -> bool:
-	var equipment: Dictionary = unit.get("equipment", {})
-	if not equipment.has(slot):
-		return false
-	equipment.erase(slot)
-	unit["equipment"] = equipment
-	return true
-
-# 给编成角色的永久强化累加 +amount 并写回 JSON（全局永久成长）。
-# stat 与单位字段一致（hp/attack/defense/move）。返回是否成功。
-static func add_permanent_stat(unit_id: String, stat: String, amount: int) -> bool:
-	if unit_id.strip_edges().is_empty() or amount == 0:
+# 一次写入多个属性，避免技能在战后为每个属性分别保存存档。
+static func add_permanent_stats(unit_id: String, amounts: Dictionary) -> bool:
+	if unit_id.strip_edges().is_empty() or amounts.is_empty():
 		return false
 	for unit in GameDatabase.player_roster.get("units", []):
 		if str(unit.get("id", "")) != unit_id:
 			continue
 		var mods: Dictionary = unit.get("permanent_mods", {})
-		mods[stat] = int(mods.get(stat, 0)) + amount
+		for stat in amounts:
+			var amount := float(amounts[stat])
+			if not is_zero_approx(amount):
+				mods[stat] = float(mods.get(stat, 0.0)) + amount
 		unit["permanent_mods"] = mods
 		return save_roster()
 	return false

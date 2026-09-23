@@ -374,7 +374,7 @@ func _build_info_panel() -> void:
 	add_child(info_panel)
 	info_panel.visible = false
 
-# 显示指定单位的属性/装备/技能/Buff 信息。
+# 显示指定单位的属性、技能和 Buff 信息。
 func _show_unit_info(unit: Unit) -> void:
 	if unit == null or not unit.alive:
 		return

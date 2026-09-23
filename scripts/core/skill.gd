@@ -120,7 +120,7 @@ func check_condition(battle, context: Dictionary) -> bool:
 		var target_hp: Variant = context.get("target")
 		if target_hp == null or not (target_hp is Unit):
 			return false
-		var target_ratio := float((target_hp as Unit).hp) / float(maxi((target_hp as Unit).max_hp, 1))
+		var target_ratio := float((target_hp as Unit).hp) / maxf((target_hp as Unit).max_hp, 1.0)
 		if not compare_num(target_ratio, condition["target_hp_percent"]):
 			return false
 	if condition.has("crit") and bool(condition.get("crit", false)) != bool(context.get("crit", false)):
@@ -165,7 +165,7 @@ func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 func get_self_hp_percent(context: Dictionary) -> float:
 	var actor = context.get("actor")
 	if actor != null and (actor is Unit):
-		return float((actor as Unit).hp) / float(maxi((actor as Unit).max_hp, 1))
+		return float((actor as Unit).hp) / maxf((actor as Unit).max_hp, 1.0)
 	return 1.0
 
 # 数值比较（lt/lte/gt/gte/eq）。

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bp71r6jueb2ut"
-path="res://.godot/imported/move.png-3d14f7960f589c202c879afa5663dc79.ctex"
+uid="uid://cya8nboqojp07"
+path="res://.godot/imported/portrait.png-bb01ad6445c71861db39dbd0e5f82b13.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/Hero/move.png"
-dest_files=["res://.godot/imported/move.png-3d14f7960f589c202c879afa5663dc79.ctex"]
+source_file="res://mods/hero/art/units/Hero/portrait.png"
+dest_files=["res://.godot/imported/portrait.png-bb01ad6445c71861db39dbd0e5f82b13.ctex"]
 
 [params]
 

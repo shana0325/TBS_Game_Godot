@@ -16,6 +16,8 @@ var condition_label: Label
 
 # 首次加入场景时构建遮罩和弹窗，后续仅更新技能数据。
 func _ready() -> void:
+	# 学习/遗忘列表位于立绘区的较高绘制层，详情必须盖过整页内容。
+	z_index = 20
 	_build_popup()
 	_layout_popup()
 
@@ -24,27 +26,20 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and dialog != null:
 		_layout_popup()
 
-# 构建与角色资料页一致的深紫、金色视觉层级。
+# 构建与角色资料页一致的深蓝、金色装饰层级。
 func _build_popup() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	backdrop = ColorRect.new()
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.015, 0.015, 0.035, 0.74)
+	backdrop.color = Color(0.01, 0.015, 0.03, 0.76)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	backdrop.gui_input.connect(_on_backdrop_input)
 	add_child(backdrop)
 
 	dialog = PanelContainer.new()
 	dialog.mouse_filter = Control.MOUSE_FILTER_STOP
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#20223e")
-	style.border_color = Color("#9b83b3")
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(10)
-	style.shadow_color = Color(0, 0, 0, 0.65)
-	style.shadow_size = 16
-	dialog.add_theme_stylebox_override("panel", style)
+	dialog.add_theme_stylebox_override("panel", MenuStyle.frame_panel_style())
 	add_child(dialog)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 28)
@@ -56,19 +51,22 @@ func _build_popup() -> void:
 	content.add_theme_constant_override("separation", 15)
 	margin.add_child(content)
 
+	var header_frame := PanelContainer.new()
+	header_frame.add_theme_stylebox_override("panel", MenuStyle.header_style())
+	content.add_child(header_frame)
 	var header := HBoxContainer.new()
-	content.add_child(header)
+	header_frame.add_child(header)
 	var headings := VBoxContainer.new()
 	headings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(headings)
 	title_label = Label.new()
 	title_label.add_theme_font_size_override("font_size", 29)
-	title_label.add_theme_color_override("font_color", Color("#f3bd80"))
+	title_label.add_theme_color_override("font_color", Color("#f3d79f"))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	headings.add_child(title_label)
 	subtitle_label = Label.new()
 	subtitle_label.add_theme_font_size_override("font_size", 16)
-	subtitle_label.add_theme_color_override("font_color", Color("#b9b7d0"))
+	subtitle_label.add_theme_color_override("font_color", Color("#b6bdc9"))
 	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	headings.add_child(subtitle_label)
 	var close_button := Button.new()
@@ -94,11 +92,12 @@ func _build_popup() -> void:
 	icon_name_label = Label.new()
 	icon_name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon_name_label.add_theme_font_size_override("font_size", 22)
-	icon_name_label.add_theme_color_override("font_color", Color("#f3d99d"))
+	icon_name_label.add_theme_color_override("font_color", Color("#f3d79f"))
 	icon_row.add_child(icon_name_label)
 
 	var body_panel := PanelContainer.new()
 	body_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_panel.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
 	content.add_child(body_panel)
 	var body_margin := MarginContainer.new()
 	body_margin.add_theme_constant_override("margin_left", 20)

@@ -1,0 +1,11 @@
+{
+  "id": "hero",
+  "name": "Hero 角色包",
+  "version": "1.0.0",
+  "author": "TBS Game",
+  "description": "Hero 单位、角色图片与固有代码技能。",
+  "code_skills": {
+    "Kill Growth": "code_skills/kill_growth.gd",
+    "Attribute Siphon": "code_skills/attribute_siphon.gd"
+  }
+}

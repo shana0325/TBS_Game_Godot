@@ -30,11 +30,11 @@
 
 | 目录 | 职责 | 是否默认读取 |
 | --- | --- | --- |
-| `data/` | 单位、技能、Buff、装备、遗物、玩家编成等 JSON 数据 | 相关数据任务时读取 |
+| `data/` | 单位、技能、Buff、遗物、玩家编成等 JSON 数据 | 相关数据任务时读取 |
 | `scenes/` | Godot 场景资源和节点布局 | UI/流程任务时读取 |
 | `scripts/core/` | 数据库、实体、会话、资源管理等基础模块 | 核心逻辑或数据流任务时读取 |
 | `scripts/battle/` | 战斗管理、移动、回合、伤害、效果、事件和技能触发 | 战斗任务时读取 |
-| `scripts/screens/` | 主菜单、选关、部署、成长、结算等界面控制器 | 流程/UI 任务时读取 |
+| `scripts/screens/` | 主菜单、选关、部署、结算和奖励等界面控制器 | 流程/UI 任务时读取 |
 | `scripts/ui/` | 战场显示、单位视图、信息卡、背包弹窗和可复用 UI 组件 | UI 任务时读取 |
 | `assets/fonts/` | 当前运行时字体 | 字体/UI 任务时读取 |
 | `assets/skills/` | 当前运行时技能图标 | 技能图标或美术任务时读取 |
@@ -56,7 +56,7 @@
 ```text
 project.godot
   └─ autoload: GameDatabase / ModLoader / ArtManager / GameSession
-       ├─ data/*.json → GameDatabase → Unit / Skill / Buff / Equipment
+       ├─ data/*.json → GameDatabase → Unit / Skill / Buff
        ├─ scenes/main.tscn → 主菜单 → 选关 → 部署 → 战斗
        └─ BattleManager → 战斗状态/事件 → battle_screen 与复用 UI 组件
 ```
@@ -68,7 +68,8 @@ project.godot
 - `scripts/core/relic_system.gd` 统一向战斗单位和部署预览应用 Run 遗物、叠层与跨战斗成长。
 - `Unit.get_shield_cap()` 是护盾上限规则入口，默认最大生命 100%，技能可提高或取消上限。
 - `scripts/screens/` 负责页面流程和输入协调，通过 `GameSession`、`BattleManager` 等接口驱动显示。
-- `scripts/ui/` 负责表现和交互组件；部署与战斗需要一致的单位信息时，优先复用已有组件和文本格式。
+- `scripts/ui/` 负责表现和交互组件；部署与战斗共用 `UnitDetailPanel` 查看角色及学习、遗忘技能。`MenuStyle` 与默认主题维护简洁的无边框面板及纯色按钮。
+- `GameDatabase` 先载入内置数据，`ModLoader` 再合并 Mod 的单位、素材引用和 CodeSkill，最后才校验玩家存档；Hero 位于 `mods/hero/`。
 - 数据平衡优先修改 `data/` 与对应设计文档，不把可配置数值硬编码到界面脚本。
 
 ## 按任务定位

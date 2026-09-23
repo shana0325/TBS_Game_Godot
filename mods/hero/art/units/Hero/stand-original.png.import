@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c2w1attkig47q"
-path="res://.godot/imported/hero.png-71b3d8fa51fb5f8b7681f15a116f6353.ctex"
+uid="uid://7do3cxy0liwf"
+path="res://.godot/imported/stand-original.png-90d7d98a4297d630204358f055099952.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/hero.png"
-dest_files=["res://.godot/imported/hero.png-71b3d8fa51fb5f8b7681f15a116f6353.ctex"]
+source_file="res://mods/hero/art/units/Hero/stand-original.png"
+dest_files=["res://.godot/imported/stand-original.png-90d7d98a4297d630204358f055099952.ctex"]
 
 [params]
 

@@ -60,7 +60,7 @@ func get_stat_modifier_for_unit(unit: Unit, stat: String) -> int:
 func _condition_matches(unit: Unit) -> bool:
 	if conditional_hp_percent.is_empty() or unit == null:
 		return true
-	var ratio := float(unit.hp) / float(maxi(unit.max_hp, 1))
+	var ratio := float(unit.hp) / maxf(unit.max_hp, 1.0)
 	return Skill.compare_num(ratio, conditional_hp_percent)
 
 # 单位行动开始时结算状态效果。

@@ -78,7 +78,7 @@ func _build_embedded_shell() -> void:
 	dimmer = ColorRect.new()
 	dimmer.name = "RewardDimmer"
 	dimmer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dimmer.color = Color(0.01, 0.015, 0.03, 0.38)
+	dimmer.color = Color(0.01, 0.015, 0.03, 0.58)
 	dimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dimmer)
 	popup_panel = PanelContainer.new()
@@ -200,7 +200,7 @@ func _build_title() -> void:
 	title.name = "RewardTitle"
 	title.text = "%s 通关！选择奖励" % GameSession.get_floor_label()
 	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", Color("#f3d99d"))
+	title.add_theme_color_override("font_color", Color("#f3d79f"))
 	title.position = Vector2(60, 30)
 	add_child(title)
 
@@ -228,6 +228,7 @@ func _build_options() -> void:
 	for i in options.size():
 		var panel := PanelContainer.new()
 		panel.custom_minimum_size = Vector2(210, 300)
+		panel.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
 		var margin := MarginContainer.new()
 		margin.add_theme_constant_override("margin_left", 12)
 		margin.add_theme_constant_override("margin_right", 12)
@@ -238,6 +239,7 @@ func _build_options() -> void:
 		var name_label := Label.new()
 		name_label.text = str(options[i].get("label", "?"))
 		name_label.add_theme_font_size_override("font_size", 22)
+		name_label.add_theme_color_override("font_color", Color("#f3d79f"))
 		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(name_label)
 		var type_label := Label.new()
@@ -249,6 +251,10 @@ func _build_options() -> void:
 		desc_label.add_theme_font_size_override("font_size", 15)
 		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(desc_label)
+		# 各卡片共用剩余高度，把选择按钮压到相同的底部位置。
+		var spacer := Control.new()
+		spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		box.add_child(spacer)
 		var pick_btn := Button.new()
 		pick_btn.text = "选择"
 		pick_btn.custom_minimum_size = Vector2(160, 42)
@@ -263,8 +269,6 @@ func _type_text(t: String) -> String:
 	match t:
 		"skill_book":
 			return "◆ 技能书"
-		"equipment":
-			return "◆ 装备"
 		"relic":
 			return "★ 遗物"
 	return t

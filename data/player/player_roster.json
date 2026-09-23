@@ -17,7 +17,6 @@
 	},
 	"units": [
 		{
-			"equipment": {},
 			"star": 1,
 			"equipped_skills": [],
 			"extra_skills": [],
@@ -32,7 +31,6 @@
 			"star": 1,
 			"level": 1,
 			"permanent_mods": {},
-			"equipment": {},
 			"learned_skills": [],
 			"equipped_skills": [],
 			"extra_skills": []
@@ -43,7 +41,6 @@
 			"star": 1,
 			"level": 1,
 			"permanent_mods": {},
-			"equipment": {},
 			"learned_skills": [],
 			"equipped_skills": [],
 			"extra_skills": []
@@ -54,7 +51,6 @@
 			"star": 1,
 			"level": 1,
 			"permanent_mods": {},
-			"equipment": {},
 			"learned_skills": [],
 			"equipped_skills": [],
 			"extra_skills": []
@@ -65,7 +61,6 @@
 			"star": 1,
 			"level": 1,
 			"permanent_mods": {},
-			"equipment": {},
 			"learned_skills": [],
 			"equipped_skills": [],
 			"extra_skills": []

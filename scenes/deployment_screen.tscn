@@ -31,4 +31,4 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-color = Color(0.025, 0.035, 0.075, 0.48)
+color = Color(0.015, 0.025, 0.055, 0.53)

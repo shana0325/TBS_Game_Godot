@@ -1,4 +1,4 @@
-# 爬塔奖励生成：胜利后三选一（技能书 / 装备 / 遗物），应用结果写入会话或编成。
+# 爬塔奖励生成：胜利后从技能书与遗物中选择奖励。
 class_name RewardGenerator
 extends RefCounted
 
@@ -17,11 +17,6 @@ static func generate_options() -> Array:
 		candidates.append({"type": "skill_book", "id": skill_id,
 			"label": "技能书：%s" % str(data.get("name", skill_id)),
 			"desc": "使用后可指定一名角色学习：%s" % str(data.get("desc", "通用技能"))})
-	# 装备
-	for equip_id in GameDatabase.equipments.keys():
-		var data: Dictionary = GameDatabase.get_equipment(equip_id)
-		candidates.append({"type": "equipment", "id": equip_id,
-			"label": str(data.get("name", equip_id)), "desc": "装备（%s）" % str(data.get("slot", ""))})
 	# 普通遗物仅出现一次；可重复遗物在达到层数上限前都可再次出现。
 	for relic_id in GameDatabase.relics.keys():
 		var data: Dictionary = GameDatabase.get_relic(relic_id)
@@ -37,17 +32,9 @@ static func generate_options() -> Array:
 
 # 应用选中的奖励。
 static func apply_option(option: Dictionary) -> void:
-	var roster: Array = GameDatabase.player_roster.get("units", [])
 	match str(option.get("type", "")):
 		"skill_book":
 			ProgressManager.add_skill_book(str(option.get("id", "")), 1)
-		"equipment":
-			var data: Dictionary = GameDatabase.get_equipment(str(option.get("id", "")))
-			var slot: String = str(data.get("slot", ""))
-			var unit := _unit_with_empty_slot(roster, slot)
-			if unit != null:
-				ProgressManager.equip_item(unit, slot, str(option.get("id", "")))
-				ProgressManager.save_roster()
 		"relic":
 			GameSession.add_run_relic(str(option.get("id", "")))
 
@@ -56,17 +43,6 @@ static func _party_has_skill(roster: Array, skill_id: String) -> bool:
 		if unit.get("learned_skills", []).has(skill_id):
 			return true
 	return false
-
-static func _first_party_unit(roster: Array) -> Dictionary:
-	for unit in roster:
-		return unit
-	return {}
-
-static func _unit_with_empty_slot(roster: Array, slot: String) -> Dictionary:
-	for unit in roster:
-		if str(unit.get("equipment", {}).get(slot, "")) == "":
-			return unit
-	return {}
 
 # 当前队伍/本局状态摘要（供奖励界面展示）。
 static func run_summary() -> String:

@@ -1,4 +1,4 @@
-# 数据加载入口：统一加载 units / skills / buffs / equipments / relics / player_roster。
+# 数据加载入口：统一加载单位、技能、Buff、遗物与玩家编成。
 extends Node
 
 # 编成进度保存路径（user://）：桌面与网页通用。
@@ -15,7 +15,6 @@ const BASE_PLAYER_UNITS := [
 var units: Dictionary = {}
 var skills: Dictionary = {}
 var buffs: Dictionary = {}
-var equipments: Dictionary = {}
 var relics: Dictionary = {}
 var tower_config: Dictionary = {}
 var player_roster: Dictionary = {}
@@ -24,7 +23,6 @@ const DATA_PATHS := {
 	"units": "res://data/unit/units.json",
 	"skills": "res://data/skill/skills.json",
 	"buffs": "res://data/buff/buffs.json",
-	"equipments": "res://data/equipment/equipments.json",
 	"relics": "res://data/relic/relics.json",
 	"tower_config": "res://data/tower/tower_config.json",
 	"player_roster": "res://data/player/player_roster.json",
@@ -34,14 +32,16 @@ func _ready() -> void:
 	units = _load_json(DATA_PATHS.units)
 	skills = _load_json(DATA_PATHS.skills)
 	buffs = _load_json(DATA_PATHS.buffs)
-	equipments = _load_json(DATA_PATHS.equipments)
 	relics = _load_json(DATA_PATHS.relics)
 	tower_config = _load_json(DATA_PATHS.tower_config)
 	player_roster = _load_json(DATA_PATHS.player_roster)
 	_merge_code_skills()
+
+# Mod 数据与代码技能注册完成后，再校验存档中的单位与技能。
+func finalize_loading() -> void:
 	_sync_user_roster()
-	print("GameDatabase loaded: units=%d skills=%d buffs=%d equipments=%d relics=%d" % [
-		units.size(), skills.size(), buffs.size(), equipments.size(), relics.size()
+	print("GameDatabase loaded: units=%d skills=%d buffs=%d relics=%d" % [
+		units.size(), skills.size(), buffs.size(), relics.size()
 	])
 
 # 编成进度优先读取 user://；首次运行时把内置编成种子写入 user:// 供后续保存。
@@ -109,6 +109,10 @@ func _sanitize_user_roster() -> void:
 			if unit.has(obsolete_key):
 				unit.erase(obsolete_key)
 				changed = true
+		# 旧版装备系统已移除，读取旧存档时丢弃装备槽。
+		if unit.has("equipment"):
+			unit.erase("equipment")
+			changed = true
 		for list_key in ["learned_skills", "equipped_skills", "extra_skills"]:
 			var old_list: Array = unit.get(list_key, [])
 			var clean_list: Array = []
@@ -155,7 +159,6 @@ func _default_unit_entry(unit_type: String, unit_id: String) -> Dictionary:
 		"star": 1,
 		"level": 1,
 		"permanent_mods": {},
-		"equipment": {},
 		"learned_skills": [],
 		"equipped_skills": [],
 		"extra_skills": [],
@@ -179,25 +182,28 @@ func _save_user_roster() -> bool:
 func _merge_code_skills() -> void:
 	for skill_id in SkillCodeRegistry.get_entries():
 		var path: String = str(SkillCodeRegistry.get_entries()[skill_id])
-		var script: GDScript = load(path)
-		if script == null or not script.can_instantiate():
-			push_error("代码技能脚本无效: %s (%s)" % [skill_id, path])
-			continue
-		var inst: Object = script.new()
-		if not (inst is CodeSkill):
-			push_error("代码技能必须继承 CodeSkill: %s" % skill_id)
-			continue
-		var meta: Dictionary = (inst as CodeSkill).export_meta()
-		# 保留 JSON 元数据（中文 name/desc/interval_seconds/mechanic 等），
-		# 代码元数据覆盖行为字段（trigger/condition/cooldown…），并挂接脚本。
-		var base: Dictionary = skills.get(skill_id, {}).duplicate()
-		var json_interval := float(base.get("interval_seconds", 0.0))
-		base.merge(meta, true)
-		# 代码技能未显式设置按秒计时间隔时（默认为 0），保留 JSON 里由数据调优的 interval_seconds
-		if float(meta.get("interval_seconds", 0.0)) <= 0.0 and json_interval > 0.0:
-			base["interval_seconds"] = json_interval
-		base["code_script"] = script
-		skills[skill_id] = base
+		register_code_skill(str(skill_id), path)
+
+# 将内置或 Mod 代码技能并入统一技能表，保留 JSON 中可调的计时间隔。
+func register_code_skill(skill_id: String, path: String) -> bool:
+	var resource: Resource = load(path)
+	if not (resource is GDScript) or not (resource as GDScript).can_instantiate():
+		push_error("代码技能脚本无效: %s (%s)" % [skill_id, path])
+		return false
+	var script := resource as GDScript
+	var inst: Object = script.new()
+	if not (inst is CodeSkill):
+		push_error("代码技能必须继承 CodeSkill: %s" % skill_id)
+		return false
+	var meta: Dictionary = (inst as CodeSkill).export_meta()
+	var base: Dictionary = skills.get(skill_id, {}).duplicate()
+	var json_interval := float(base.get("interval_seconds", 0.0))
+	base.merge(meta, true)
+	if float(meta.get("interval_seconds", 0.0)) <= 0.0 and json_interval > 0.0:
+		base["interval_seconds"] = json_interval
+	base["code_script"] = script
+	skills[skill_id] = base
+	return true
 
 func _load_json(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
@@ -263,9 +269,6 @@ func _has_required_tags(raw_tags: Variant, required_tags: Array) -> bool:
 func get_buff(buff_id: String) -> Dictionary:
 	return buffs.get(buff_id, {})
 
-func get_equipment(equipment_id: String) -> Dictionary:
-	return equipments.get(equipment_id, {})
-
 func get_relic(relic_id: String) -> Dictionary:
 	return relics.get(relic_id, {})
 
@@ -277,6 +280,6 @@ func get_player_units() -> Array:
 	return player_roster.get("units", [])
 
 func get_data_summary() -> String:
-	return "数据已加载 | 单位:%d 技能:%d Buff:%d 装备:%d" % [
-		units.size(), skills.size(), buffs.size(), equipments.size()
+	return "数据已加载 | 单位:%d 技能:%d Buff:%d" % [
+		units.size(), skills.size(), buffs.size()
 	]

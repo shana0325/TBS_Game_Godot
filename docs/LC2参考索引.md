@@ -48,7 +48,7 @@ LC2 项目位于：
 | 战场小人和血条 | `!ve/base/tscn/chara/` | `scripts/ui/unit_view.gd`、`scripts/core/art_manager.gd` |
 | 战斗日志和战后统计 | `!ve/tscn/bat/`、`!ve/tscn/bat/hurt/` | `scripts/ui/battle_screen.gd`、`scripts/screens/result_screen.gd` |
 | 地图/设施交互 | `!ve/tscn/map/`、`ex/faci/` | TBS 当前地图与战斗流程脚本 |
-| 事件和奖励选择 | `!ve/tscn/eventDlg/`、`!ve/tscn/game/gameEndDlg.tscn` | `scripts/screens/reward_screen.gd`、`progression_screen.gd` |
+| 事件和奖励选择 | `!ve/tscn/eventDlg/`、`!ve/tscn/game/gameEndDlg.tscn` | `scripts/screens/reward_screen.gd`、`scripts/ui/unit_detail_panel.gd` |
 | 数据对象和内容注册 | `core/global/data.gd`、`core/base.gd`、`ex/` | `scripts/core/game_database.gd`、`data/` |
 
 ## 后续按需读取规则

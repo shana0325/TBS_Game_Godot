@@ -2,6 +2,8 @@
 class_name BattleManager
 extends RefCounted
 
+signal battle_finished(winner_camp: String)
+
 const TILE_SIZE := 64
 
 var grid: Grid
@@ -101,7 +103,7 @@ func _spawn_enemy_units(scenario: Dictionary) -> void:
 		if config.is_empty():
 			continue
 		var pos := Vector2i(int(entry.pos[0]), int(entry.pos[1]))
-		# 敌人技能走"装备技能"通道（塔层生成器按层配技能）；属性倍率用于按层成长
+		# 敌人额外技能走技能槽通道（塔层生成器按层配技能）；属性倍率用于按层成长
 		var roster_data: Dictionary = {
 			"equipped_skills": entry.get("skills", []),
 			"stat_multiplier": float(entry.get("stat_multiplier", 1.0)),
@@ -459,6 +461,8 @@ func _auto_act(unit: Unit) -> Dictionary:
 	return {"action": "wait"}
 
 func _check_winner() -> void:
+	if winner != "":
+		return
 	var players := 0
 	var enemies := 0
 	for unit in units:
@@ -471,6 +475,8 @@ func _check_winner() -> void:
 		winner = TurnManager.ENEMY_CAMP
 	elif enemies == 0:
 		winner = TurnManager.PLAYER_CAMP
+	if winner != "":
+		battle_finished.emit(winner)
 
 # 对外提供本场战斗当前的狂暴最终伤害增幅，供 UI 和非普通攻击效果复用。
 func get_final_damage_bonus_percent() -> float:

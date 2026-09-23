@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cryuuyjkbiyf6"
-path="res://.godot/imported/stand.png-be5f638b84ea7ff299505a48f6b82096.ctex"
+uid="uid://3x3rgo8lbwaa"
+path="res://.godot/imported/death.png-69bf3ffa3c6c5d955774492d5d5a07a5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/Hero/stand.png"
-dest_files=["res://.godot/imported/stand.png-be5f638b84ea7ff299505a48f6b82096.ctex"]
+source_file="res://mods/hero/art/units/Hero/death.png"
+dest_files=["res://.godot/imported/death.png-69bf3ffa3c6c5d955774492d5d5a07a5.ctex"]
 
 [params]
 

@@ -1,26 +1,4 @@
 {
-  "Kill Growth": {
-    "name": "以战养战",
-    "desc": "每击杀一名敌人，生命值上限永久 +1（当前生命同步 +1）",
-    "tags": ["固有", "成长"],
-    "common": false,
-    "searchable": false,
-    "trigger": "on_kill",
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "effects": [
-      {
-        "type": "permanent_stat",
-        "stat": "hp",
-        "amount": 1,
-        "persist": true
-      }
-    ]
-  },
   "Power Strike": {
     "name": "强力打击",
     "desc": "攻击后额外造成100%攻击力伤害",

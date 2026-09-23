@@ -1,25 +1,41 @@
-# 界面主操作按钮的统一外观，供各页面复用。
+# 为各界面提供简洁的深色面板、标题栏和有明确底色的按钮样式。
 class_name MenuStyle
 extends RefCounted
 
-# 为推进流程的按钮设置金色强调及悬停、按下状态。
+# 推进流程按钮与普通按钮共用底色，避免出现额外的强调色。
 static func apply_primary(button: Button) -> void:
-	button.add_theme_stylebox_override("normal", _make_button_style(Color("#775b31"), Color("#e9c47a")))
-	button.add_theme_stylebox_override("hover", _make_button_style(Color("#9b7440"), Color("#fff0bc")))
-	button.add_theme_stylebox_override("pressed", _make_button_style(Color("#594424"), Color("#dcb46b")))
-	button.add_theme_stylebox_override("focus", _make_button_style(Color("#775b31"), Color("#fff0bc")))
-	button.add_theme_color_override("font_color", Color("#fff6dc"))
-	button.add_theme_color_override("font_hover_color", Color.WHITE)
-	button.add_theme_font_size_override("font_size", 19)
+	button.add_theme_stylebox_override("normal", _flat(Color(0.21, 0.21, 0.34), 12))
+	button.add_theme_stylebox_override("hover", _flat(Color(0.29, 0.29, 0.45), 12))
+	button.add_theme_stylebox_override("pressed", _flat(Color(0.36, 0.34, 0.53), 12))
+	button.add_theme_stylebox_override("focus", _flat(Color.TRANSPARENT, 0))
+	button.add_theme_color_override("font_color", Color(0.91, 0.89, 0.83))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 0.91, 0.71))
+	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.95, 0.82))
 
-# 创建与全局紫色面板协调的圆角按钮样式。
-static func _make_button_style(fill: Color, outline: Color) -> StyleBoxFlat:
+# 用底色和文字亮度表示当前目录项。
+static func apply_navigation(button: Button, selected: bool) -> void:
+	button.add_theme_stylebox_override("normal", _flat(Color("#363557") if selected else Color.TRANSPARENT, 10))
+	button.add_theme_stylebox_override("hover", _flat(Color("#444465"), 10))
+	button.add_theme_stylebox_override("pressed", _flat(Color("#55547d"), 10))
+	button.add_theme_stylebox_override("focus", _flat(Color.TRANSPARENT, 0))
+	button.add_theme_color_override("font_color", Color("#f2e7ff") if selected else Color("#aaa9bf"))
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+
+# 创建全屏资料页的纯色底面。
+static func frame_panel_style() -> StyleBoxFlat:
+	return _flat(Color("#17192b"), 14)
+
+# 创建内容区的轻微色差底面。
+static func section_panel_style() -> StyleBoxFlat:
+	return _flat(Color("#202139"), 14)
+
+# 创建无装饰的章节标题栏。
+static func header_style() -> StyleBoxFlat:
+	return _flat(Color("#242540"), 14)
+
+# 创建不带描边的纯色样式，保留内容与边缘的必要间距。
+static func _flat(color: Color, padding: float) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = outline
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(9)
-	style.set_content_margin_all(10)
-	style.shadow_color = Color(0.01, 0.01, 0.03, 0.4)
-	style.shadow_size = 5
+	style.bg_color = color
+	style.set_content_margin_all(padding)
 	return style

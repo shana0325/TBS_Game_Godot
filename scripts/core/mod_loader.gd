@@ -1,22 +1,23 @@
 # Mod 加载器：扫描 mods/ 目录（res:// 与 user:// 均可），读取 mod.json 元数据，
-# 把 units/skills/buffs/equipments 合并进 GameDatabase，实现"放文件夹即生效"的 mod 扩展。
+# 把 units/skills/buffs 合并进 GameDatabase，实现"放文件夹即生效"的 mod 扩展。
 # mod 目录结构：
 #   mods/<mod_id>/
 #     mod.json          # 必填：id/name/version/author
 #     units/*.json      # 单位数据（key 为 unit_type，与 GameDatabase 合并）
 #     skills/*.json     # 技能数据
 #     buffs/*.json      # Buff 数据
-#     equipments/*.json # 装备数据
+#     code_skills/*.gd  # 代码技能；在 mod.json 的 code_skills 中登记
 #     art/units/<unit_type>/   # 角色素材：idle/attack/hurt/death/skill/portrait.png
 extends Node
 
-const MOD_CATEGORIES := ["units", "skills", "buffs", "equipments"]
+const MOD_CATEGORIES := ["units", "skills", "buffs"]
 
 var loaded_mods: Array = []
 
 func _ready() -> void:
 	_load_mods_from("res://mods")
 	_load_mods_from("user://mods")
+	GameDatabase.finalize_loading()
 	for mod in loaded_mods:
 		print("Mod loaded: %s v%s by %s" % [mod.get("name", mod.get("id", "?")), mod.get("version", "?"), mod.get("author", "?")])
 
@@ -50,6 +51,20 @@ func _merge_mod(mod_dir: String, manifest: Dictionary) -> void:
 			var target: Dictionary = GameDatabase.get(category)
 			for key in data:
 				target[key] = data[key]
+	_merge_code_skills(mod_dir, manifest)
+
+# 按 mod.json 登记的相对路径注册代码技能，防止引用 Mod 目录之外的脚本。
+func _merge_code_skills(mod_dir: String, manifest: Dictionary) -> void:
+	var entries = manifest.get("code_skills", {})
+	if not (entries is Dictionary):
+		push_error("Mod 的 code_skills 必须是字典: %s" % mod_dir)
+		return
+	for skill_id in entries:
+		var relative_path := str(entries[skill_id]).replace("\\", "/")
+		if not relative_path.begins_with("code_skills/") or relative_path.contains(".."):
+			push_error("Mod 代码技能路径无效: %s" % relative_path)
+			continue
+		GameDatabase.register_code_skill(str(skill_id), mod_dir + "/" + relative_path)
 
 func _merge_category(mod_dir: String, category: String) -> Dictionary:
 	var result: Dictionary = {}

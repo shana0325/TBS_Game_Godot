@@ -6,6 +6,7 @@ extends Node
 
 const BUILTIN_DIR := "res://assets/units/"
 const SKILL_ICON_DIR := "res://assets/skills/"
+const DEFAULT_SKILL_ICON := "res://assets/skills/23_atom.png"
 const RELIC_ICON_DIR := "res://assets/relics/"
 var _skill_icon_files: Array[String] = []
 
@@ -83,9 +84,8 @@ func _find_skill_icon_path(skill_id: String, skill_name: String) -> String:
 		for file_name in files:
 			if _normalize_icon_text(file_name).find(token) >= 0:
 				return SKILL_ICON_DIR + file_name
-	# 没有语义关键词时也使用素材，保证技能卡不会退回纯文字。
-	var fallback_index := absi(hash(search_text)) % files.size()
-	return SKILL_ICON_DIR + files[fallback_index]
+	# 未指定图标的技能统一使用中性默认图标，避免不同调用参数产生不同随机贴图。
+	return DEFAULT_SKILL_ICON
 
 func _get_skill_icon_files() -> Array[String]:
 	if not _skill_icon_files.is_empty():
@@ -114,11 +114,6 @@ func _find_sprite_path(unit_type: String, action: String) -> String:
 			var path: String = str(mod_dir) + "/art/units/%s/%s.png" % [unit_type, action]
 			if _res_exists(path):
 				return path
-	# 内置 Hero 的新版站立像素图；保留旧素材供其他动作和回退使用。
-	if unit_type == "Hero" and action == "stand":
-		var updated_stand := BUILTIN_DIR + "Hero/stand-v2.png"
-		if _res_exists(updated_stand):
-			return updated_stand
 	# 2. 内置动作目录 assets/units/<Type>/<action>.png
 	var action_dir := BUILTIN_DIR + unit_type + "/" + action + ".png"
 	if _res_exists(action_dir):

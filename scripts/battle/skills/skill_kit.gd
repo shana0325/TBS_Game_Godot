@@ -115,6 +115,6 @@ static func passive_damage_bonus(source: Unit, target: Unit) -> float:
 		bonus += 0.02 * float(rt.stack_get("onset"))
 	# 盈血之力：生命 > 70% → +40%
 	if source.has_skill("Absolute Focus"):
-		if float(source.hp) / float(maxi(source.max_hp, 1)) > 0.7:
+		if float(source.hp) / maxf(source.max_hp, 1.0) > 0.7:
 			bonus += 0.40
 	return bonus

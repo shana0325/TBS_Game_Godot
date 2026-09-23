@@ -1,0 +1,16 @@
+{
+  "Hero": {
+    "tags": [],
+    "hp": 22,
+    "atk": 7,
+    "defense": 5,
+    "move": 1,
+    "crit_rate": 5,
+    "crit_damage": 150,
+    "range_min": 1,
+    "range_max": 2,
+    "turn_interval": 4.0,
+    "innate_skill": "Kill Growth",
+    "innate_skills": ["Attribute Siphon"]
+  }
+}

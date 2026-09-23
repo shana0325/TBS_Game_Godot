@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://djcme48xv3ym8"
-path="res://.godot/imported/goblin.png-3cee438f147f18aa7387bd19507787cf.ctex"
+uid="uid://yug2qav5vvaf"
+path="res://.godot/imported/stand.png-06d891596aea6e868e8e6fc634d6303b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/goblin.png"
-dest_files=["res://.godot/imported/goblin.png-3cee438f147f18aa7387bd19507787cf.ctex"]
+source_file="res://mods/hero/art/units/Hero/stand.png"
+dest_files=["res://.godot/imported/stand.png-06d891596aea6e868e8e6fc634d6303b.ctex"]
 
 [params]
 
