@@ -50,6 +50,7 @@ mods/
     "move": 1,
     "range_min": 1,
     "range_max": 1,
+    "random_pool_enabled": true,
     "innate_skill": "Power Slash",
     "tags": ["战士"]
   }
@@ -64,6 +65,7 @@ mods/
 | `hp` / `atk` / `defense` / `move` | 基础属性 |
 | `range_min` / `range_max` | 攻击射程 |
 | `innate_skill` | 固有技能 ID，可为空 |
+| `random_pool_enabled` | 是否进入随机招募、商店和普通敌人池；默认 `true`。设为 `false` 后仍可由开局编成、指定关卡或特殊事件直接获得/生成 |
 | `tags` | 单位标签数组 |
 
 ## 4. 技能数据（skills/*.json）
@@ -125,7 +127,7 @@ mods/
    - `check_condition(battle, context)`：触发条件（缺省按 JSON `condition` 判断）
    - `resolve_targets(battle, user, context)`：目标解析（缺省按 `target_type` 与射程）
    - `execute(user, targets, game, battle)`：效果执行（缺省把 `effects` 交给效果库；可直接调用 `EffectSystem.apply_effects`）
-2. 元数据（名称/描述/触发时机/冷却/射程/common 标记）在脚本 `_init` 中设置。
+2. 元数据（名称/描述/触发时机/冷却/射程/common 标记）只在脚本 `_init` 中设置；同一代码技能不需要再建一份 `skills/*.json`。代码技能若直接造成伤害，还需声明 `damage_kinds = [DamageSystem.SKILL]`，或按实际结算类型使用 `ATTACK` / `EFFECT`；详情页据此显示伤害类型。JSON 伤害效果未配置 `damage_kind` 时默认是技能伤害。
 3. 对项目内置代码技能，在 `scripts/battle/skills/skill_code_registry.gd` 注册。对 Mod 代码技能，在 `mod.json` 中加入：
    ```json
    "code_skills": {"My Skill Name": "code_skills/my_skill.gd"}
@@ -135,4 +137,4 @@ mods/
 
 代码技能与 JSON 技能统一并入技能表，编成界面、战斗触发、单位创建均自动生效。
 
-`mods/hero/` 展示了两个固有代码技能：`innate_skill` 保留“以战养战”，`innate_skills` 追加“属性汲取”。后者通过 `on_hit` 筛选普攻命中，在本场按目标记录偷取次数，战斗结束信号触发时将存活角色偷取总量的 20% 写入编成永久属性。生命、攻击、护甲与暴击属性支持小数存储，最终伤害仍按现有伤害结算规则取整。
+`mods/hero/` 展示了固有代码技能“属性汲取”：它通过 `on_attack_hit_before` 在普攻扣血前按目标记录偷取次数，战斗结束信号触发时将存活角色偷取总量的 20% 写入编成永久属性。生命、攻击、护甲与暴击属性支持小数存储，最终伤害仍按现有伤害结算规则取整。

@@ -16,6 +16,8 @@ var aura_range: int = 0
 var heal_percent: float = 0.0
 var immunity: Array = []
 var reflect_percent: float = 0.0
+# 反射来源的伤害类别：技能反射可触发伤害联动，遗物反射默认仍为特效。
+var reflect_damage_kind: String = "effect"
 var reduce_percent: float = 0.0
 var ignore_defense: bool = false
 var is_mark: bool = false
@@ -39,6 +41,7 @@ static func from_data(data: Dictionary) -> Buff:
 	buff.heal_percent = float(data.get("heal_percent", 0.0))
 	buff.immunity = data.get("immunity", [])
 	buff.reflect_percent = float(data.get("reflect_percent", 0.0))
+	buff.reflect_damage_kind = str(data.get("reflect_damage_kind", "effect"))
 	buff.reduce_percent = float(data.get("reduce_percent", 0.0))
 	buff.ignore_defense = bool(data.get("ignore_defense", false))
 	buff.is_mark = bool(data.get("is_mark", false))

@@ -12,6 +12,8 @@ var stats_tab: String = "damage"
 var embedded: bool = false
 var popup_panel: PanelContainer
 var dimmer: ColorRect
+var fixed_supplies: Dictionary = {}
+var reward_resolved: bool = false
 const STAT_TABS := {"damage": "伤害输出", "taken": "承伤", "heal": "治疗"}
 
 func setup_embedded() -> void:
@@ -21,6 +23,7 @@ func setup_embedded() -> void:
 func _ready() -> void:
 	if embedded:
 		_build_embedded_shell()
+	fixed_supplies = GameSession.claim_tower_clear_supplies()
 	options = RewardGenerator.generate_options()
 	_build_title()
 	_build_summary()
@@ -198,7 +201,7 @@ func _stat_row(name: String, value: int, pct: int) -> HBoxContainer:
 func _build_title() -> void:
 	var title := Label.new()
 	title.name = "RewardTitle"
-	title.text = "%s 通关！选择奖励" % GameSession.get_floor_label()
+	title.text = "%s 通关！选择遗物" % GameSession.get_floor_label()
 	title.add_theme_font_size_override("font_size", 36)
 	title.add_theme_color_override("font_color", Color("#f3d79f"))
 	title.position = Vector2(60, 30)
@@ -208,7 +211,9 @@ func _build_summary() -> void:
 	var summary := Label.new()
 	summary.name = "RunSummary"
 	var text := RewardGenerator.run_summary()
-	summary.text = text if text != "" else "尚未获得遗物"
+	var skill_id := str(fixed_supplies.get("skill_id", ""))
+	var book_name := str(GameDatabase.get_skill(skill_id).get("name", skill_id)) if not skill_id.is_empty() else "无可用技能书"
+	summary.text = "已获得：技能书·%s、金币 +%d\n%s" % [book_name, int(fixed_supplies.get("gold", 0)), text if text != "" else "尚未获得遗物"]
 	summary.add_theme_font_size_override("font_size", 18)
 	summary.position = Vector2(60, 96)
 	summary.custom_minimum_size = Vector2(900, 54)
@@ -274,9 +279,11 @@ func _type_text(t: String) -> String:
 	return t
 
 func _build_quit_button() -> void:
+	if not options.is_empty():
+		return
 	var quit_btn := Button.new()
 	quit_btn.name = "QuitTowerButton"
-	quit_btn.text = "跳过奖励，进入下一层"
+	quit_btn.text = "继续进入下一层"
 	quit_btn.custom_minimum_size = Vector2(220, 40)
 	quit_btn.add_theme_color_override("font_color", Color(0.92, 0.48, 0.42, 1.0))
 	quit_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.68, 0.56, 1.0))
@@ -284,18 +291,35 @@ func _build_quit_button() -> void:
 	add_child(quit_btn)
 
 func _on_pick(index: int) -> void:
+	if reward_resolved:
+		return
+	if fixed_supplies.is_empty():
+		fixed_supplies = GameSession.claim_tower_clear_supplies()
+		if fixed_supplies.is_empty():
+			return
 	var option: Dictionary = options[index]
-	RewardGenerator.apply_option(option)
-	_advance_to_next_floor()
+	if RewardGenerator.apply_option(option):
+		_advance_to_next_floor()
 
 func _on_skip_reward_pressed() -> void:
-	# 跳过本次奖励，但仍推进爬塔层数并进入下一层部署。
-	_advance_to_next_floor()
+	# 仅在遗物候选池为空时允许直接推进。
+	if not reward_resolved:
+		_advance_to_next_floor()
 
 func _advance_to_next_floor() -> void:
+	if reward_resolved:
+		return
+	if fixed_supplies.is_empty():
+		fixed_supplies = GameSession.claim_tower_clear_supplies()
+		if fixed_supplies.is_empty():
+			return
+	reward_resolved = true
 	# 选中奖励或跳过奖励都进入下一层部署，保留上一场最终阵容和位置。
 	GameSession.tower_floor += 1
 	GameSession.tower_scenario = TowerGenerator.generate_scenario(GameSession.tower_floor)
 	GameSession.prepare_tower_deployment()
-
-	get_tree().change_scene_to_file("res://scenes/deployment_screen.tscn")
+	GameSession.prepare_tower_events()
+	if GameSession.pending_tower_events.is_empty():
+		get_tree().change_scene_to_file("res://scenes/deployment_screen.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/tower_event_screen.tscn")

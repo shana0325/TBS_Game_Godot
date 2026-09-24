@@ -75,6 +75,9 @@ func _on_tower_pressed() -> void:
 	# 新一局或继续当前局，统一进入部署（部署预填上一层出战单位）
 	if not GameSession.tower_has_active_run():
 		GameSession.start_tower()
+	elif not GameSession.pending_tower_events.is_empty():
+		get_tree().change_scene_to_file("res://scenes/tower_event_screen.tscn")
+		return
 	else:
 		GameSession.prepare_tower_deployment()
 	get_tree().change_scene_to_file("res://scenes/deployment_screen.tscn")

@@ -18,6 +18,7 @@
 | 系统设计 | `docs/tbs_game_system_design_v2.md` | 总体玩法、系统和架构意图 |
 | 数值技能设计 | `docs/数值与技能设计文档_V1.md` | 职业模板、技能与数值方向 |
 | 爬塔方向 | `docs/爬塔模式设计方向.md` | 爬塔流程、奖励和局内成长方向 |
+| Boss 初版设计 | `docs/BOSS_DESIGN.md` | 第 10、20、30 层的模板数值、固有技能和事件接入规则 |
 | 遗物与技能映射 | `docs/LoL符文_遗物一一对应表.md` | 当前机制遗物与通用技能的设计清单 |
 | 视觉规范 | `视觉风格设计.md` | 当前画风、组件和交互验收规则 |
 | 当前交接 | `docs/HANDOFF.md` | 已完成内容、恢复步骤和后续优先级 |
@@ -32,9 +33,9 @@
 | --- | --- | --- |
 | `data/` | 单位、技能、Buff、遗物、玩家编成等 JSON 数据 | 相关数据任务时读取 |
 | `scenes/` | Godot 场景资源和节点布局 | UI/流程任务时读取 |
-| `scripts/core/` | 数据库、实体、会话、资源管理等基础模块 | 核心逻辑或数据流任务时读取 |
+| `scripts/core/` | 数据库、实体、会话、奖励、爬塔事件和资源管理等基础模块 | 核心逻辑或数据流任务时读取 |
 | `scripts/battle/` | 战斗管理、移动、回合、伤害、效果、事件和技能触发 | 战斗任务时读取 |
-| `scripts/screens/` | 主菜单、选关、部署、结算和奖励等界面控制器 | 流程/UI 任务时读取 |
+| `scripts/screens/` | 主菜单、图鉴、选关、部署、结算和奖励等界面控制器 | 流程/UI 任务时读取 |
 | `scripts/ui/` | 战场显示、单位视图、信息卡、背包弹窗和可复用 UI 组件 | UI 任务时读取 |
 | `assets/fonts/` | 当前运行时字体 | 字体/UI 任务时读取 |
 | `assets/skills/` | 当前运行时技能图标 | 技能图标或美术任务时读取 |
@@ -56,20 +57,24 @@
 ```text
 project.godot
   └─ autoload: GameDatabase / ModLoader / ArtManager / GameSession
-       ├─ data/*.json → GameDatabase → Unit / Skill / Buff
-       ├─ scenes/main.tscn → 主菜单 → 选关 → 部署 → 战斗
+       ├─ data/*.json + SkillCodeRegistry/Mod CodeSkill → GameDatabase → Unit / Skill / Buff
+       ├─ scenes/main.tscn → 主菜单 → 选关 → 部署 → 战斗 → 奖励/事件 → 下一层
+       ├─ scenes/encyclopedia.tscn → 技能/遗物图鉴 → 复用详情弹窗
        └─ BattleManager → 战斗状态/事件 → battle_screen 与复用 UI 组件
 ```
 
 ### 主要边界
 
 - `scripts/core/` 和 `scripts/battle/` 负责状态、规则和事件，不应直接依赖具体 UI 场景节点。
+- 简单技能由 `data/skill/skills.json` 定义；代码技能由 `CodeSkill` 脚本提供完整元数据与行为，注册表仅映射技能 ID 到脚本路径。两者统一注册到 `GameDatabase.skills`。
 - `scripts/battle/combat/damage_system.gd` 是伤害结算入口，统一处理伤害类别、真实伤害、百分比减免、护盾及伤害后的事件；`damage_calculator.gd` 只计算基础护甲与暴击数值。
 - `scripts/core/relic_system.gd` 统一向战斗单位和部署预览应用 Run 遗物、叠层与跨战斗成长。
+- `RewardGenerator` 只生成遗物候选；固定技能书与金币由 `GameSession` 逐层防重发放。`TowerEventFactory` 按层产生有序事件队列；同层商店与追加事件依次运行，事件可通过 `apply_to_scenario()` 改写当前层场景。第 10、20、30 层的 Boss 事件从 `mods/tower_bosses/` 读取对应单位，并在原有敌军外追加一名。
 - `Unit.get_shield_cap()` 是护盾上限规则入口，默认最大生命 100%，技能可提高或取消上限。
 - `scripts/screens/` 负责页面流程和输入协调，通过 `GameSession`、`BattleManager` 等接口驱动显示。
 - `scripts/ui/` 负责表现和交互组件；部署与战斗共用 `UnitDetailPanel` 查看角色及学习、遗忘技能。`MenuStyle` 与默认主题维护简洁的无边框面板及纯色按钮。
 - `GameDatabase` 先载入内置数据，`ModLoader` 再合并 Mod 的单位、素材引用和 CodeSkill，最后才校验玩家存档；Hero 位于 `mods/hero/`。
+- `GameDatabase.get_random_pool_unit_ids()` 汇总单位的 `random_pool_enabled` 规则；随机招募、商店和普通敌人生成共用此名单，指定关卡和特殊事件仍可直接引用单位 ID。
 - 数据平衡优先修改 `data/` 与对应设计文档，不把可配置数值硬编码到界面脚本。
 
 ## 按任务定位

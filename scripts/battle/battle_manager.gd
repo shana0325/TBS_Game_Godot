@@ -171,10 +171,14 @@ func get_attack_targets(attacker: Unit) -> Array:
 		if unit is Unit and unit.alive and unit != attacker and unit.camp != attacker.camp:
 			if combat_system.is_in_range(attacker, unit):
 				result.append(unit)
+	var preferred := attacker.get_current_target()
+	if result.has(preferred):
+		result.erase(preferred)
+		result.push_front(preferred)
 	return result
 
 func can_attack(attacker: Unit, defender: Unit) -> bool:
-	return attacker != null and defender != null and defender.alive and not attacker.acted \
+	return attacker != null and attacker.alive and defender != null and defender.alive and not attacker.acted \
 		and attacker.camp != defender.camp and combat_system.is_in_range(attacker, defender)
 
 # 执行一次攻击，返回 { "damage": int, "crit": bool }（供 UI 飙字等使用）。
@@ -184,14 +188,24 @@ func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
 		return empty
 	# 攻击前触发
 	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_START, {"actor": attacker, "user": attacker, "target": defender})
+	if not can_attack(attacker, defender):
+		return empty
+	attacker.set_current_target(defender)
+	# 普攻目标已确认，在扣血和伤害计算前触发；本次偷取等属性变化会影响本次普攻。
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ATTACK_HIT_BEFORE,
+		{"actor": attacker, "user": attacker, "target": defender, "damage_kind": DamageSystem.ATTACK})
+	if not can_attack(attacker, defender):
+		return empty
 	var result := combat_system.perform_attack(attacker, defender, 0, get_final_damage_multiplier())
 	var damage: int = result.get("damage", 0)
 	var crit: bool = result.get("crit", false)
-	# 反射：防御方有反射 buff 时，把部分伤害反射回攻击者
-	if defender.alive and defender.get_reflect_percent() > 0.0 and damage > 0:
-		var reflect_damage := roundi(damage * defender.get_reflect_percent())
-		if reflect_damage > 0:
-			DamageSystem.apply(defender, attacker, {"damage_kind": DamageSystem.EFFECT,
+	# 技能反射和遗物反射分别结算，避免遗物伤害被误算成技能伤害。
+	if defender.alive and damage > 0:
+		for reflect_kind in [DamageSystem.SKILL, DamageSystem.EFFECT]:
+			var reflect_damage := roundi(damage * defender.get_reflect_percent(reflect_kind))
+			if reflect_damage <= 0:
+				continue
+			DamageSystem.apply(defender, attacker, {"damage_kind": reflect_kind,
 				"raw_damage": reflect_damage, "true_damage": true}, self, game)
 			if game != null and game.has_method("add_log"):
 				game.add_log("%s 反射 %d 点伤害给 %s" % [defender.get_display_name(), reflect_damage, attacker.get_display_name()])
@@ -257,6 +271,13 @@ func on_damage_resolved(source: Unit, target: Unit, report: Dictionary) -> void:
 		if ally is Unit and ally.alive and ally.camp == target.camp and ally != target:
 			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ALLY_DEATH,
 				{"actor": ally, "user": ally, "target": target})
+	# 锁定目标死亡时通知追击者；即使击杀来自其他单位也能重选目标。
+	for pursuer in units:
+		if pursuer is Unit and pursuer.alive and pursuer.get_current_target() == target:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TARGET_DEATH,
+				{"actor": pursuer, "user": pursuer, "target": target})
+			if pursuer.get_current_target() == target:
+				pursuer.set_current_target(null)
 	RelicSystem.on_death(self, target, game)
 
 func is_damage_skill(skill: Skill) -> bool:
@@ -312,15 +333,16 @@ func _get_combat_distance(from: Unit, to_pos: Vector2i) -> int:
 func wait(unit: Unit) -> void:
 	pass
 
-# 在指定位置附近召唤一个新单位（召唤类技能用）。返回生成的单位或 null。
-func spawn_unit(unit_type: String, camp: String, near_pos: Vector2i) -> Unit:
+# 在指定位置附近召唤单位，并继承召唤者的关卡属性倍率。
+func spawn_unit(unit_type: String, camp: String, near_pos: Vector2i, summoner: Unit = null) -> Unit:
 	var config: Dictionary = GameDatabase.get_unit(unit_type)
 	if config.is_empty():
 		return null
 	var spawn_pos := _find_empty_adjacent(near_pos)
 	if spawn_pos.x < 0:
 		return null
-	var unit := Unit.create_from_config(unit_type, camp, spawn_pos, config)
+	var roster_data := {"stat_multiplier": summoner.stat_multiplier} if summoner != null else {}
+	var unit := Unit.create_from_config(unit_type, camp, spawn_pos, config, roster_data)
 	units.append(unit)
 	unit.turn_timer = 0.0
 	return unit
@@ -487,5 +509,10 @@ func get_final_damage_multiplier() -> float:
 
 # 单位级伤害倍率：委托遗物系统按来源/目标/伤害种类汇总（处决/先手/背水/层积风暴等）。
 func get_damage_bonus_percent(source: Unit, target: Unit, kind: String) -> float:
-	return RelicSystem.get_damage_bonus_percent(source, target, kind, relic_state) \
+	var bonus := RelicSystem.get_damage_bonus_percent(source, target, kind, relic_state) \
 		+ SkillKit.passive_damage_bonus(source, target)
+	if source != null:
+		for skill in source.skills:
+			if skill is Skill:
+				bonus += (skill as Skill).get_damage_bonus_percent(source, target, kind)
+	return bonus

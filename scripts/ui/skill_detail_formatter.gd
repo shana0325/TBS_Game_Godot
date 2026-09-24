@@ -4,9 +4,10 @@ extends RefCounted
 
 const TRIGGER_LABELS := {
 	"on_battle_start": "战斗开始时", "on_turn_start": "行动开始时", "on_attack_start": "攻击前",
+	"on_attack_hit_before": "普攻命中前",
 	"on_attack": "攻击时", "on_attack_end": "攻击结束后", "on_hit": "造成伤害后",
 	"on_be_attacked": "受到攻击后", "on_taken_damage": "受到伤害后", "on_kill": "击杀敌人后",
-	"on_death": "阵亡时", "on_ally_death": "友军阵亡时", "on_turn_end": "行动结束时",
+	"on_death": "阵亡时", "on_ally_death": "友军阵亡时", "on_target_death": "当前目标死亡时", "on_turn_end": "行动结束时",
 	"on_round_start": "首回合开始时", "passive": "常驻被动", "on_timer": "按战斗时间自动释放",
 }
 const STAT_LABELS := {"hp": "生命", "attack": "攻击", "defense": "护甲", "move": "移动", "crit_rate": "暴击率", "crit_damage": "暴击伤害"}
@@ -113,7 +114,7 @@ static func _effect_text(effect: Dictionary) -> String:
 
 # 展示效果数据声明的伤害触发类别。
 static func _damage_kind_text(effect: Dictionary) -> String:
-	return {"attack": "普攻伤害", "skill": "技能伤害", "effect": "特效伤害"}.get(str(effect.get("damage_kind", "effect")), "特效伤害")
+	return {"attack": "普攻伤害", "skill": "技能伤害", "effect": "特效伤害"}.get(str(effect.get("damage_kind", "skill")), "技能伤害")
 
 # 展示与伤害类别独立的真实伤害标记。
 static func _true_damage_text(effect: Dictionary) -> String:

@@ -70,7 +70,14 @@ func _draw() -> void:
 		var draw_pos := Vector2(-draw_rect_size.x / 2.0, -draw_rect_size.y / 2.0)
 		# acted 时变暗
 		var mod := Color(1, 1, 1, 0.6) if unit.acted else Color(1, 1, 1, 1)
+		# 按素材原始朝向校正为我方朝右；敌军在此基础上水平镜像。
+		var source_faces_left := str(unit.config.get("sprite_facing", "right")) == "left"
+		var flip_h: bool = source_faces_left != (unit.camp == TurnManager.ENEMY_CAMP)
+		if flip_h:
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2(-1.0, 1.0))
 		draw_texture_rect(sprite_texture, Rect2(draw_pos, draw_rect_size), false, mod)
+		if flip_h:
+			draw_set_transform(Vector2.ZERO)
 	# 阵营边框提供稳定的视觉识别，不依赖单位贴图或颜色滤镜。
 	var camp_color := Color(0.84, 0.67, 0.34, 0.95) if unit.camp == TurnManager.PLAYER_CAMP else Color(0.78, 0.28, 0.25, 0.95)
 	var frame_rect := Rect2(-tile_size / 2.0 + 2.0, -tile_size / 2.0 + 2.0, tile_size - 4.0, tile_size - 4.0)

@@ -16,6 +16,7 @@ func _init() -> void:
 	min_range = 1
 	max_range = 2
 	tags = ["通用", "减益", "持续伤害"]
+	damage_kinds = [DamageSystem.EFFECT]
 
 func execute(user: Unit, targets: Array, game = null, battle = null) -> Array:
 	if battle == null:

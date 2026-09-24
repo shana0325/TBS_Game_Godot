@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dgdmthybkw7xq"
-path="res://.godot/imported/archer.png-a96a8e8d77addabb1568e0c1450cf518.ctex"
+uid="uid://dxwmeo33c1cmk"
+path="res://.godot/imported/relic_sheet.svg-bfd5b454c5bc55b4a2a7219b9b3135ce.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/archer.png"
-dest_files=["res://.godot/imported/archer.png-a96a8e8d77addabb1568e0c1450cf518.ctex"]
+source_file="res://assets/relics/relic_sheet.svg"
+dest_files=["res://.godot/imported/relic_sheet.svg-bfd5b454c5bc55b4a2a7219b9b3135ce.ctex"]
 
 [params]
 
@@ -38,3 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false

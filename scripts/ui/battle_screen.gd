@@ -568,6 +568,10 @@ func _animate_unit_move(unit_view: Node2D, from_cell: Vector2i, to_cell: Vector2
 
 # --- 刷新与结果 ---
 func _refresh_units() -> void:
+	# 定时召唤会在战斗开始后追加单位，首次刷新时为其建立可见小人。
+	for unit in manager.units:
+		if unit is Unit and not unit_views.has(unit):
+			_create_unit_view(unit)
 	for child in units_layer.get_children():
 		if child.has_method("refresh"):
 			child.refresh()

@@ -11,6 +11,8 @@ var tags: Array = []
 var camp: String = "player"
 var team_id: int = 0
 var pos: Vector2i = Vector2i.ZERO
+# 本场战斗锁定的普攻目标使用弱引用，避免交战双方互相持有导致无法释放。
+var current_target_ref: WeakRef = null
 var config: Dictionary = {}
 var level: int = 1
 var star: int = 1
@@ -119,7 +121,19 @@ func get_range_min() -> int:
 	return int(config.get("range_min", 1))
 
 func get_range_max() -> int:
-	return int(config.get("range_max", 1))
+	var max_range := int(config.get("range_max", 1))
+	for skill in skills:
+		if skill is Skill:
+			max_range += (skill as Skill).get_attack_range_bonus()
+	return max_range
+
+# 设置当前普攻目标；战斗单位之间不建立强引用环。
+func set_current_target(target: Unit) -> void:
+	current_target_ref = weakref(target) if target != null else null
+
+# 查询当前普攻目标；目标对象释放后自动返回空。
+func get_current_target() -> Unit:
+	return current_target_ref.get_ref() as Unit if current_target_ref != null else null
 
 func get_display_name() -> String:
 	return display_name
@@ -276,11 +290,12 @@ func has_counter() -> bool:
 func has_taunt() -> bool:
 	return _has_control("taunt")
 
-# 反射比例（取各反射 buff 之和）。
-func get_reflect_percent() -> float:
+# 反射比例（按伤害类别分别汇总；不指定时返回全部反射 buff 之和）。
+func get_reflect_percent(kind: String = "") -> float:
 	var total := 0.0
 	for buff in buffs:
-		total += buff.reflect_percent
+		if kind.is_empty() or buff.reflect_damage_kind == kind:
+			total += buff.reflect_percent
 	return total
 
 # 汇总所有状态提供的百分比伤害减免；由 DamageSystem 对全部伤害类别统一应用。

@@ -10,7 +10,7 @@ static func now_of(battle) -> float:
 		return float(battle.get_battle_time())
 	return 0.0
 
-# 追加特效伤害：按 攻击力倍数(atk) / 最大生命倍数(maxhp) / 固定值(flat)，可选真实伤害。
+# 追加伤害：按攻击力倍数、最大生命倍数或固定值结算，默认特效伤害；可显式指定技能伤害。
 static func deal_effect(user: Unit, target: Unit, game, battle, opts: Dictionary) -> Dictionary:
 	if user == null or target == null or not target.alive:
 		return {"damage": 0}
@@ -23,7 +23,7 @@ static func deal_effect(user: Unit, target: Unit, game, battle, opts: Dictionary
 		raw = int(opts["flat"])
 	if raw <= 0:
 		return {"damage": 0}
-	return DamageSystem.apply(user, target, {"damage_kind": DamageSystem.EFFECT,
+	return DamageSystem.apply(user, target, {"damage_kind": str(opts.get("damage_kind", DamageSystem.EFFECT)),
 		"raw_damage": raw, "true_damage": bool(opts.get("true", false))}, battle, game)
 
 # 目标 + 与目标曼哈顿距离 1 的所有敌方存活单位（Comet Fall 用）。

@@ -1,15 +1,15 @@
 # TBS Game Godot 当前交接
 
-> 更新日期：2026-09-22
+> 更新日期：2026-09-24
 > 当前主分支：`main`
 > 引擎：Godot 4.7.1
 
 ## 当前可玩流程
 
-- 主菜单：开始新游戏、继续游戏。
+- 主菜单：开始新游戏、继续游戏、技能/遗物图鉴。
 - 快速战斗：选关 → 部署 → 自动战斗 → 结算。
-- 爬塔：部署 → 自动战斗 → 场内奖励 → 下一层；阵容和站位可跨层调整。
-- 角色管理：升星、装备、技能书学习与技能遗忘。
+- 爬塔：部署 → 自动战斗 → 固定技能书与金币、遗物三选一 → 同层有序事件队列 → 下一层；阵容和站位可跨层调整。
+- 角色管理：升星、技能书学习与遗忘、招募和出售；初始上阵 4 人，最多 6 人。
 
 ## 已实现的核心规则
 
@@ -30,6 +30,7 @@
 - `run_relics` 保存唯一遗物 ID，`run_relic_stacks` 保存可重复遗物层数。
 - 战斗和部署预览都通过 `RelicSystem.apply_run_bonuses_to_unit` 应用完整加成。
 - 跨战斗成长保存在 `run_relic_state`；只有主菜单“开始新游戏”会清空。
+- 战后固定奖励每层只发放一次；商店、补给、探索与 Boss 使用 `TowerEvent` 基类，同层事件对象由 `GameSession` 按序保存。第 10、20、30 层会在原有敌军外各追加一名 Boss，三者共用每 20 秒征召一名享受层数增益的随机敌军技能。数值与固有技能见 `docs/BOSS_DESIGN.md`，经济初值见 `data/tower/tower_config.json`。
 
 ## 当前 UI
 
@@ -49,6 +50,8 @@
 | 技能基类 | `scripts/core/skill.gd` |
 | 遗物规则 | `scripts/core/relic_system.gd` |
 | 奖励生成 | `scripts/core/reward_generator.gd` |
+| 事件调度与基类 | `scripts/core/tower_event_factory.gd`、`tower_event.gd` |
+| 事件界面 | `scripts/screens/tower_event_screen.gd` |
 | 统一伤害结算 | `scripts/battle/combat/damage_system.gd` |
 | 战斗管理 | `scripts/battle/battle_manager.gd` |
 | 部署界面 | `scripts/screens/deployment_screen.gd` |
@@ -71,5 +74,5 @@ git status --short
 
 - 继续统一按钮、弹窗与字体的主题资源，减少脚本内重复样式。
 - 为新增角色、技能和遗物补齐独立美术资源。
-- 扩充敌人机制、精英层和 Boss 层内容。
+- 在现有 Boss 战基础上扩充敌人机制、精英层与专属奖励。
 - 在新增复杂技能前补对应的战斗验证用例。

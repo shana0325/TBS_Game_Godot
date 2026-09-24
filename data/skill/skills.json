@@ -15,7 +15,7 @@
     "effects": [
       {
         "type": "damage",
-        "damage_kind": "effect",
+        "damage_kind": "skill",
         "power": 1.0
       }
     ]
@@ -36,7 +36,7 @@
     "effects": [
       {
         "type": "damage",
-        "damage_kind": "effect",
+        "damage_kind": "skill",
         "power": 0.5
       }
     ]
@@ -60,7 +60,7 @@
     "effects": [
       {
         "type": "damage",
-        "damage_kind": "effect",
+        "damage_kind": "skill",
         "power": 1.5
       }
     ]
@@ -222,6 +222,7 @@
     "effects": [
       {
         "type": "reflect",
+        "damage_kind": "skill",
         "percent": 0.25,
         "duration": -1,
         "permanent": true
@@ -251,262 +252,5 @@
         }
       }
     ]
-  },
-  "Triple Pursuit": {
-    "name": "破军追击",
-    "desc": "连续 3 次普攻击中同一敌人后，后续对该目标的普攻伤害 +50%；更换目标则重新计数。",
-    "tags": ["通用", "攻击"],
-    "trigger": "on_attack",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "追刺次数计数",
-    "effects": []
-  },
-  "Frenzy Chain": {
-    "name": "疾风电涌",
-    "desc": "每次普攻击中叠 1 层（至多 5 层）；满层后的下一次普攻追加 50% 攻击力的真实特效伤害并清层。",
-    "tags": ["通用", "攻击", "连击"],
-    "trigger": "on_attack",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "叠层计数+真实特效追加",
-    "effects": []
-  },
-  "Onset Might": {
-    "name": "骁勇累积",
-    "desc": "每次造成普攻或技能伤害叠 1 层（至多 10 层）；每层使自身普攻与技能伤害 +2%，满层时实际生命损失 8% 转为自身治疗。特效伤害不叠层。",
-    "tags": ["通用", "攻击", "成长"],
-    "trigger": "on_hit",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "叠层计数+伤害倍率+伤害转治疗",
-    "effects": []
-  },
-  "Blooddrain Victim": {
-    "name": "燃血命脉",
-    "desc": "击杀敌人时回复自身 60% 最大生命。",
-    "tags": ["通用", "生存", "击杀"],
-    "trigger": "on_kill",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "击杀回复最大生命比例",
-    "effects": []
-  },
-  "Calm Branch": {
-    "name": "回气指环",
-    "desc": "造成技能伤害后，若有按秒触发技能正在等待，使剩余时间最长者缩短 0.3 秒（每秒至多一次）；击杀敌人时额外缩短 1 秒。基础冷却小于 1 秒的技能无法触发。",
-    "tags": ["通用", "冷却", "加速"],
-    "trigger": "on_hit",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "缩短定时技能剩余时间",
-    "effects": []
-  },
-  "Electrocute Burst": {
-    "name": "雷霆连锁",
-    "desc": "6 秒内对同一敌人造成 3 次普攻或技能伤害时，追加一次 100% 攻击力的特效伤害；独立冷却 8 秒。特效伤害不计命中次数。",
-    "tags": ["通用", "攻击", "爆发"],
-    "trigger": "on_hit",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "窗口内命中计数+独立冷却",
-    "effects": []
-  },
-  "Blade Opening": {
-    "name": "破阵序斩",
-    "desc": "每场战斗对每个不同的敌方单位，自身前 3 次对其普攻追加 25% 攻击力的真实特效伤害。",
-    "tags": ["通用", "攻击"],
-    "trigger": "on_attack",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "按目标的首 3 次普攻计数",
-    "effects": []
-  },
-  "Taste Blood": {
-    "name": "血腥回响",
-    "desc": "造成普攻或技能伤害后，回复本次实际伤害的 10%（每 8 秒至多一次）；特效伤害不触发。",
-    "tags": ["通用", "生存", "恢复"],
-    "trigger": "on_hit",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "伤害比例治疗+冷却",
-    "effects": []
-  },
-  "Comet Fall": {
-    "name": "彗星溅射",
-    "desc": "造成技能伤害后，对该目标及其相邻 1 格内的敌人各造成 50% 攻击力的特效伤害。",
-    "tags": ["通用", "攻击", "范围"],
-    "trigger": "on_hit",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "目标+相邻敌范围特效伤害",
-    "effects": []
-  },
-  "Deathfire Burn": {
-    "name": "灼魂焚身",
-    "desc": "技能伤害命中后给目标施加灼烧，持续其接下来的 3 次行动；每次行动开始时受到施放者攻击力 8% 的特效伤害，第三次伤害翻倍。持续伤害不再触发造成伤害类效果。",
-    "tags": ["通用", "减益", "持续伤害"],
-    "trigger": "on_hit",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "行动次数型灼烧+第三次翻倍",
-    "effects": []
-  },
-  "Transcend Row": {
-    "name": "回响节点",
-    "desc": "每累计施放 3 次按秒触发技能，使自身其他按秒触发技能的剩余时间减少 30%。",
-    "tags": ["通用", "冷却", "加速"],
-    "trigger": "on_timer",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "interval_seconds": 5.0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "定时施放计数→缩短其他定时技能",
-    "effects": []
-  },
-  "Absolute Focus": {
-    "name": "盈血之力",
-    "desc": "当前生命高于 70% 时，普攻和技能伤害 +40%。",
-    "tags": ["通用", "攻击"],
-    "trigger": "passive",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "按自身血量的伤害倍率",
-    "effects": []
-  },
-  "Scorch Tick": {
-    "name": "余烬引燃",
-    "desc": "造成技能伤害时，追加 10% 攻击力的真实特效伤害。",
-    "tags": ["通用", "攻击", "灼烧"],
-    "trigger": "on_hit",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "技能伤害追加真实特效",
-    "effects": []
-  },
-  "Demolish Scene": {
-    "name": "攻坚重锤",
-    "desc": "对敌方最大生命最高的一名单位进行普攻时，追加自身最大生命 30% 的特效伤害。",
-    "tags": ["通用", "攻击"],
-    "trigger": "on_attack",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "命中最高HP敌人→按最大生命追加",
-    "effects": []
-  },
-  "Shield Bash": {
-    "name": "盾辉反击",
-    "desc": "获得护盾后，下一次普攻追加本次实际获得护盾值 15% 的特效伤害。",
-    "tags": ["通用", "防御", "攻击"],
-    "trigger": "on_attack",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "护盾获取记忆→普攻追加",
-    "effects": []
-  },
-  "Second Wind": {
-    "name": "残喘气血",
-    "desc": "受到普攻或技能伤害、实际扣除生命后，回复当前已损生命的 6%（每 8 秒至多一次）。特效伤害不触发治疗。",
-    "tags": ["通用", "生存", "恢复"],
-    "trigger": "on_taken_damage",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "self"
-    },
-    "min_range": 1,
-    "max_range": 2,
-    "mechanic": "受击回复已损生命+冷却",
-    "effects": []
   }
 }

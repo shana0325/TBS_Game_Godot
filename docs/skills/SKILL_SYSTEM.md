@@ -45,8 +45,9 @@
 | `unlimited_shield` | bool | 为 true 时取消该单位的护盾上限 |
 | `target` | dict | 目标选择（见第 5 节） |
 | `effects` | array | 效果列表（见第 6 节） |
+| `damage_kinds` | array | 代码技能直接造成的伤害类别，供详情页展示 |
 
-伤害效果可另外声明 `damage_kind`（`attack` / `skill` / `effect`）和 `true_damage`（布尔值）。未声明类别的效果伤害默认为 `effect`；伤害由技能、遗物或装备产生，并不自动成为技能伤害。只有明确写为 `skill` 时，才参与“造成伤害时”的后续联动。`true_damage` 与类别可以组合，旧字段 `ignore_defense` 仍按真实伤害处理。
+伤害效果可另外声明 `damage_kind`（`attack` / `skill` / `effect`）和 `true_damage`（布尔值）。技能的 `damage`、`percentage_damage`、`chain_damage` 效果未声明类别时默认为 `skill`；代码技能直接造成的伤害按实际结算类型声明 `damage_kinds`。技能提供的反射伤害按 `skill` 结算，遗物提供的反射仍按 `effect` 结算。`attack` 和 `skill` 可参与“造成伤害时”的后续联动，`effect` 不会继续触发附加伤害。`true_damage` 与类别可以组合，旧字段 `ignore_defense` 仍按真实伤害处理。
 
 统一结算顺序：攻击力或固定值 → 护甲（真实伤害跳过）→ 暴击和效果倍率 → 狂暴 → 目标百分比伤害减免 → 护盾与生命。特效伤害不触发新的造成伤害联动；同一条伤害链中同一个联动技能只执行一次。
 
@@ -71,13 +72,13 @@
   ├─ 选目标 ── 判定攻击范围
   │
   ▼
-A 攻击 B ── on_attack_start（攻击前触发）→ 可结算附加效果
+A 攻击 B ── on_attack_start（攻击前触发）→ 确认目标仍可攻击
   │
   ▼
-命中判定 ── on_attack（攻击时触发）
+on_attack_hit_before（普攻命中前，扣血前）
   │
   ▼
-伤害结算 ── on_hit（造成伤害后触发）/ on_taken_damage（受到伤害后触发）
+普攻伤害结算 ── on_attack（攻击时触发）→ on_hit（造成伤害后触发）/ on_taken_damage（受到伤害后触发）
   │
   ▼
 攻击结束 ── on_attack_end（攻击后触发）→ 附带技能伤害在此阶段结算
@@ -108,6 +109,7 @@ B 受击后 ── on_be_attacked（受到攻击后触发）→ 用于反击/免
 | `on_battle_start` | 战斗开始时 | 所有单位 | ✅ |
 | `on_turn_start` | 该单位行动开始时 | 当前行动单位 | ✅ |
 | `on_attack_start` | 该单位即将攻击前 | 攻击者 | ✅ |
+| `on_attack_hit_before` | 普攻目标确认后、伤害结算前 | 攻击者 | ✅ |
 | `on_attack` | 该单位攻击时（与命中同步） | 攻击者 | ✅ |
 | `on_attack_end` | 该单位攻击完全结束后 | 攻击者 | ✅ |
 | `on_hit` | 该单位造成伤害后 | 攻击者 | ✅ |
@@ -493,12 +495,12 @@ static func apply(context: EffectContext) -> Dictionary
 ### 11.1 固有技能 / 通用技能
 
 - 单位模板 `units.json` 的 `innate_skill` 声明固有技能：模板独有、始终生效、不可更换；可为空（兼容）。
-- `skills.json` 中 `common: true` 标记通用技能：角色消耗对应技能书学习，装备到通用技能槽后参与战斗。
+- 技能元数据中的 `common: true` 标记通用技能（JSON 技能在 `skills.json` 设置，代码技能在脚本中设置）：角色消耗对应技能书学习，装备到通用技能槽后参与战斗。
 - 每个技能可配置 `tags`（0 个或多个）与 `searchable`。`searchable: false` 不进入敌人随机技能、爬塔随机奖励和常规学习池；特定逻辑仍可通过技能 ID 指定获取。
 - 爬塔随机技能奖励以对应的技能书进入玩家背包；技能书可在部署界面直接拖到目标角色，使用后学习并装备，满槽时选择覆盖技能，取消不会消耗技能书。
 - 通用技能槽初始 1 格，前两次升星各增加 1 格，升星带来的槽位增量最多 2 格；固有技能不占通用技能槽且不可替换。
 - 修复：已学未装备的技能不再自动生效（只有已装备的通用技能 + 固有技能进入战斗）。
-- 示例：Hero 固有"以战养战"（on_kill 触发，permanent_stat 永久生命上限 +1，persist=true 写回编成）。
+- 示例：Hero 固有“属性汲取”在普攻伤害前偷取敌方属性，战后按存活状态留存部分成长。
 
 ### 11.2 代码技能双轨
 
@@ -515,7 +517,7 @@ static func apply(context: EffectContext) -> Dictionary
   - `check_condition(battle, context)`：触发条件（血量/护盾/任意自定义）
   - `resolve_targets(battle, user, context)`：目标解析
   - `execute(user, targets, game)`：效果执行（可直接调用 EffectSystem 效果库）
-- `CodeSkill`（scripts/battle/skills/code_skill.gd）：代码技能基类，元数据（名称/触发/冷却/射程/common）在 `_init` 中设置，`export_meta()` 供合并注册。
+- `CodeSkill`（scripts/battle/skills/code_skill.gd）：代码技能基类，元数据（名称/触发/冷却/射程/common）只在 `_init` 中设置，`export_meta()` 供注册；不在 `skills.json` 复制代码技能条目。
 - `skill_code_registry.gd`：集中注册文件，一行（技能 id + 脚本 res:// 路径）。
 - GameDatabase 启动时把代码技能并入全局技能表，战斗创建/编成界面/信息面板统一访问，与 JSON 技能无差别。
 - 代码技能与 JSON 技能共用同一条触发分发管线与效果函数库。

@@ -86,8 +86,15 @@ func _sanitize_user_roster() -> void:
 		if not inventory.has("skill_books") or not (inventory["skill_books"] is Dictionary):
 			inventory["skill_books"] = {}
 			changed = true
+		if not inventory.has("gold"):
+			inventory["gold"] = 0
+			changed = true
+		inventory["gold"] = maxi(0, int(inventory["gold"]))
 		player_roster["inventory"] = inventory
-	var existing_types: Array = []
+	if not player_roster.has("deployment_limit"):
+		player_roster["deployment_limit"] = 4
+		changed = true
+	player_roster["deployment_limit"] = clampi(int(player_roster["deployment_limit"]), 1, 6)
 	for raw_unit in player_roster.get("units", []):
 		if typeof(raw_unit) != TYPE_DICTIONARY:
 			changed = true
@@ -97,7 +104,6 @@ func _sanitize_user_roster() -> void:
 		if not units.has(unit_type):
 			changed = true
 			continue
-		existing_types.append(unit_type)
 		if str(unit.get("id", "")).is_empty():
 			unit["id"] = _default_unit_id(unit_type)
 			changed = true
@@ -130,11 +136,12 @@ func _sanitize_user_roster() -> void:
 			unit["equipped_skills"] = equipped.slice(0, slot_limit)
 			changed = true
 		valid_units.append(unit)
-	for base_unit in BASE_PLAYER_UNITS:
-		var base_type := str(base_unit["type"])
-		if existing_types.has(base_type) or not units.has(base_type):
-			continue
-		valid_units.append(_default_unit_entry(base_type, str(base_unit["id"])))
+	# 只在旧存档完全没有有效角色时补基础队伍；出售过的角色不能自动复活。
+	if valid_units.is_empty():
+		for base_unit in BASE_PLAYER_UNITS:
+			var base_type := str(base_unit["type"])
+			if units.has(base_type):
+				valid_units.append(_default_unit_entry(base_type, str(base_unit["id"])))
 		changed = true
 	if valid_units.size() != player_roster.get("units", []).size():
 		changed = true
@@ -142,14 +149,9 @@ func _sanitize_user_roster() -> void:
 	if changed:
 		_save_user_roster()
 
-# 首次创建玩家存档时发放测试资源：99 个升星道具，以及每种通用技能书 1 本。
+# 旧存档缺少背包字段时补空背包，不再自动发放测试资源。
 func _default_inventory() -> Dictionary:
-	var skill_books: Dictionary = {}
-	for skill_id in skills.keys():
-		var skill_data: Dictionary = skills.get(skill_id, {})
-		if bool(skill_data.get("common", false)):
-			skill_books[str(skill_id)] = 1
-	return {"star_items": 99, "skill_books": skill_books}
+	return {"star_items": 0, "skill_books": {}, "gold": 0}
 
 # 构造基础角色的持久化字段，避免旧存档中的临时模板继续以空 unit_id 运行。
 func _default_unit_entry(unit_type: String, unit_id: String) -> Dictionary:
@@ -177,14 +179,13 @@ func _save_user_roster() -> bool:
 		return true
 	return false
 
-# 合并代码技能（技能代码轨）：把注册文件中的技能并入全局技能表，
-# 战斗与界面统一通过 get_skill 访问，与 JSON 技能无差别。
+# 注册代码技能（技能代码轨）：脚本提供完整元数据，战斗与界面仍统一通过 get_skill 访问。
 func _merge_code_skills() -> void:
 	for skill_id in SkillCodeRegistry.get_entries():
 		var path: String = str(SkillCodeRegistry.get_entries()[skill_id])
 		register_code_skill(str(skill_id), path)
 
-# 将内置或 Mod 代码技能并入统一技能表，保留 JSON 中可调的计时间隔。
+# 注册内置或 Mod 代码技能；同 ID 的已有定义会被明确替换，避免两份元数据混用。
 func register_code_skill(skill_id: String, path: String) -> bool:
 	var resource: Resource = load(path)
 	if not (resource is GDScript) or not (resource as GDScript).can_instantiate():
@@ -196,13 +197,10 @@ func register_code_skill(skill_id: String, path: String) -> bool:
 		push_error("代码技能必须继承 CodeSkill: %s" % skill_id)
 		return false
 	var meta: Dictionary = (inst as CodeSkill).export_meta()
-	var base: Dictionary = skills.get(skill_id, {}).duplicate()
-	var json_interval := float(base.get("interval_seconds", 0.0))
-	base.merge(meta, true)
-	if float(meta.get("interval_seconds", 0.0)) <= 0.0 and json_interval > 0.0:
-		base["interval_seconds"] = json_interval
-	base["code_script"] = script
-	skills[skill_id] = base
+	if skills.has(skill_id):
+		push_warning("代码技能 %s 与已有定义重名，将只使用当前脚本元数据" % skill_id)
+	meta["code_script"] = script
+	skills[skill_id] = meta
 	return true
 
 func _load_json(path: String) -> Dictionary:
@@ -221,6 +219,16 @@ func _load_json(path: String) -> Dictionary:
 
 func get_unit(unit_id: String) -> Dictionary:
 	return units.get(unit_id, {})
+
+# 返回允许进入随机招募、商店和普通敌人池的单位；缺省视为可抽取。
+func get_random_pool_unit_ids() -> Array:
+	var result: Array = []
+	for unit_id in units.keys():
+		var data: Dictionary = get_unit(str(unit_id))
+		if bool(data.get("random_pool_enabled", true)):
+			result.append(str(unit_id))
+	result.sort()
+	return result
 
 func get_skill(skill_id: String) -> Dictionary:
 	return skills.get(skill_id, {})

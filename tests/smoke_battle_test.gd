@@ -71,8 +71,11 @@ func run() -> bool:
 func _verify_repeatable_relics_and_shields() -> bool:
 	var old_relics := GameSession.run_relics.duplicate()
 	var old_stacks := GameSession.run_relic_stacks.duplicate(true)
+	var old_growth := GameSession.run_relic_state.duplicate(true)
 	GameSession.run_relics = []
 	GameSession.run_relic_stacks = {}
+	# 本用例只验证本次遗物效果，不能继承用户存档中的跨战斗成长。
+	GameSession.run_relic_state.clear()
 	if not GameSession.add_run_relic("power_blessing") or not GameSession.add_run_relic("power_blessing"):
 		push_error("可重复遗物无法连续获得")
 		return false
@@ -115,6 +118,7 @@ func _verify_repeatable_relics_and_shields() -> bool:
 		return false
 	GameSession.run_relics = old_relics
 	GameSession.run_relic_stacks = old_stacks
+	GameSession.run_relic_state = old_growth
 	return true
 
 # 验证单位阻挡不可穿越、可绕行，并优先选择总移动消耗更低的路径。

@@ -8,6 +8,150 @@ const DISPLAY_STATS := ["attack", "defense", "move", "hp", "crit_rate", "crit_da
 const MAX_STARS := Unit.MAX_STARS
 const BASE_SKILL_SLOTS := 1
 const ASCENSION_SKILL_SLOT_CAP := 2
+const MAX_ROSTER_SIZE := 10
+const MAX_DEPLOYMENT_LIMIT := 6
+
+# 从爬塔配置读取经济数值，缺项时使用初版默认值。
+static func economy_value(key: String, fallback: int) -> int:
+	var economy: Dictionary = GameDatabase.tower_config.get("economy", {})
+	return maxi(0, int(economy.get(key, fallback)))
+
+# 读取金币和上阵人口，供部署与商店共用。
+static func get_gold() -> int:
+	return maxi(0, int(get_inventory().get("gold", 0)))
+
+# 增加金币并保存，供非商店事件发放货币。
+static func add_gold(amount: int) -> bool:
+	if amount <= 0:
+		return false
+	var inventory := get_inventory()
+	var old_gold := get_gold()
+	inventory["gold"] = old_gold + amount
+	if save_roster():
+		return true
+	inventory["gold"] = old_gold
+	return false
+
+# 读取当前上阵人口上限。
+static func get_deployment_limit() -> int:
+	return clampi(int(GameDatabase.player_roster.get("deployment_limit", 4)), 1, MAX_DEPLOYMENT_LIMIT)
+
+# 一次保存战后固定奖励，避免奖励页重复打开时只发放其中一部分。
+static func grant_battle_supplies(skill_id: String, gold: int) -> bool:
+	if gold < 0 or (not skill_id.is_empty() and not bool(GameDatabase.get_skill(skill_id).get("common", false))):
+		return false
+	var inventory := get_inventory()
+	var old_gold := get_gold()
+	var books: Dictionary = inventory.get("skill_books", {})
+	var old_books := books.duplicate(true)
+	inventory["gold"] = old_gold + gold
+	if not skill_id.is_empty():
+		books[skill_id] = int(books.get(skill_id, 0)) + 1
+	if save_roster():
+		return true
+	inventory["gold"] = old_gold
+	inventory["skill_books"] = old_books
+	return false
+
+# 招募一个独立角色；同类型可重复招募，但编成最多十人。
+static func recruit_unit(unit_type: String, price: int = 0) -> bool:
+	if not GameDatabase.units.has(unit_type) or price < 0 or get_gold() < price:
+		return false
+	var roster: Array = GameDatabase.player_roster.get("units", [])
+	if roster.size() >= MAX_ROSTER_SIZE:
+		return false
+	var original_serial := int(GameDatabase.player_roster.get("next_unit_serial", 1))
+	var serial := original_serial
+	var unit_id := "recruit_%d" % serial
+	var known_ids: Array = roster.map(func(unit: Dictionary) -> String: return str(unit.get("id", "")))
+	while known_ids.has(unit_id):
+		serial += 1
+		unit_id = "recruit_%d" % serial
+	var inventory := get_inventory()
+	var old_gold := get_gold()
+	inventory["gold"] = old_gold - price
+	GameDatabase.player_roster["next_unit_serial"] = serial + 1
+	var recruit := {"id": unit_id, "type": unit_type, "star": 1, "level": 1,
+		"permanent_mods": {}, "learned_skills": [], "equipped_skills": [], "extra_skills": []}
+	roster.append(recruit)
+	if save_roster():
+		return true
+	roster.pop_back()
+	inventory["gold"] = old_gold
+	GameDatabase.player_roster["next_unit_serial"] = original_serial
+	return false
+
+# 出售价格只返还金币，不折算已消耗的技能书、升星材料或永久成长。
+static func get_sale_price(unit: Dictionary) -> int:
+	return economy_value("sale_base_price", 8) + economy_value("sale_star_bonus", 4) * maxi(0, int(unit.get("star", 1)) - 1)
+
+# 出售指定角色并返回其旧编成索引；失败返回 -1。
+static func sell_unit(unit_id: String) -> int:
+	var roster: Array = GameDatabase.player_roster.get("units", [])
+	if roster.size() <= 1:
+		return -1
+	for index in roster.size():
+		var unit: Dictionary = roster[index]
+		if str(unit.get("id", "")) != unit_id:
+			continue
+		var inventory := get_inventory()
+		var old_gold := get_gold()
+		var old_growth := GameSession.run_relic_state.duplicate(true)
+		var growth_units: Dictionary = GameSession.run_relic_state.get("units", {})
+		growth_units.erase(unit_id)
+		GameSession.run_relic_state["units"] = growth_units
+		GameDatabase.player_roster[GameSession.RUN_GROWTH_SAVE_KEY] = GameSession.run_relic_state.duplicate(true)
+		inventory["gold"] = old_gold + get_sale_price(unit)
+		roster.remove_at(index)
+		if save_roster():
+			GameSession.on_roster_unit_sold(index)
+			return index
+		roster.insert(index, unit)
+		inventory["gold"] = old_gold
+		GameSession.run_relic_state = old_growth
+		GameDatabase.player_roster[GameSession.RUN_GROWTH_SAVE_KEY] = old_growth.duplicate(true)
+		return -1
+	return -1
+
+# 商店购买技能书或升星材料，统一扣费并保存背包。
+static func purchase_supply(kind: String, item_id: String, amount: int, price: int) -> bool:
+	if amount <= 0 or price < 0 or get_gold() < price:
+		return false
+	if kind == "skill_book" and not bool(GameDatabase.get_skill(item_id).get("common", false)):
+		return false
+	if kind != "skill_book" and kind != "star_items":
+		return false
+	var inventory := get_inventory()
+	var old_gold := get_gold()
+	var old_stars := int(inventory.get("star_items", 0))
+	var old_books: Dictionary = (inventory.get("skill_books", {}) as Dictionary).duplicate(true)
+	inventory["gold"] = old_gold - price
+	if kind == "star_items":
+		inventory["star_items"] = old_stars + amount
+	else:
+		var books: Dictionary = inventory["skill_books"]
+		books[item_id] = int(books.get(item_id, 0)) + amount
+	if save_roster():
+		return true
+	inventory["gold"] = old_gold
+	inventory["star_items"] = old_stars
+	inventory["skill_books"] = old_books
+	return false
+
+# 商店购买一个上阵人口位，最多六位。
+static func purchase_deployment_limit(price: int) -> bool:
+	if price < 0 or get_gold() < price or get_deployment_limit() >= MAX_DEPLOYMENT_LIMIT:
+		return false
+	var inventory := get_inventory()
+	var old_gold := get_gold()
+	var old_limit := get_deployment_limit()
+	inventory["gold"] = old_gold - price
+	GameDatabase.player_roster["deployment_limit"] = old_limit + 1
+	if save_roster():
+		return true
+	inventory["gold"] = old_gold
+	GameDatabase.player_roster["deployment_limit"] = old_limit
+	return false
 
 # 当前星级对应的通用技能槽位：初始 1 格，前两次升星各增加 1 格。
 static func get_skill_slot_limit(star: int) -> int:

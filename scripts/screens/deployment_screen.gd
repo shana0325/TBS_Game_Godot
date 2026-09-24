@@ -7,7 +7,6 @@ var scenario_id: String = ""
 var grid: Grid
 var deployment_zone: Array = []
 var roster_units: Array = []
-var mod_unit_types: Array = []
 var selectable_units: Array = []
 var placements: Dictionary = {}
 var cell_to_slot: Dictionary = {}
@@ -21,6 +20,11 @@ var roster_scroll: ScrollContainer
 var back_button: Button
 var start_button: Button
 var backpack_button: Button
+var roster_button: Button
+var population_label: Label
+var roster_popup: PopupPanel
+var sale_confirmation: ConfirmationDialog
+var pending_sale_id: String = ""
 var relic_summary_bar: HBoxContainer
 var relic_detail_popup: RelicDetailPopup
 var action_buttons: Array[Control] = []
@@ -48,37 +52,19 @@ func _ready() -> void:
 	tile_size = BattleLayout.compute_tile_size(grid.width, grid.height, _board_available_size(initial_vp), 0.86)
 	deployment_zone = _parse_cells(scenario.get("deployment_zone", []))
 	roster_units = GameDatabase.player_roster.get("units", [])
-	mod_unit_types = _collect_mod_unit_types()
 	_build_selectable_units()
 	_build_ui(scenario)
 	_prefill_placements()
 	_refresh_units()
 	_refresh_state()
 
-# 收集所有可用单位类型：player_roster 的 type + mod 添加的单位 type（去重）。
-func _collect_mod_unit_types() -> Array:
-	var roster_types: Array = []
-	for rd in roster_units:
-		roster_types.append(str(rd.get("type", "")))
-	var result: Array = []
-	for unit_type in GameDatabase.units.keys():
-		if not roster_types.has(str(unit_type)):
-			result.append(str(unit_type))
-	result.sort()
-	return result
-
-# 构建可选单位列表：每项 { "type", "roster_index" }。roster 单位在前，mod 单位在后。
+# 只展示已拥有的角色；Mod 单位也需要先通过招募加入编成。
 func _build_selectable_units() -> void:
 	selectable_units.clear()
 	for i in roster_units.size():
 		selectable_units.append({
 			"type": str(roster_units[i].get("type", "Hero")),
 			"roster_index": i
-		})
-	for unit_type in mod_unit_types:
-		selectable_units.append({
-			"type": unit_type,
-			"roster_index": -1
 		})
 
 func _load_scenario() -> Dictionary:
@@ -111,6 +97,8 @@ func _prefill_placements() -> void:
 			if int(selectable_units[i].get("roster_index", -1)) == ridx \
 					and str(selectable_units[i].get("type", "")) == str(entry.get("type", "")):
 				if not placements.has(i) and deployment_zone.has(pos):
+					if placements.size() >= ProgressManager.get_deployment_limit():
+						return
 					placements[i] = pos
 					cell_to_slot[pos] = i
 				break
@@ -128,6 +116,11 @@ func _build_ui(scenario: Dictionary) -> void:
 	title.add_theme_color_override("font_color", Color("#f3d99d"))
 	title.position = Vector2(20, 12)
 	add_child(title)
+	population_label = Label.new()
+	population_label.position = Vector2(480, 23)
+	population_label.add_theme_font_size_override("font_size", 17)
+	population_label.add_theme_color_override("font_color", Color("#e5d5ad"))
+	add_child(population_label)
 
 	# 顶部遗物栏用图标展示持有物，悬停提示名称、效果和当前成长。
 	relic_summary_bar = HBoxContainer.new()
@@ -207,8 +200,14 @@ func _build_ui(scenario: Dictionary) -> void:
 	backpack_button.custom_minimum_size = Vector2(220, 48)
 	backpack_button.pressed.connect(_on_backpack_pressed)
 	add_child(backpack_button)
+	roster_button = Button.new()
+	roster_button.text = "管理队伍"
+	roster_button.custom_minimum_size = Vector2(220, 48)
+	roster_button.pressed.connect(_show_roster_management)
+	add_child(roster_button)
 	# 操作区按“从下往上”维护，后续新增按钮直接追加到数组即可。
-	action_buttons = [start_button, back_button, backpack_button]
+	action_buttons = [start_button, back_button, backpack_button, roster_button]
+	_build_roster_management()
 	_build_info_panel()
 	_build_backpack_panel()
 	relic_detail_popup = RelicDetailPopup.new()
@@ -291,6 +290,84 @@ func _build_backpack_panel() -> void:
 	backpack_panel.name = "BackpackPanel"
 	add_child(backpack_panel)
 	backpack_panel.visible = false
+
+# 创建队伍管理与出售确认窗口，出售只返还金币且不会恢复成长材料。
+func _build_roster_management() -> void:
+	roster_popup = PopupPanel.new()
+	roster_popup.title = "管理队伍"
+	roster_popup.exclusive = true
+	add_child(roster_popup)
+	sale_confirmation = ConfirmationDialog.new()
+	sale_confirmation.title = "确认出售"
+	sale_confirmation.ok_button_text = "确认出售"
+	sale_confirmation.confirmed.connect(_confirm_sale)
+	roster_popup.add_child(sale_confirmation)
+
+# 打开队伍列表，逐个显示星级、售价与出售操作。
+func _show_roster_management() -> void:
+	for child in roster_popup.get_children():
+		if child == sale_confirmation:
+			continue
+		roster_popup.remove_child(child)
+		child.queue_free()
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	roster_popup.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	margin.add_child(box)
+	var heading := Label.new()
+	heading.text = "队伍管理 · %d/%d 人 · %d 金币" % [roster_units.size(), ProgressManager.MAX_ROSTER_SIZE, ProgressManager.get_gold()]
+	heading.add_theme_font_size_override("font_size", 24)
+	heading.add_theme_color_override("font_color", Color("#f3d79f"))
+	box.add_child(heading)
+	var note := Label.new()
+	note.text = "出售只获得金币；技能书、升星投入和永久成长不返还。至少保留一名角色。"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(note)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 8)
+	scroll.add_child(rows)
+	for unit in roster_units:
+		var row := HBoxContainer.new()
+		rows.add_child(row)
+		var name_label := Label.new()
+		var unit_type := str(unit.get("type", ""))
+		name_label.text = "%s · %d 星 · %s" % [
+			str(GameDatabase.get_unit(unit_type).get("display_name", unit_type)),
+			int(unit.get("star", 1)), str(unit.get("id", ""))]
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(name_label)
+		var sell_button := Button.new()
+		sell_button.text = "出售 +%d 金币" % ProgressManager.get_sale_price(unit)
+		sell_button.custom_minimum_size.x = 145
+		sell_button.disabled = roster_units.size() <= 1
+		MenuStyle.apply_primary(sell_button)
+		sell_button.pressed.connect(_request_sale.bind(str(unit.get("id", ""))))
+		row.add_child(sell_button)
+	roster_popup.popup_centered(Vector2i(660, 570))
+
+# 在真正删除角色前明确展示不可返还的投入。
+func _request_sale(unit_id: String) -> void:
+	pending_sale_id = unit_id
+	sale_confirmation.dialog_text = "出售后该角色的已学技能、升星投入和永久强化都会失去，且不会返还。确定出售吗？"
+	sale_confirmation.popup_centered()
+
+# 出售成功后修正跨层部署索引并重建部署界面。
+func _confirm_sale() -> void:
+	var old_index := ProgressManager.sell_unit(pending_sale_id)
+	pending_sale_id = ""
+	if old_index < 0:
+		return
+	get_tree().reload_current_scene()
 
 func _on_backpack_pressed() -> void:
 	if backpack_panel != null:
@@ -445,6 +522,8 @@ func _unit_at_cell(cell: Vector2i) -> Unit:
 	return null
 
 func _input(event: InputEvent) -> void:
+	if (roster_popup != null and roster_popup.visible) or (sale_confirmation != null and sale_confirmation.visible):
+		return
 	# 背包打开时由其遮罩独占鼠标，避免点击弹窗内容误触发战场拖动。
 	if backpack_panel != null and backpack_panel.visible:
 		return
@@ -515,7 +594,8 @@ func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
 	if not grid.in_bounds(cell.x, cell.y) or not deployment_zone.has(cell):
 		return false
 	var slot := int(data.get("selectable_index", -1))
-	return slot >= 0 and slot < selectable_units.size() and not placements.has(slot) and cell_to_slot.get(cell, null) == null
+	return slot >= 0 and slot < selectable_units.size() and not placements.has(slot) \
+		and cell_to_slot.get(cell, null) == null and placements.size() < ProgressManager.get_deployment_limit()
 
 func _drop_data(at_position: Vector2, data: Variant) -> void:
 	if typeof(data) == TYPE_DICTIONARY and str(data.get("kind", "")) == "skill_book":
@@ -660,6 +740,9 @@ func _withdraw_slot(slot: int) -> void:
 	_refresh_units()
 
 func _place_slot(slot: int, cell: Vector2i) -> void:
+	if not placements.has(slot) and placements.size() >= ProgressManager.get_deployment_limit():
+		_refresh_state()
+		return
 	var prev_pos = placements.get(slot)
 	if prev_pos != null:
 		cell_to_slot.erase(prev_pos)
@@ -691,12 +774,18 @@ func _refresh_units() -> void:
 
 func _refresh_state() -> void:
 	var placed := placements.size()
+	if population_label != null:
+		population_label.text = "上阵 %d/%d  ·  后备 %d/%d  ·  金币 %d" % [
+			placed, ProgressManager.get_deployment_limit(), roster_units.size(),
+			ProgressManager.MAX_ROSTER_SIZE, ProgressManager.get_gold()]
 	for i in unit_cards.size():
 		unit_cards[i].set_deployed(placements.has(i))
 		unit_cards[i].modulate = Color(1.15, 1.15, 0.85) if i == selected_slot else Color.WHITE
-	start_button.disabled = placed == 0
+	start_button.disabled = placed == 0 or placed > ProgressManager.get_deployment_limit()
 
 func _on_start_pressed() -> void:
+	if placements.is_empty() or placements.size() > ProgressManager.get_deployment_limit():
+		return
 	var deployed: Array = []
 	# 保存部署前的完整单位栏，战斗场景直接按同一份数据复用。
 	GameSession.deployment_units = selectable_units.duplicate(true)

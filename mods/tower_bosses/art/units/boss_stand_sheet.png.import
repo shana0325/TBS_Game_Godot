@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c8h57thw8q78t"
-path="res://.godot/imported/tank.png-c19bde6ff3603691510faf82f61752cc.ctex"
+uid="uid://evghtbyew8ce"
+path="res://.godot/imported/boss_stand_sheet.png-93978b9b412201cbe360e4d731cb560d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/tank.png"
-dest_files=["res://.godot/imported/tank.png-c19bde6ff3603691510faf82f61752cc.ctex"]
+source_file="res://mods/tower_bosses/art/units/boss_stand_sheet.png"
+dest_files=["res://.godot/imported/boss_stand_sheet.png-93978b9b412201cbe360e4d731cb560d.ctex"]
 
 [params]
 

@@ -1,6 +1,8 @@
 {
   "Warrior": {
     "display_name": "战士",
+    "sprite_facing": "left",
+    "random_pool_enabled": true,
     "role": "warrior",
     "tags": ["战士"],
     "hp": 1400,
@@ -12,10 +14,11 @@
     "range_min": 1,
     "range_max": 1,
     "turn_interval": 4.0,
-    "innate_skill": ""
+    "innate_skill": "Warrior Resolve"
   },
   "Tank": {
     "display_name": "坦克",
+    "random_pool_enabled": true,
     "role": "tank",
     "tags": ["坦克"],
     "hp": 2000,
@@ -27,10 +30,11 @@
     "range_min": 1,
     "range_max": 1,
     "turn_interval": 4.0,
-    "innate_skill": ""
+    "innate_skill": "Tank Shelter"
   },
   "Archer": {
     "display_name": "射手",
+    "random_pool_enabled": true,
     "role": "archer",
     "tags": ["射手"],
     "hp": 1000,
@@ -42,10 +46,11 @@
     "range_min": 1,
     "range_max": 2,
     "turn_interval": 4.0,
-    "innate_skill": ""
+    "innate_skill": "Archer Distance"
   },
   "Assassin": {
     "display_name": "刺客",
+    "random_pool_enabled": true,
     "role": "assassin",
     "tags": ["刺客"],
     "hp": 800,
@@ -57,6 +62,6 @@
     "range_min": 1,
     "range_max": 1,
     "turn_interval": 4.0,
-    "innate_skill": ""
+    "innate_skill": "Assassin Pursuit"
   }
 }

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dlpo08ryc531x"
-path="res://.godot/imported/assassin.png-a95dbe2c707d6e103ac0132c195bf91c.ctex"
+uid="uid://djoh8dk7esme5"
+path="res://.godot/imported/battle_stand_sheet.png-0dc32502febb1cf51d3c40c8baf96187.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/assassin.png"
-dest_files=["res://.godot/imported/assassin.png-a95dbe2c707d6e103ac0132c195bf91c.ctex"]
+source_file="res://assets/units/battle_stand_sheet.png"
+dest_files=["res://.godot/imported/battle_stand_sheet.png-0dc32502febb1cf51d3c40c8baf96187.ctex"]
 
 [params]
 

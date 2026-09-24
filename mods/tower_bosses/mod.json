@@ -1,0 +1,13 @@
+{
+  "id": "tower_bosses",
+  "name": "爬塔 Boss 角色包",
+  "version": "1.0.0",
+  "author": "TBS Game",
+  "description": "第 10、20、30 层 Boss、共享召唤技能与战斗小人。",
+  "code_skills": {
+    "Battlefield Summons": "code_skills/battlefield_summons.gd",
+    "Iron Ward": "code_skills/iron_ward.gd",
+    "Rift Volley": "code_skills/rift_volley.gd",
+    "Abyss Edict": "code_skills/abyss_edict.gd"
+  }
+}

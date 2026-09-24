@@ -94,6 +94,7 @@ func refresh() -> void:
 		items_grid.remove_child(child)
 		child.queue_free()
 	var inventory: Dictionary = ProgressManager.get_inventory()
+	_add_item_cell("gold", "金币", "用于在行商营地招募、购买技能书和材料。", int(inventory.get("gold", 0)))
 	_add_item_cell("star_item", "升星道具", "用于角色升星。当前总数量：%d" % int(inventory.get("star_items", 0)), int(inventory.get("star_items", 0)))
 	var books: Dictionary = inventory.get("skill_books", {})
 	var book_ids: Array = books.keys()

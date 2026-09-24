@@ -128,9 +128,18 @@ func run() -> bool:
 	var guardian_ok := _verify_guardian_per_unit_turn()
 	var armor_ok := _verify_effect_damage_uses_armor()
 	var grasp_ok := _verify_grasp_base_attack_kill()
-	var pass_ok := p != null and p.skills.size() == CHECK_SKILLS.size() \
+	# 固有技能会增加总数，只检查本用例要求装备的通用技能是否齐全。
+	var configured_skills_ok := p != null
+	if p != null:
+		for skill_id in CHECK_SKILLS:
+			if not p.has_skill(_chinese_name(str(skill_id))):
+				configured_skills_ok = false
+	var pass_ok := configured_skills_ok \
 		and p.damage_dealt > 0 and p.healing_done > 0 and zero.is_empty() \
 		and persistent_ok and biscuit_ok and guardian_ok and armor_ok and grasp_ok
+	if not pass_ok:
+		print("验证状态：技能=%s 成长=%s 口粮=%s 守卫=%s 护甲=%s 血契=%s" % [
+			configured_skills_ok, persistent_ok, biscuit_ok, guardian_ok, armor_ok, grasp_ok])
 	if battle.winner == "":
 		print("警告：战斗超时未分出胜负")
 	return pass_ok

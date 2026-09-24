@@ -6,8 +6,11 @@ extends RefCounted
 
 static func get_entries() -> Dictionary:
 	return {
-		# 16 个通用技能的代码实现登记：key 为英文技能 id（与 skills.json 键一致），
-		# 值指向脚本。GameDatabase 合并时保留 JSON 的中文 name/desc 等元数据。
+		"Warrior Resolve": "res://scripts/battle/skills/code/warrior_resolve.gd",
+		"Tank Shelter": "res://scripts/battle/skills/code/tank_shelter.gd",
+		"Archer Distance": "res://scripts/battle/skills/code/archer_distance.gd",
+		"Assassin Pursuit": "res://scripts/battle/skills/code/assassin_pursuit.gd",
+		# 16 个通用技能的代码实现登记：key 为稳定技能 id，值指向脚本；元数据由脚本提供。
 		"Triple Pursuit": "res://scripts/battle/skills/code/triple_pursuit.gd",
 		"Frenzy Chain": "res://scripts/battle/skills/code/frenzy_chain.gd",
 		"Onset Might": "res://scripts/battle/skills/code/onset_might.gd",

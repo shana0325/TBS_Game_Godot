@@ -6,6 +6,7 @@ func _init() -> void:
 	name = "回响节点"
 	desc = "每累计施放 3 次按秒触发技能，使自身其他按秒触发技能的剩余时间减少 30%。"
 	trigger = "on_timer"
+	interval_seconds = 5.0
 	condition = {"target_type": "self"}
 	common = true
 	searchable = true

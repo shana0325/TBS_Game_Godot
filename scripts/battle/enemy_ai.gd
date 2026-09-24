@@ -12,6 +12,7 @@ static func get_decision(manager: BattleManager, unit: Unit) -> Dictionary:
 	var nearest := _get_move_target(manager, unit)
 	if nearest == null:
 		return {"action": "wait"}
+	unit.set_current_target(nearest)
 	var move_tiles := manager.get_move_tiles(unit)
 	if move_tiles.is_empty():
 		return {"action": "wait"}
@@ -72,6 +73,9 @@ static func _get_move_target(manager: BattleManager, unit: Unit) -> Unit:
 	var taunt := _find_taunter(manager, unit)
 	if taunt != null:
 		return taunt
+	var current := unit.get_current_target()
+	if current != null and current.alive and current.camp != unit.camp:
+		return current
 	return manager.get_nearest_target(unit)
 
 # 查找嘲讽该单位的敌方单位（向 manager 查询可攻击的挑衅者）。

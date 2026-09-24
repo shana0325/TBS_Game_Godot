@@ -12,23 +12,23 @@ var _settlement_connected := false
 # 注册命中触发与技能说明；独立技能实例保存本场记录。
 func _init() -> void:
 	name = "属性汲取"
-	desc = "普攻命中每名敌人时，首次偷取其当前生命上限、攻击、护甲、暴击率和暴击伤害各 5%，持续本场战斗。战斗结束时若自身存活，将本场偷取量的 20% 永久保留。"
-	trigger = "on_hit"
+	desc = "普攻命中前，对每名敌人首次偷取其当前生命上限、攻击、护甲、暴击率和暴击伤害各 5%，持续本场战斗。战斗结束时若自身存活，将本场偷取量的 20% 永久保留。"
+	trigger = SkillTriggerSystem.ON_ATTACK_HIT_BEFORE
 	condition = {"target_type": "target"}
 	common = false
 	searchable = false
 	tags = ["固有", "攻击", "成长"]
 
-# 只接受本人实际造成伤害的普攻；技能和特效伤害不会偷取。
+# 只接受本人已确认目标的普攻；技能和特效伤害不会偷取。
 func check_condition(_battle, context: Dictionary) -> bool:
 	var user = context.get("actor")
 	var target = context.get("target")
 	return context.get("damage_kind") == DamageSystem.ATTACK \
 		and user is Unit and target is Unit and user != target \
-		and user.camp != target.camp and float(context.get("damage", 0)) > 0.0 \
+		and user.alive and target.alive and user.camp != target.camp \
 		and not _stolen_targets.has(target.get_instance_id())
 
-# 致命普攻也属于命中；允许从刚被击杀的目标读取本次属性。
+# 扣血前目标仍存活，从其当前属性读取本次偷取量。
 func resolve_targets(_battle, _user: Unit, context: Dictionary) -> Array:
 	var target = context.get("target")
 	return [target] if target is Unit else []

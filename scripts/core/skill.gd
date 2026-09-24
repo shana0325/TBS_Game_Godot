@@ -16,6 +16,8 @@ var priority: int = 0
 var min_range: int = 1
 var max_range: int = 1
 var effects: Array = []
+# 代码技能可声明其直接造成的伤害类别，供详情界面展示。
+var damage_kinds: Array = []
 var cooldown_remaining: int = 0
 var interval_remaining: float = 0.0
 var common: bool = false
@@ -29,6 +31,14 @@ var shield_cap_percent: float = 1.0
 var unlimited_shield: bool = false
 # 所属单位：用于 on_timer 定时技能按单位技能急速折算实际施放间隔。
 var owner: Unit = null
+
+# 常驻技能可增加单位普攻射程；默认没有加成。
+func get_attack_range_bonus() -> int:
+	return 0
+
+# 常驻技能可按本次攻击目标提供伤害加成；默认没有加成。
+func get_damage_bonus_percent(_source: Unit, _target: Unit, _kind: String) -> float:
+	return 0.0
 
 static func from_data(data: Dictionary) -> Skill:
 	var skill: Skill
@@ -51,6 +61,7 @@ static func from_data(data: Dictionary) -> Skill:
 	skill.min_range = int(data.get("min_range", 1))
 	skill.max_range = int(data.get("max_range", 1))
 	skill.effects = data.get("effects", [])
+	skill.damage_kinds = _string_array(data.get("damage_kinds", []))
 	skill.common = bool(data.get("common", false))
 	skill.tags = _string_array(data.get("tags", []))
 	skill.searchable = bool(data.get("searchable", true))

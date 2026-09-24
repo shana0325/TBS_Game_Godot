@@ -167,13 +167,17 @@ func show_skill(skill_id: String) -> void:
 	move_to_front()
 	_layout_popup()
 
-# 汇总技能各效果中声明的伤害类型（去重保留顺序）；无伤害效果返回空数组。
+# 汇总代码技能声明及数据效果的伤害类型；无直接伤害的技能返回空数组。
 func _collect_damage_kinds(data: Dictionary) -> Array:
 	var kinds: Array = []
+	for kind in data.get("damage_kinds", []):
+		var label := SKILL_DETAIL_FORMATTER._damage_kind_text({"damage_kind": str(kind)})
+		if not kinds.has(label):
+			kinds.append(label)
 	for effect in data.get("effects", []):
 		if not (effect is Dictionary):
 			continue
-		if not str(effect.get("type", "")) in ["damage", "percentage_damage", "chain_damage"]:
+		if not str(effect.get("type", "")) in ["damage", "percentage_damage", "chain_damage", "reflect"]:
 			continue
 		var label := SKILL_DETAIL_FORMATTER._damage_kind_text(effect)
 		if kinds.has(label):

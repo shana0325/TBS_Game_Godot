@@ -152,6 +152,8 @@ docs/       设计/交接/技能规范/mod 指南
 
 ### 6.7 固有技能 / 通用技能
 - 固有技能：`units.json → innate_skill`，模板独有、始终生效、不可更换；可为空。
+- 基础角色固有技能：战士普攻追加已损生命 10% 的技能伤害并回复已损生命 10%；坦克受普攻后为当前生命最低的我方单位提供自身最大生命 5% 的护盾；射手普攻射程 +10，普攻伤害每格距离 +10%；刺客锁定目标死亡时改锁当前生命最低的敌人并瞬移至其相邻空格（无空格则仅改锁）。
+- 单位模板用 `random_pool_enabled` 决定是否进入普通敌人、招募事件及商店的随机池，缺省为 `true`；Hero 设为 `false`，但开局编成保留一个，指定事件和关卡仍可直接引用它。
 - 通用技能：`common: true`，消耗对应技能书学习并装备后参与战斗。
 - 通用技能槽初始 1 格；前两次升星各增加 1 格，最多因升星增加 2 格。未来提高最高星级时，该升星带来的槽位增量上限不变。
 - 所有技能均有 `tags` 与 `searchable` 字段。不可检索技能不会进入敌人随机技能、爬塔随机奖励或常规学习池；通过指定手段直接获得后仍可显示、学习记录和装备。
@@ -161,11 +163,12 @@ docs/       设计/交接/技能规范/mod 指南
 ## 7. 成长与编成
 
 ### 7.1 ProgressManager（纯逻辑）
-- 升星：`ascend_unit` 消耗背包中的可堆叠 `inventory.star_items`，当前最高 3 星；`add_star_items` 供未来奖励/商店等明确来源调用。星级规则集中在 `Unit`，方便未来扩展最高星级。
+- 升星：`ascend_unit` 消耗背包中的可堆叠 `inventory.star_items`，当前最高 3 星；升星材料可从补给事件、探索事件和商店获得。星级规则集中在 `Unit`。
 - 通用技能槽：`1 + min(star - 1, 2)`；`equip_skill` 与战斗中的 `Unit.apply_skills` 共同限制装备技能数量。
 - 技能：技能书是通用技能的学习材料；角色详情提供学习和遗忘入口。槽位已满时必须先遗忘一个通用技能。
 - 永久强化：`add_permanent_stat(unit_id, stat, amount)` 累加 `permanent_mods` 并写回 player_roster.json。
 - 持久化：`save_roster()` 写回 JSON。
+- 爬塔经济：背包金币、上阵人口与已招募角色保存在玩家编成中；固定战后奖励、商店购买和出售均经 `ProgressManager` 保存。
 
 ### 7.2 角色资料页（UnitDetailPanel）
 - 在部署与战斗中点击单位打开共用资料页：左侧章节导航、中间立绘、右侧连续滚动属性和技能。
@@ -175,7 +178,8 @@ docs/       设计/交接/技能规范/mod 指南
 ## 8. 关卡与部署
 
 - `data/scenario/*.json`：name / width / height / deployment_zone（玩家部署区，battle_01/02 为左半场 x0-5 × y0-5）/ player_units（roster_index + pos）/ enemy_units（type + pos）。
-- 部署界面：右侧编成槽位，点选单位后点击部署区放置，可反复调整；全部就绪后开始战斗。
+- 爬塔每层可有多个部署前事件：`TowerEventFactory` 先排周期事件，再追加 `tower_config.json.floor_events` 中的同层事件；`GameSession` 保留事件实例并按顺序出队。事件可通过 `apply_to_scenario` 替换战斗场景，Boss 方案见 `docs/BOSS_DESIGN.md`。
+- 部署界面：只展示已招募角色，拖入部署区放置；初始上阵 4 人，上限可在商店提升至 6 人。管理队伍可出售多余角色，至少保留一名。
 
 ## 9. 战斗表现（UI）
 

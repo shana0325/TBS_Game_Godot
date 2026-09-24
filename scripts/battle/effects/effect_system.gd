@@ -182,8 +182,8 @@ static func _apply_summon(user: Unit, config: Dictionary, game) -> void:
 	# 在目标旁找空位（简化：复用 game 的 BattleManager 添加单位）
 	var battle = game
 	if battle != null and battle.has_method("spawn_unit"):
-		battle.spawn_unit(unit_type, user.camp, user.pos)
-		if game.has_method("add_log"):
+		var summoned: Unit = battle.spawn_unit(unit_type, user.camp, user.pos, user)
+		if summoned != null and game.has_method("add_log"):
 			game.add_log("%s 召唤了 %s" % [user.get_display_name(), unit_type])
 	else:
 		if game != null and game.has_method("add_log"):
@@ -227,6 +227,7 @@ static func _apply_reflect(target: Unit, config: Dictionary, game) -> void:
 		"name": str(config.get("name", "反射")),
 		"duration": int(config.get("duration", 2)),
 		"reflect_percent": float(config.get("percent", 0.3)),
+		"reflect_damage_kind": str(config.get("damage_kind", DamageSystem.SKILL)),
 		"permanent": bool(config.get("permanent", false)),
 		"is_beneficial": true,
 	}
@@ -372,6 +373,8 @@ static func _apply_percentage_damage(user: Unit, target: Unit, config: Dictionar
 	damage = maxi(1, damage)
 	var damage_config := config.duplicate()
 	damage_config["raw_damage"] = damage
+	if not damage_config.has("damage_kind"):
+		damage_config["damage_kind"] = DamageSystem.SKILL
 	if not damage_config.has("true_damage") and not damage_config.has("ignore_defense"):
 		damage_config["true_damage"] = true
 	var resolved := DamageSystem.apply(user, target, damage_config, battle, game)
@@ -397,6 +400,8 @@ static func _apply_chain_damage(user: Unit, target: Unit, config: Dictionary, ga
 			break
 		var damage_config := config.duplicate()
 		damage_config["power"] = power
+		if not damage_config.has("damage_kind"):
+			damage_config["damage_kind"] = DamageSystem.SKILL
 		var resolved := DamageSystem.apply(user, current_target, damage_config, battle, game)
 		var damage: int = resolved.get("damage", 0)
 		var crit: bool = resolved.get("crit", false)

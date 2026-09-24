@@ -96,7 +96,7 @@ grow_horizontal = 2
 grow_vertical = 2
 text = "开始新游戏"
 
-[node name="QuitButton" type="Button" parent="."]
+[node name="EncyclopediaButton" type="Button" parent="."]
 layout_mode = 1
 anchor_left = 0.74
 anchor_top = 0.5
@@ -106,6 +106,20 @@ offset_left = -150.0
 offset_top = 146.0
 offset_right = 150.0
 offset_bottom = 202.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "图鉴"
+
+[node name="QuitButton" type="Button" parent="."]
+layout_mode = 1
+anchor_left = 0.74
+anchor_top = 0.5
+anchor_right = 0.74
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = 214.0
+offset_right = 150.0
+offset_bottom = 270.0
 grow_horizontal = 2
 grow_vertical = 2
 text = "退出游戏"
