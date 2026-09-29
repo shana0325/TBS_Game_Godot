@@ -21,7 +21,9 @@ var max_hp: float = 0.0
 var acted: bool = false
 var moved: bool = false
 var alive: bool = true
-var turn_interval: float = 4.0
+var is_summoned: bool = false
+var battle_ref: WeakRef = null
+var turn_interval: float = 1.0
 var turn_timer: float = 0.0
 var permanent_mods: Dictionary = {}
 var battle_stat_mods: Dictionary = {}
@@ -34,6 +36,7 @@ var learned_skill_names: Array = []
 # 战斗运行时状态库（叠层/按目标计数/限流/时间窗），由技能和遗物共用。
 var runtime: UnitRuntimeState = UnitRuntimeState.new()
 
+# 组合单位模板和编成数据，生成当前战斗使用的单位实例。
 static func create_from_config(
 	unit_type: String,
 	camp: String,
@@ -52,7 +55,7 @@ static func create_from_config(
 	unit.config = config_data
 	unit.level = int(roster_data.get("level", 1))
 	unit.star = clampi(int(roster_data.get("star", 1)), 1, MAX_STARS)
-	unit.turn_interval = float(config_data.get("turn_interval", 4.0))
+	unit.turn_interval = float(config_data.get("turn_interval", 1.0))
 	unit.permanent_mods = roster_data.get("permanent_mods", {})
 	# 敌方属性倍率（爬塔敌人按层成长用，玩家为 1.0）
 	unit.stat_multiplier = float(roster_data.get("stat_multiplier", 1.0))
@@ -77,7 +80,11 @@ func get_stat(stat: String) -> float:
 	var value := float(get_base_stat(stat))
 	value += float(permanent_mods.get(stat, 0.0))
 	for buff in buffs:
-		value += buff.get_stat_modifier_for_unit(self, stat)
+		if buff.aura_range <= 0:
+			value += buff.get_stat_modifier_for_unit(self, stat)
+	var battle = battle_ref.get_ref() if battle_ref != null else null
+	if battle != null:
+		value += battle.get_aura_stat_bonus(self, stat)
 	var percent := float(percent_mods.get(stat, 0.0))
 	if not is_zero_approx(percent):
 		value += value * percent
@@ -91,7 +98,11 @@ func get_defense() -> float:
 	return get_stat("defense")
 
 func get_move_points() -> int:
-	return roundi(get_stat("move"))
+	return maxi(0, roundi(get_stat("move")) - get_frost_stacks())
+
+# 霜冻每层使行动间隔增加 10%，不改写单位模板的基础间隔。
+func get_effective_turn_interval() -> float:
+	return turn_interval * (1.0 + 0.1 * float(get_frost_stacks()))
 
 func get_crit_rate() -> float:
 	return get_stat("crit_rate")
@@ -123,7 +134,7 @@ func get_range_min() -> int:
 func get_range_max() -> int:
 	var max_range := int(config.get("range_max", 1))
 	for skill in skills:
-		if skill is Skill:
+		if skill is Skill and not is_silenced():
 			max_range += (skill as Skill).get_attack_range_bonus()
 	return max_range
 
@@ -221,6 +232,46 @@ func _amplify_player_vital(source: Unit, amount: int) -> int:
 func add_buff(buff: Buff) -> void:
 	if buff != null:
 		buffs.append(buff)
+
+# 绑定当前战斗，供动态光环与按场上位置计算的规则查询。
+func set_battle(battle) -> void:
+	battle_ref = weakref(battle) if battle != null else null
+
+# 查询并移除独立状态；数值护盾仍通过 Buff.shield 处理。
+func has_status(status_name: String) -> bool:
+	for buff in buffs:
+		if buff.status == status_name:
+			return true
+	return false
+
+# 移除指定状态及其所有层实例。
+func remove_status(status_name: String) -> void:
+	for buff in buffs.duplicate():
+		if buff.status == status_name:
+			buffs.erase(buff)
+
+# 休眠状态查询。
+func is_dormant() -> bool:
+	return has_status("dormant")
+
+# 潜行状态查询。
+func is_stealthed() -> bool:
+	return has_status("stealth")
+
+# 读取当前霜冻层数。
+func get_frost_stacks() -> int:
+	for buff in buffs:
+		if buff.status == "frost":
+			return int(buff.raw_data.get("stacks", 0))
+	return 0
+
+# 圣盾只抵消一次正伤害，消耗后与数值护盾分开记录。
+func consume_divine_shield() -> bool:
+	for buff in buffs:
+		if buff.status == "divine_shield":
+			buffs.erase(buff)
+			return true
+	return false
 
 # 当前所有独立护盾实例的剩余总量。
 func get_total_shield() -> int:

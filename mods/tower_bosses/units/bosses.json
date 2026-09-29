@@ -12,7 +12,7 @@
     "crit_damage": 150,
     "range_min": 1,
     "range_max": 1,
-    "turn_interval": 4.5,
+    "turn_interval": 1.0,
     "innate_skill": "Iron Ward",
     "innate_skills": ["Battlefield Summons"]
   },
@@ -28,7 +28,7 @@
     "crit_damage": 150,
     "range_min": 1,
     "range_max": 4,
-    "turn_interval": 4.0,
+    "turn_interval": 1.0,
     "innate_skill": "Rift Volley",
     "innate_skills": ["Battlefield Summons"]
   },
@@ -45,7 +45,7 @@
     "crit_damage": 150,
     "range_min": 1,
     "range_max": 2,
-    "turn_interval": 4.0,
+    "turn_interval": 1.0,
     "innate_skill": "Abyss Edict",
     "innate_skills": ["Battlefield Summons"]
   }

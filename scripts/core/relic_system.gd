@@ -432,15 +432,8 @@ static func _apply_airy_guardian(manager: BattleManager, source: Unit, target: U
 			if game != null and game.has_method("add_log"):
 				game.add_log("守护精灵：对 %s 追加 %d 点特效伤害" % [target.get_display_name(), dmg])
 	else:
-		# 给当前生命比例最低的存活友军施加施放者 60% 攻击力的护盾
-		var lowest: Unit = null
-		var lowest_ratio := 1.01
-		for ally in manager.units:
-			if ally is Unit and ally.alive and ally.camp == TurnManager.PLAYER_CAMP:
-				var r := float(ally.hp) / maxf(ally.max_hp, 1.0)
-				if r < lowest_ratio:
-					lowest_ratio = r
-					lowest = ally
+		# 按共用规则给生命比例最低且仍有护盾容量的友军施加护盾。
+		var lowest := SkillKit.lowest_hp_shield_ally(manager, source, false, true)
 		if lowest != null:
 			_apply_shield_to(lowest, roundi(source.get_attack() * 0.60), game)
 

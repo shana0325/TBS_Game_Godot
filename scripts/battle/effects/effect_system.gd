@@ -29,11 +29,11 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null,
 			"heal":
 				report["heal"] += _apply_heal(user, target, effect, game)
 			"buff":
-				var buff := _apply_buff(target, effect, game)
+				var buff := _apply_buff(user, target, effect, game, battle)
 				if buff != null:
 					report["buffs"].append(buff.name)
 			"dot":
-				var dot_buff := _apply_buff(target, {"type": "buff", "buff": str(effect.get("buff", ""))}, game)
+				var dot_buff := _apply_buff(user, target, {"type": "buff", "buff": str(effect.get("buff", ""))}, game, battle)
 				if dot_buff != null:
 					report["buffs"].append(dot_buff.name)
 			"shield":
@@ -49,10 +49,26 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null,
 					report["revived"] = true
 			"dispel":
 				_apply_dispel(target, effect, game)
+			"cleanse":
+				_apply_dispel(target, {"friendly": true}, game)
 			"summon":
-				_apply_summon(user, effect, game)
+				_apply_summon(user, effect, battle if battle != null else game)
 			"taunt":
 				_apply_status_buff(target, effect, game, "taunt")
+			"stealth", "divine_shield", "silence":
+				_apply_timed_status(target, effect, effect_type)
+			"dormant":
+				_apply_dormant(target, effect)
+			"poison":
+				_apply_poison(user, target, effect)
+			"burn":
+				_apply_burn(user, target, effect)
+			"frost":
+				_apply_frost(target, effect)
+			"aura":
+				_apply_aura(target, effect)
+			"double_stats":
+				_apply_double_stats(target, effect)
 			"immunity":
 				_apply_immunity(target, effect, game)
 			"reflect":
@@ -106,11 +122,11 @@ static func _apply_heal(user: Unit, target: Unit, config: Dictionary, game) -> i
 		game.add_log("%s 恢复 %d 点生命" % [target.get_display_name(), healed])
 	return healed
 
-static func _apply_buff(target: Unit, config: Dictionary, game) -> Buff:
+static func _apply_buff(user: Unit, target: Unit, config: Dictionary, game, battle) -> Buff:
 	if target == null:
 		return null
 	var buff_id := str(config.get("buff", ""))
-	return BuffEffect.apply(target, buff_id, game)
+	return BuffEffect.apply(target, buff_id, game, user, battle)
 
 static func _apply_shield(target: Unit, config: Dictionary, game) -> int:
 	if target == null:
@@ -164,13 +180,121 @@ static func _apply_dispel(target: Unit, config: Dictionary, game) -> void:
 	var kept: Array = []
 	for buff in target.buffs:
 		var is_beneficial: bool = bool(buff.raw_data.get("is_beneficial", false))
-		if is_beneficial == friendly:
+		if is_beneficial == friendly or bool(buff.raw_data.get("uncleansable", false)):
 			kept.append(buff)
 	target.buffs = kept
 	if game != null and game.has_method("add_log"):
 		game.add_log("%s 的效果被驱散" % target.get_display_name())
 
-# 召唤：在目标（或自身）附近生成一个单位，存活 duration 回合。
+# 刷新单份限时状态；潜行和圣盾不因重复施加而叠层。
+static func _apply_timed_status(target: Unit, config: Dictionary, status_name: String) -> void:
+	if target == null or not target.alive or target.is_immune(status_name):
+		return
+	for buff in target.buffs:
+		if buff.status == status_name:
+			buff.seconds_left = maxf(buff.seconds_left, float(config.get("duration_seconds", 6.0)))
+			return
+	var beneficial := status_name != "silence"
+	target.add_buff(Buff.from_data({"name": str(config.get("name", status_name)),
+		"status": status_name, "control": status_name if not beneficial else "",
+		"duration_seconds": float(config.get("duration_seconds", 6.0)),
+		"permanent": true, "is_beneficial": beneficial}))
+
+# 休眠期间仍可受伤；解除时由 BattleManager 一次性执行苏醒效果。
+static func _apply_dormant(target: Unit, config: Dictionary) -> void:
+	if target == null or not target.alive or target.is_dormant():
+		return
+	target.add_buff(Buff.from_data({"name": str(config.get("name", "休眠")),
+		"status": "dormant", "duration_seconds": float(config.get("duration_seconds", 20.0)),
+		"awaken_effects": config.get("awaken_effects", []), "permanent": true,
+		"uncleansable": true, "is_beneficial": true}))
+
+# 中毒只创建一个状态，内部每层独立记持续时间与伤害来源。
+static func _apply_poison(user: Unit, target: Unit, config: Dictionary) -> void:
+	if target == null or not target.alive or target.is_immune("poison"):
+		return
+	var poison: Buff = null
+	for buff in target.buffs:
+		if buff.status == "poison":
+			poison = buff
+			break
+	if poison == null:
+		poison = Buff.from_data({"name": "中毒", "status": "poison", "permanent": true,
+			"is_beneficial": false})
+		target.add_buff(poison)
+	var interval := maxf(0.1, float(config.get("tick_interval_seconds", 2.0)))
+	var layer := {"remaining": maxf(0.1, float(config.get("duration_seconds", 6.0))),
+		"until_tick": interval, "interval": interval, "damage": maxi(1, int(config.get("damage", 5))),
+		"source_ref": weakref(user) if user != null else null}
+	if poison.stacks.size() >= maxi(1, int(config.get("max_stacks", 5))):
+		poison.stacks.pop_front()
+	poison.stacks.append(layer)
+
+# 灼烧不叠层：重复施加刷新时间并保留较高的每跳伤害。
+static func _apply_burn(user: Unit, target: Unit, config: Dictionary) -> void:
+	if target == null or not target.alive or target.is_immune("burn"):
+		return
+	for buff in target.buffs:
+		if buff.status == "burn":
+			buff.seconds_left = maxf(0.1, float(config.get("duration_seconds", 6.0)))
+			if int(config.get("damage", 5)) > buff.tick_damage:
+				buff.tick_damage = int(config.get("damage", 5))
+				buff.source_ref = weakref(user) if user != null else null
+			return
+	target.add_buff(Buff.from_data({"name": "灼烧", "status": "burn",
+		"duration_seconds": maxf(0.1, float(config.get("duration_seconds", 6.0))),
+		"tick_interval_seconds": maxf(0.1, float(config.get("tick_interval_seconds", 2.0))),
+		"tick_damage": maxi(1, int(config.get("damage", 5))), "source": user,
+		"permanent": true, "is_beneficial": false}))
+
+# 霜冻每层减移动并延长行动间隔；第三层冻结下一次行动并短暂防止连锁冻结。
+static func _apply_frost(target: Unit, config: Dictionary) -> void:
+	if target == null or not target.alive or target.is_immune("frost") or target.has_status("frost_resist"):
+		return
+	var frost: Buff = null
+	for buff in target.buffs:
+		if buff.status == "frost":
+			frost = buff
+			break
+	if frost == null:
+		frost = Buff.from_data({"name": "霜冻", "status": "frost", "stacks": 0,
+			"duration_seconds": 5.0, "permanent": true, "is_beneficial": false})
+		target.add_buff(frost)
+	frost.raw_data["stacks"] = int(frost.raw_data.get("stacks", 0)) + int(config.get("stacks", 1))
+	frost.seconds_left = maxf(0.1, float(config.get("duration_seconds", 5.0)))
+	if int(frost.raw_data["stacks"]) >= 3:
+		target.remove_status("frost")
+		target.add_buff(Buff.from_data({"name": "冻结", "status": "frozen", "permanent": true,
+			"is_beneficial": false}))
+		target.add_buff(Buff.from_data({"name": "抗冻", "status": "frost_resist",
+			"duration_seconds": 3.0, "permanent": true, "is_beneficial": true}))
+
+# 光环不复制到友军身上，由单位查询属性时按当前位置实时统计。
+static func _apply_aura(target: Unit, config: Dictionary) -> void:
+	if target == null or not target.alive:
+		return
+	target.add_buff(Buff.from_data({"name": str(config.get("name", "光环")),
+		"aura_range": maxi(1, int(config.get("range", 2))),
+		"modifiers": config.get("stats", {}),
+		"duration_seconds": float(config.get("duration_seconds", -1.0)),
+		"permanent": true, "is_beneficial": true}))
+
+# 战斗内翻倍指定基础属性；最大生命与当前生命同步翻倍，保持生命比例。
+static func _apply_double_stats(target: Unit, config: Dictionary) -> void:
+	if target == null or not target.alive:
+		return
+	for stat in config.get("stats", ["hp", "attack", "defense"]):
+		match str(stat):
+			"hp":
+				var old_hp := target.hp
+				target.add_battle_stat("hp", target.max_hp)
+				target.hp = minf(target.max_hp, old_hp * 2.0)
+			"attack":
+				target.add_battle_stat("attack", target.get_attack())
+			"defense":
+				target.add_battle_stat("defense", target.get_defense())
+
+# 召唤：在施放者附近生成仅存在于本场战斗的单位。
 static func _apply_summon(user: Unit, config: Dictionary, game) -> void:
 	if user == null:
 		return
@@ -179,7 +303,7 @@ static func _apply_summon(user: Unit, config: Dictionary, game) -> void:
 	if config_data.is_empty():
 		push_warning("召唤未知单位: %s" % unit_type)
 		return
-	# 在目标旁找空位（简化：复用 game 的 BattleManager 添加单位）
+	# 由 BattleManager 寻找空位并绑定楼层倍率与入场事件。
 	var battle = game
 	if battle != null and battle.has_method("spawn_unit"):
 		var summoned: Unit = battle.spawn_unit(unit_type, user.camp, user.pos, user)
@@ -196,6 +320,9 @@ static func _apply_status_buff(target: Unit, config: Dictionary, game, control: 
 	var data := {
 		"name": str(config.get("name", control)),
 		"duration": int(config.get("duration", 1)),
+		"duration_seconds": float(config.get("duration_seconds", 6.0)),
+		"permanent": true,
+		"status": control,
 		"control": control,
 		"is_beneficial": bool(config.get("is_beneficial", false)),
 	}
@@ -288,6 +415,8 @@ static func _apply_lifesteal(target: Unit, config: Dictionary, game) -> void:
 	var data := {
 		"name": str(config.get("name", "吸血")),
 		"duration": int(config.get("duration", 2)),
+		"duration_seconds": float(config.get("duration_seconds", -1.0)),
+		"permanent": bool(config.get("permanent", false)),
 		"trigger": "on_hit",
 		"heal_percent": float(config.get("percent", 0.3)),
 		"is_beneficial": true,

@@ -1,5 +1,5 @@
 # 战斗界面（自走棋·自动战斗）：渲染网格与单位，实时驱动 BattleManager.tick，
-# 播放行动动画/日志，判定胜负后进入结算。
+# 播放行动动画，判定胜负后进入结算。
 extends Control
 
 const ANIM_SPEED := 1.0
@@ -17,15 +17,12 @@ var _tween_running: int = 0
 @onready var enemy_status_label: Label = $EnemyStatusLabel
 @onready var grid_view: Node2D = $BattleView/GridView
 @onready var units_layer: Node2D = $BattleView/UnitsLayer
-@onready var log_list: VBoxContainer = $LogPanel/Scroll/LogList
-@onready var log_panel: PanelContainer = $LogPanel
 @onready var victory_label: Label = $VictoryLabel
 
 var info_panel: UnitDetailPanel
 var settings_panel: PanelContainer
 var pause_btn: Button
 var speed_btn: Button
-var log_btn: Button
 var action_buttons: Array[Control] = []
 var roster_panel: PanelContainer
 var roster_scroll: ScrollContainer
@@ -33,9 +30,7 @@ var roster_container: HBoxContainer
 var battle_unit_cards: Array[DeploymentUnitCard] = []
 var battle_speed: int = 1
 const SPEED_OPTIONS := [1, 2, 3]
-const MAX_LOG_ENTRIES := 100
 const INFO_REFRESH_INTERVAL := 0.1
-var log_buffer: Array[String] = []
 var info_refresh_elapsed: float = 0.0
 var skill_damage_queue: Array[Dictionary] = []
 var reward_overlay: Control
@@ -45,8 +40,6 @@ var reward_toggle_button: Button
 func _ready() -> void:
 	# 暂停时本界面保持可交互（暂停/倍速/信息面板可用）
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	# 日志默认隐藏；隐藏期间只保存文本，不创建日志 Label 节点。
-	log_panel.visible = false
 	manager = BattleManager.new(GameSession.current_scenario, self, GameSession.deployed_units, GameSession.scenario_override)
 	manager.setup()
 	manager.setup_battle()
@@ -61,17 +54,9 @@ func _ready() -> void:
 	_flush_skill_damage_queue()
 	_build_info_panel()
 	_update_turn_label()
-	if GameSession.mode == GameSession.MODE_TOWER:
-		add_log("＝%s＝" % GameSession.get_floor_label())
-	add_log("战斗开始！地图 %dx%d，我方 %d 单位，敌方 %d 单位" % [
-		manager.grid.width, manager.grid.height,
-		_count_alive(TurnManager.PLAYER_CAMP), _count_alive(TurnManager.ENEMY_CAMP)
-	])
 	_build_settings_ui()
 	_build_speed_controls()
-	_build_log_toggle()
 	_build_battle_roster()
-	action_buttons.append(log_btn)
 	_layout_overlay_controls()
 
 func _notification(what: int) -> void:
@@ -96,36 +81,11 @@ func _layout_overlay_controls() -> void:
 	var settings_button := get_node_or_null("SettingsButton") as Button
 	if settings_button != null:
 		settings_button.position = Vector2(maxf(20.0, vp.x - 108.0), 12.0)
-	if log_panel != null:
-		# 日志窗口悬浮在底部单位栏上方，可以遮挡单位卡片但不改变战场位置。
-		var tray_y := _roster_panel_y(vp)
-		log_panel.position = Vector2(24.0, maxf(104.0, tray_y - 248.0))
-		log_panel.size = Vector2(minf(520.0, vp.x - 48.0), 232.0)
 	_layout_roster_panel(vp)
 	if info_panel != null:
 		info_panel.fit_to_viewport()
 	if reward_toggle_button != null:
 		reward_toggle_button.position = Vector2((vp.x - reward_toggle_button.size.x) / 2.0, 12.0)
-
-# 战斗日志：默认隐藏，可点击展开/收起。
-func _build_log_toggle() -> void:
-	log_panel.visible = false
-	log_btn = Button.new()
-	log_btn.text = "展开日志"
-	log_btn.custom_minimum_size = Vector2(110, 30)
-	log_btn.position = Vector2(20, 200)
-	log_btn.pressed.connect(_on_log_toggled)
-	add_child(log_btn)
-
-func _on_log_toggled() -> void:
-	var should_show := not log_panel.visible
-	if should_show:
-		_render_log_buffer()
-	else:
-		_clear_log_nodes()
-	log_panel.visible = should_show
-	if log_btn != null:
-		log_btn.text = "收起日志" if should_show else "展开日志"
 
 func _build_battle_roster() -> void:
 	# 战斗中保留底部单位栏作为阵容确认区，但卡片只读、不可拖动。
@@ -320,36 +280,6 @@ func _process(delta: float) -> void:
 func get_database() -> Node:
 	return GameDatabase
 
-# --- 提供给战斗系统回调的接口 ---
-func add_log(text: String) -> void:
-	log_buffer.append(text)
-	while log_buffer.size() > MAX_LOG_ENTRIES:
-		log_buffer.pop_front()
-	if not log_panel.visible:
-		return
-	_append_log_label(text)
-	while log_list.get_child_count() > MAX_LOG_ENTRIES:
-		var oldest: Node = log_list.get_child(0)
-		log_list.remove_child(oldest)
-		oldest.queue_free()
-
-func _append_log_label(text: String) -> void:
-	var label := Label.new()
-	label.text = text
-	label.modulate = Color(0.92, 0.92, 0.92)
-	log_list.add_child(label)
-
-func _clear_log_nodes() -> void:
-	for child in log_list.get_children():
-		var node: Node = child
-		log_list.remove_child(node)
-		node.queue_free()
-
-func _render_log_buffer() -> void:
-	_clear_log_nodes()
-	for text in log_buffer:
-		_append_log_label(text)
-
 # --- 界面搭建 ---
 func _position_battle_view() -> void:
 	var view: Node2D = $BattleView
@@ -435,7 +365,6 @@ func _handle_event(ev: Dictionary) -> void:
 			var target: Unit = ev.get("target")
 			if target != null and unit_view != null:
 				_play_attack_animation(unit_view, target)
-				add_log("%s 攻击 %s" % [unit.get_display_name(), target.get_display_name()])
 			_show_damage_popup(ev)
 		"move", "move_attack":
 			var to: Vector2i = ev.get("to")
@@ -447,9 +376,7 @@ func _handle_event(ev: Dictionary) -> void:
 						func(): _play_attack_animation(unit_view, t2))
 				else:
 					_animate_unit_move(unit_view, ev.get("from", Vector2i(-1, -1)), to)
-			if action == "move_attack":
-				if t2 != null:
-					add_log("%s 攻击 %s" % [unit.get_display_name(), t2.get_display_name()])
+			if action == "move_attack" and t2 != null:
 				_show_damage_popup(ev)
 		"wait":
 			pass
@@ -613,7 +540,6 @@ func _check_battle_end() -> void:
 	victory_label.visible = true
 	victory_label.text = ("%s 通关！" % GameSession.get_floor_label()) if is_tower_win \
 		else ("胜利！" if manager.winner == TurnManager.PLAYER_CAMP else "失败…")
-	add_log(victory_label.text)
 	await get_tree().create_timer(1.5).timeout
 	if is_tower_win:
 		_show_reward_overlay()

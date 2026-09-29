@@ -24,6 +24,8 @@ var relic_state: Dictionary = {}
 var battle_time: float = 0.0
 # 最近一次非特效命中的上下文（含 hp_lost/damage_kind/damage），供 on_hit/on_taaken_damage 技能读取。
 var active_hit: Dictionary = {}
+var battle_started: bool = false
+var awakened_this_tick: Array = []
 
 func get_battle_time() -> float:
 	return battle_time
@@ -45,6 +47,9 @@ func setup() -> void:
 	turn_manager = TurnManager.new(units)
 	event_system = EventSystem.new(units, game)
 	combat_system = CombatSystem.new(game, event_system, grid, self)
+	for unit in units:
+		if unit is Unit:
+			unit.set_battle(self)
 
 func _load_scenario() -> Dictionary:
 	# 优先使用运行时覆盖的场景（爬塔分层生成），否则读关卡文件
@@ -165,12 +170,15 @@ func move_unit_to(unit: Unit, cell: Vector2i) -> bool:
 
 func get_attack_targets(attacker: Unit) -> Array:
 	var result: Array = []
-	if attacker == null or not attacker.alive or attacker.acted:
+	if attacker == null or not attacker.alive or attacker.acted or attacker.is_dormant():
 		return result
 	for unit in units:
-		if unit is Unit and unit.alive and unit != attacker and unit.camp != attacker.camp:
+		if unit is Unit and can_target_enemy(attacker, unit):
 			if combat_system.is_in_range(attacker, unit):
 				result.append(unit)
+	var taunters: Array = result.filter(func(candidate: Unit) -> bool: return candidate.has_taunt())
+	if not taunters.is_empty():
+		result = taunters
 	var preferred := attacker.get_current_target()
 	if result.has(preferred):
 		result.erase(preferred)
@@ -179,7 +187,28 @@ func get_attack_targets(attacker: Unit) -> Array:
 
 func can_attack(attacker: Unit, defender: Unit) -> bool:
 	return attacker != null and attacker.alive and defender != null and defender.alive and not attacker.acted \
-		and attacker.camp != defender.camp and combat_system.is_in_range(attacker, defender)
+		and not attacker.is_dormant() and can_target_enemy(attacker, defender) \
+		and combat_system.is_in_range(attacker, defender) \
+		and (not _has_attackable_taunter(attacker) or defender.has_taunt())
+
+# 潜行仅在同阵营还有未潜行的存活单位时阻止敌方单目标选择。
+func can_target_enemy(attacker: Unit, target: Unit) -> bool:
+	if attacker == null or target == null or not target.alive or attacker.camp == target.camp:
+		return false
+	if not target.is_stealthed():
+		return true
+	for other in units:
+		if other is Unit and other.alive and other.camp == target.camp and not other.is_stealthed():
+			return false
+	return true
+
+# 嘲讽仅限制普攻的可攻击目标，不改变技能的指定目标。
+func _has_attackable_taunter(attacker: Unit) -> bool:
+	for other in units:
+		if other is Unit and other.has_taunt() and can_target_enemy(attacker, other) \
+				and combat_system.is_in_range(attacker, other):
+			return true
+	return false
 
 # 执行一次攻击，返回 { "damage": int, "crit": bool }（供 UI 飙字等使用）。
 func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
@@ -271,6 +300,9 @@ func on_damage_resolved(source: Unit, target: Unit, report: Dictionary) -> void:
 		if ally is Unit and ally.alive and ally.camp == target.camp and ally != target:
 			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ALLY_DEATH,
 				{"actor": ally, "user": ally, "target": target})
+			if not target.is_summoned:
+				SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_AVENGE,
+					{"actor": ally, "user": ally, "target": target})
 	# 锁定目标死亡时通知追击者；即使击杀来自其他单位也能重选目标。
 	for pursuer in units:
 		if pursuer is Unit and pursuer.alive and pursuer.get_current_target() == target:
@@ -296,7 +328,8 @@ func get_skill_targets(user: Unit, skill: Skill) -> Array:
 	else:
 		target_camp = user.camp
 	for unit in units:
-		if unit is Unit and unit.alive and unit != user and unit.camp == target_camp:
+		if unit is Unit and unit.alive and unit != user and unit.camp == target_camp \
+				and (unit.camp == user.camp or can_target_enemy(user, unit)):
 			var distance := _get_combat_distance(user, unit.pos)
 			if distance >= skill.min_range and distance <= skill.max_range:
 				result.append(unit)
@@ -319,7 +352,7 @@ func get_nearest_target(unit: Unit) -> Unit:
 	var nearest: Unit = null
 	var best := 999999
 	for other in units:
-		if other is Unit and other.alive and other.camp != unit.camp:
+		if other is Unit and can_target_enemy(unit, other):
 			var d := _get_combat_distance(unit, other.pos)
 			if d < best:
 				best = d
@@ -343,8 +376,15 @@ func spawn_unit(unit_type: String, camp: String, near_pos: Vector2i, summoner: U
 		return null
 	var roster_data := {"stat_multiplier": summoner.stat_multiplier} if summoner != null else {}
 	var unit := Unit.create_from_config(unit_type, camp, spawn_pos, config, roster_data)
+	unit.is_summoned = true
+	unit.set_battle(self)
 	units.append(unit)
 	unit.turn_timer = 0.0
+	if battle_started:
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ENTER_BATTLE,
+			{"actor": unit, "user": unit})
+		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.PASSIVE,
+			{"actor": unit, "user": unit})
 	return unit
 
 # 找 near_pos 附近最近的空格。
@@ -371,13 +411,18 @@ func setup_battle() -> void:
 	RelicSystem.begin_battle(self)
 	if turn_manager != null:
 		turn_manager.setup()
+	battle_started = true
 	for unit in units:
 		if unit is Unit:
 			for skill in unit.skills:
 				if skill is Skill and skill.trigger == SkillTriggerSystem.ON_TIMER:
 					skill.interval_remaining = skill.interval_seconds
-	# on_battle_start：所有单位各触发一次
-	for unit in units:
+	# 战吼与战斗开始技能分别分发；召唤入场只触发战吼。
+	var initial_units := units.duplicate()
+	for unit in initial_units:
+		if unit is Unit and unit.alive:
+			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ENTER_BATTLE, {"actor": unit, "user": unit})
+	for unit in initial_units:
 		if unit is Unit and unit.alive:
 			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_BATTLE_START, {"actor": unit, "user": unit})
 	# passive：常驻被动技能在战斗开始即生效
@@ -395,14 +440,19 @@ func tick(delta: float) -> Array:
 	if turn_manager == null or winner != "":
 		return []
 	battle_time += maxf(delta, 0.0)
+	awakened_this_tick.clear()
 	var due_units: Array = turn_manager.tick(delta)
 	var events: Array = []
+	_tick_statuses(delta)
 	_tick_timed_skills(delta)
 	RelicSystem.tick_battle(self, delta)
 	for unit in due_units:
 		if winner != "":
 			break
-		if not unit.alive:
+		if not unit.alive or unit.is_dormant() or awakened_this_tick.has(unit):
+			continue
+		if unit.has_status("frozen"):
+			unit.remove_status("frozen")
 			continue
 		# 行动开始 tick
 		unit.tick_turn_start(game, self)
@@ -440,7 +490,7 @@ func _tick_timed_skills(delta: float) -> void:
 	for unit in units:
 		if winner != "":
 			return
-		if not (unit is Unit) or not unit.alive:
+		if not (unit is Unit) or not unit.alive or unit.is_dormant() or unit.is_silenced():
 			continue
 		for skill in unit.skills:
 			if not (skill is Skill) or skill.trigger != SkillTriggerSystem.ON_TIMER:
@@ -510,9 +560,49 @@ func get_final_damage_multiplier() -> float:
 # 单位级伤害倍率：委托遗物系统按来源/目标/伤害种类汇总（处决/先手/背水/层积风暴等）。
 func get_damage_bonus_percent(source: Unit, target: Unit, kind: String) -> float:
 	var bonus := RelicSystem.get_damage_bonus_percent(source, target, kind, relic_state) \
-		+ SkillKit.passive_damage_bonus(source, target)
-	if source != null:
+		+ (0.0 if source != null and source.is_silenced() else SkillKit.passive_damage_bonus(source, target))
+	if source != null and not source.is_silenced():
 		for skill in source.skills:
 			if skill is Skill:
 				bonus += (skill as Skill).get_damage_bonus_percent(source, target, kind)
+	return bonus
+
+# 按秒推进状态；持续伤害与状态到期不依赖单位行动频率。
+func _tick_statuses(delta: float) -> void:
+	for unit in units.duplicate():
+		if not (unit is Unit) or not unit.alive:
+			continue
+		for buff in unit.buffs.duplicate():
+			if not unit.alive:
+				break
+			buff.tick_seconds(unit, delta, game, self)
+			if buff.status == "dormant" and buff.seconds_left <= 0.0:
+				awaken_unit(unit)
+		unit.remove_expired_buffs()
+	_check_winner()
+
+# 苏醒只执行一次；保持生命比例，并从苏醒时重新开始行动计时。
+func awaken_unit(unit: Unit) -> void:
+	if unit == null or not unit.alive:
+		return
+	for buff in unit.buffs.duplicate():
+		if buff.status != "dormant":
+			continue
+		var awaken_effects: Array = buff.raw_data.get("awaken_effects", [])
+		unit.buffs.erase(buff)
+		unit.turn_timer = 0.0
+		awakened_this_tick.append(unit)
+		EffectSystem.apply_effects(unit, unit, awaken_effects, game, self)
+		return
+
+# 实时计算同阵营光环；施放者休眠、沉默或死亡时立刻失效。
+func get_aura_stat_bonus(target: Unit, stat: String) -> float:
+	var bonus := 0.0
+	for source in units:
+		if not (source is Unit) or not source.alive or source.camp != target.camp \
+				or source.is_silenced() or source.is_dormant():
+			continue
+		for buff in source.buffs:
+			if buff.aura_range > 0 and Grid.manhattan_distance(source.pos, target.pos) <= buff.aura_range:
+				bonus += float(buff.modifiers.get(stat, 0.0))
 	return bonus

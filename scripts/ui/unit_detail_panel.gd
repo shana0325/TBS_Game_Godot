@@ -330,8 +330,7 @@ func _stat_rows() -> Array:
 		["移动", "%d 格" % unit.get_move_points()],
 		["行动间隔", "%.1f 秒" % unit.turn_interval],
 		["暴击", "%.2f%% / %.2f%%" % [unit.get_crit_rate(), unit.get_crit_damage()]],
-		["通用技能槽", "%d / %d" % [unit.equipped_skill_names.size(), Unit.get_skill_slot_limit(unit.star)]],
-		["当前状态", "存活" if unit.alive else "已阵亡"]
+		["通用技能槽", "%d / %d" % [unit.equipped_skill_names.size(), Unit.get_skill_slot_limit(unit.star)]]
 	]
 
 # 更新已存在的数值标签，不触碰滚动容器中的节点结构。
@@ -350,22 +349,13 @@ func _render_skills() -> void:
 		var row := Button.new()
 		row.add_theme_stylebox_override("normal", MenuStyle.section_panel_style())
 		row.add_theme_stylebox_override("hover", MenuStyle.header_style())
-		row.custom_minimum_size = Vector2(0, 82)
+		row.custom_minimum_size = Vector2(0, 76)
 		row.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		row.pressed.connect(_show_skill_details.bind(skill_id))
 		var row_box := HBoxContainer.new()
 		row_box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		row_box.add_theme_constant_override("separation", 12)
 		row_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(row_box)
-		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(58, 58)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.texture = ArtManager.get_skill_icon(skill_id, str(skill.name))
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row_box.add_child(icon)
 		var text_box := VBoxContainer.new()
 		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -459,24 +449,16 @@ func _show_skill_manage(mode: String) -> void:
 	skill_manage_overlay.visible = true
 	skill_manage_overlay.move_to_front()
 
-# 添加技能选择行，统一显示图标、名称和简介。
+# 添加技能选择行，以名称和简介占满整行。
 func _add_skill_manage_row(skill_id: String, mode: String) -> void:
 	var data: Dictionary = GameDatabase.get_skill(skill_id)
 	var row := Button.new()
-	row.custom_minimum_size = Vector2(0, 86)
+	row.custom_minimum_size = Vector2(0, 76)
 	row.pressed.connect(_apply_skill_manage.bind(skill_id, mode))
 	var line := HBoxContainer.new()
 	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.add_theme_constant_override("separation", 12)
 	row.add_child(line)
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(64, 64)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture = ArtManager.get_skill_icon(skill_id, str(data.get("name", skill_id)))
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.add_child(icon)
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE

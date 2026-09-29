@@ -1,9 +1,10 @@
-# 图鉴页面：按分类列出数据库中的全部技能与遗物，并复用已有详情弹窗。
+# 图鉴页面：统一展示技能、遗物和战斗机制的可滚动说明。
 extends Control
 
 const CATEGORIES := [
 	{"id": "skills", "label": "技能图鉴"},
 	{"id": "relics", "label": "遗物图鉴"},
+	{"id": "mechanics", "label": "机制图鉴"},
 ]
 
 var category_buttons: Dictionary = {}
@@ -102,7 +103,7 @@ func _build_layout() -> void:
 	content_title.add_theme_color_override("font_color", Color("#f3d79f"))
 	content_box.add_child(content_title)
 	content_hint = Label.new()
-	content_hint.text = "从左侧选择技能图鉴或遗物图鉴。"
+	content_hint.text = "从左侧选择技能、遗物或机制图鉴。"
 	content_hint.add_theme_color_override("font_color", Color("#b6bdc9"))
 	content_box.add_child(content_hint)
 	var scroll := ScrollContainer.new()
@@ -122,31 +123,66 @@ func _select_category(category_id: String) -> void:
 		entry_list.remove_child(child)
 		child.queue_free()
 	var source: Dictionary = GameDatabase.skills if category_id == "skills" else GameDatabase.relics
+	if category_id == "mechanics":
+		source = _load_mechanics()
 	var ids := source.keys()
-	ids.sort_custom(func(a: Variant, b: Variant) -> bool:
-		return str(source[a].get("name", a)) < str(source[b].get("name", b)))
-	content_title.text = "技能图鉴" if category_id == "skills" else "遗物图鉴"
-	content_hint.text = "共 %d 项 · 点击条目查看详情" % ids.size()
+	if category_id != "mechanics":
+		ids.sort_custom(func(a: Variant, b: Variant) -> bool:
+			return str(source[a].get("name", a)) < str(source[b].get("name", b)))
+	content_title.text = "机制图鉴" if category_id == "mechanics" else ("技能图鉴" if category_id == "skills" else "遗物图鉴")
+	content_hint.text = "共 %d 项 · 下方可滚动查看规则" % ids.size() if category_id == "mechanics" \
+		else "共 %d 项 · 点击条目查看详情" % ids.size()
 	for entry_id in ids:
 		_add_entry(category_id, str(entry_id), source[entry_id])
 
-# 为一项技能或遗物创建可点击的图标、名称和效果摘要。
+# 为技能创建纯文字条目；遗物仍显示自身图标。
 func _add_entry(category_id: String, entry_id: String, data: Dictionary) -> void:
+	if category_id == "mechanics":
+		_add_mechanic_entry(data)
+		return
 	var entry := Button.new()
 	var entry_name := str(data.get("name", entry_id))
 	var description := str(data.get("desc", "暂无说明")).replace("\n", " ")
 	if description.length() > 110:
 		description = description.substr(0, 110) + "…"
 	entry.text = "%s\n%s" % [entry_name, description]
-	entry.icon = ArtManager.get_skill_icon(entry_id, entry_name) if category_id == "skills" else ArtManager.get_relic_icon(entry_id)
-	entry.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if category_id == "relics":
+		entry.icon = ArtManager.get_relic_icon(entry_id)
+		entry.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		entry.add_theme_constant_override("icon_max_width", 64)
 	entry.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	entry.custom_minimum_size.y = 90
-	entry.add_theme_constant_override("icon_max_width", 64)
+	entry.custom_minimum_size.y = 78 if category_id == "skills" else 90
 	MenuStyle.apply_primary(entry)
 	entry.pressed.connect(_open_entry.bind(category_id, entry_id))
 	entry_list.add_child(entry)
+
+# 从独立规则数据读取机制说明，避免图鉴文本与规则讨论混在技能脚本中。
+func _load_mechanics() -> Dictionary:
+	var file := FileAccess.open("res://data/mechanics.json", FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	return parsed if parsed is Dictionary else {}
+
+# 机制图鉴直接展开完整规则，便于连续阅读并在右侧滚动。
+func _add_mechanic_entry(data: Dictionary) -> void:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
+	entry_list.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 5)
+	panel.add_child(box)
+	var title := Label.new()
+	title.text = str(data.get("name", "机制"))
+	title.add_theme_color_override("font_color", Color("#f3d79f"))
+	title.add_theme_font_size_override("font_size", 20)
+	box.add_child(title)
+	var description := Label.new()
+	description.text = str(data.get("desc", ""))
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	description.add_theme_color_override("font_color", Color("#b6bdc9"))
+	box.add_child(description)
 
 # 打开与角色资料页一致的技能或遗物详情。
 func _open_entry(category_id: String, entry_id: String) -> void:

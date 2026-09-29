@@ -7,6 +7,7 @@ extends RefCounted
 
 # 触发时机常量（与 EventTypes 语义对应，但自走棋独立定义）
 const ON_BATTLE_START := "on_battle_start"
+const ON_ENTER_BATTLE := "on_enter_battle"
 const ON_TURN_START := "on_turn_start"
 const ON_ATTACK_START := "on_attack_start"
 const ON_ATTACK_HIT_BEFORE := "on_attack_hit_before"
@@ -18,6 +19,7 @@ const ON_TAKEN_DAMAGE := "on_taken_damage"
 const ON_KILL := "on_kill"
 const ON_DEATH := "on_death"
 const ON_ALLY_DEATH := "on_ally_death"
+const ON_AVENGE := "on_avenge"
 const ON_TARGET_DEATH := "on_target_death"
 const ON_TURN_END := "on_turn_end"
 const ON_ROUND_START := "on_round_start"
@@ -41,6 +43,16 @@ static func dispatch(battle, trigger: String, context: Dictionary) -> Array:
 			continue
 		if skill.trigger != trigger:
 			continue
+		if actor.is_silenced():
+			continue
+		if actor.is_dormant() and not skill.usable_while_dormant:
+			var defensive_event := trigger in [ON_BE_ATTACKED, ON_TAKEN_DAMAGE, ON_ALLY_DEATH]
+			if not defensive_event or not (skill.tags.has("防御") or skill.tags.has("护盾") or skill.tags.has("回复")):
+				continue
+		if trigger == ON_AVENGE:
+			skill.avenge_progress += 1
+			if skill.avenge_progress < maxi(1, skill.avenge_count):
+				continue
 		if trigger == ON_HIT and context.has("proc_chain"):
 			var used: Array = context["proc_chain"].get("used", [])
 			if used.has(skill):
@@ -55,6 +67,8 @@ static func dispatch(battle, trigger: String, context: Dictionary) -> Array:
 		if trigger == ON_HIT and context.has("proc_chain"):
 			context["proc_chain"]["used"].append(skill)
 		var reports: Array = skill.execute(actor, targets, battle.game, battle)
+		if trigger == ON_AVENGE:
+			skill.avenge_progress = 0
 		skill.start_cooldown()
 		casted.append(skill)
 		var skill_damage := 0

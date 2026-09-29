@@ -24,6 +24,11 @@ var is_mark: bool = false
 var permanent: bool = false
 var conditional_hp_percent: Dictionary = {}
 var raw_data: Dictionary = {}
+var status: String = ""
+var seconds_left: float = -1.0
+var tick_elapsed: float = 0.0
+var stacks: Array = []
+var source_ref: WeakRef = null
 
 static func from_data(data: Dictionary) -> Buff:
 	var buff := Buff.new()
@@ -47,7 +52,14 @@ static func from_data(data: Dictionary) -> Buff:
 	buff.is_mark = bool(data.get("is_mark", false))
 	buff.permanent = bool(data.get("permanent", false))
 	buff.conditional_hp_percent = data.get("conditional_hp_percent", {})
-	buff.raw_data = data
+	buff.raw_data = data.duplicate(true)
+	buff.raw_data.erase("source")
+	buff.status = str(data.get("status", ""))
+	buff.seconds_left = float(data.get("duration_seconds", -1.0))
+	buff.stacks = (data.get("stacks", []) as Array).duplicate(true) if data.get("stacks", []) is Array else []
+	var source: Variant = data.get("source")
+	if source is Unit:
+		buff.source_ref = weakref(source)
 	return buff
 
 func get_stat_modifier(stat: String) -> int:
@@ -91,9 +103,42 @@ func on_trigger(unit, event, game) -> void:
 				game.add_log("%s 通过 %s 恢复 %d 点生命" % [unit.get_display_name(), name, heal])
 
 func is_expired() -> bool:
+	if status == "poison":
+		return stacks.is_empty()
+	if raw_data.has("duration_seconds") and float(raw_data.get("duration_seconds", -1.0)) >= 0.0:
+		return seconds_left <= 0.0
 	if permanent:
 		return false
 	return duration <= 0
+
+# 按真实秒数推进状态；中毒各层独立到期，按来源合并同一帧伤害。
+func tick_seconds(unit: Unit, delta: float, game = null, battle = null) -> void:
+	if status == "poison":
+		var damage_by_source: Dictionary = {}
+		for layer in stacks.duplicate():
+			var active_delta := minf(delta, maxf(0.0, float(layer.get("remaining", 0.0))))
+			layer["remaining"] = float(layer.get("remaining", 0.0)) - delta
+			layer["until_tick"] = float(layer.get("until_tick", 2.0)) - active_delta
+			while float(layer["until_tick"]) <= 0.0:
+				var source = layer.get("source_ref").get_ref() if layer.get("source_ref") is WeakRef else null
+				damage_by_source[source] = int(damage_by_source.get(source, 0)) + int(layer.get("damage", 0))
+				layer["until_tick"] = float(layer["until_tick"]) + float(layer.get("interval", 2.0))
+			if float(layer["remaining"]) <= 0.0:
+				stacks.erase(layer)
+		for source in damage_by_source:
+			DamageSystem.apply(source, unit, {"damage_kind": DamageSystem.EFFECT,
+				"raw_damage": damage_by_source[source], "true_damage": true}, battle, game)
+		return
+	if status == "burn" and seconds_left > 0.0:
+		tick_elapsed += minf(delta, seconds_left)
+		var interval := maxf(0.1, float(raw_data.get("tick_interval_seconds", 2.0)))
+		while tick_elapsed >= interval and unit.alive:
+			tick_elapsed -= interval
+			var source = source_ref.get_ref() if source_ref != null else null
+			DamageSystem.apply(source, unit, {"damage_kind": DamageSystem.EFFECT,
+				"raw_damage": tick_damage, "true_damage": true}, battle, game)
+	if raw_data.has("duration_seconds") and float(raw_data.get("duration_seconds", -1.0)) >= 0.0:
+		seconds_left -= delta
 
 func _apply_tick(unit, game, battle = null) -> void:
 	if tick_damage > 0:

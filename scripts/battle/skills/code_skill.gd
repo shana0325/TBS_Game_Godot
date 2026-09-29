@@ -26,6 +26,8 @@ func export_meta() -> Dictionary:
 		"tags": tags,
 		"searchable": searchable,
 		"once": once,
+		"avenge_count": avenge_count,
+		"usable_while_dormant": usable_while_dormant,
 	}
 
 # from_data 构造后回调：代码技能可在这里做初始化（读取数据中的附加字段）。

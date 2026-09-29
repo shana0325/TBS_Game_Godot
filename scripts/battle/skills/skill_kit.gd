@@ -48,6 +48,34 @@ static func max_hp_enemy(battle, user: Unit) -> Unit:
 				best = unit
 	return best
 
+# 判断单位是否仍能获得护盾，供各种友军选目标规则共用。
+static func can_receive_shield(unit: Unit) -> bool:
+	if unit == null or not unit.alive:
+		return false
+	var shield_cap: int = unit.get_shield_cap()
+	return shield_cap < 0 or unit.get_total_shield() < shield_cap
+
+# 为可选择友军的护盾效果选目标：跳过满盾单位，可按当前生命值或生命比例排序。
+# 明确指定自身的护盾效果应直接调用 gain_shield，不使用此选择函数。
+static func lowest_hp_shield_ally(battle, user: Unit, exclude_self: bool = false, by_hp_ratio: bool = false) -> Unit:
+	if battle == null or user == null:
+		return null
+	var best: Unit = null
+	var best_hp := INF
+	for candidate in battle.units:
+		if not (candidate is Unit):
+			continue
+		var ally: Unit = candidate
+		if ally.camp != user.camp or (exclude_self and ally == user):
+			continue
+		if not can_receive_shield(ally):
+			continue
+		var current_hp := float(ally.hp) / maxf(ally.max_hp, 1.0) if by_hp_ratio else float(ally.hp)
+		if best == null or current_hp < best_hp:
+			best = ally
+			best_hp = current_hp
+	return best
+
 # 缩短 unit 名下所有正在等待的 on_timer 技能中剩余时间最长者的剩余时间（至少为 0）。
 # 可选排除某技能（如回响节点缩短"其他"时排除自身）。
 static func shorten_timed(unit: Unit, seconds: float, exclude: Skill = null) -> int:

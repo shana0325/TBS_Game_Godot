@@ -2,7 +2,8 @@
 class_name BuffEffect
 extends RefCounted
 
-static func apply(target: Unit, buff_id: String, game = null) -> Buff:
+# 数据库中的持续伤害统一走按秒状态结算，保留旧技能的 buff 引用方式。
+static func apply(target: Unit, buff_id: String, game = null, source: Unit = null, battle = null) -> Buff:
 	if target == null:
 		return null
 	var db = GameDatabase
@@ -10,6 +11,16 @@ static func apply(target: Unit, buff_id: String, game = null) -> Buff:
 		db = game.get_database()
 	var data: Dictionary = db.get_buff(buff_id)
 	if data.is_empty():
+		return null
+	if buff_id in ["poison", "burn"]:
+		EffectSystem.apply_effects(source, target, [{"type": buff_id,
+			"duration_seconds": data.get("duration_seconds", 6.0),
+			"tick_interval_seconds": data.get("tick_interval_seconds", 2.0),
+			"damage": data.get("tick_damage", 5),
+			"max_stacks": data.get("max_stacks", 5)}], game, battle)
+		for active in target.buffs:
+			if active.status == buff_id:
+				return active
 		return null
 	var buff := Buff.from_data(data)
 	target.add_buff(buff)

@@ -55,6 +55,9 @@ static func apply(source: Unit, target: Unit, config: Dictionary, battle = null,
 			damage = maxi(1, roundi(float(damage) * (1.0 + unit_bonus)))
 	var reduction := clampf(target.get_reduce_percent(), 0.0, 1.0)
 	damage = maxi(0, roundi(float(damage) * (1.0 - reduction)))
+	# 圣盾抵消下一次正伤害；持续伤害也统一经过此入口并消耗圣盾。
+	if damage > 0 and target.consume_divine_shield():
+		return report
 	var result := target.take_damage(damage, game)
 	var actual := ceili(float(result.get("hp_lost", 0.0))) + int(result.get("shield_absorbed", 0))
 	if source != null:
@@ -63,6 +66,10 @@ static func apply(source: Unit, target: Unit, config: Dictionary, battle = null,
 	report["actual_damage"] = actual
 	report["crit"] = crit
 	report["result"] = result
+	if battle != null and target.alive and target.is_dormant() \
+			and float(result.get("hp_lost", 0.0)) > 0.0 \
+			and target.hp / maxf(target.max_hp, 1.0) < 0.3:
+		battle.awaken_unit(target)
 	if battle != null and actual > 0 and not bool(config.get("defer_reactions", false)):
 		battle.on_damage_resolved(source, target, report)
 	return report

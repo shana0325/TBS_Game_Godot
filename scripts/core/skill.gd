@@ -26,6 +26,9 @@ var searchable: bool = true
 var code_script: GDScript = null
 var once: bool = false
 var triggered: bool = false
+var avenge_count: int = 0
+var avenge_progress: int = 0
+var usable_while_dormant: bool = false
 # 护盾上限规则：1.0 表示最大生命 100%；负数或 unlimited_shield 表示无上限。
 var shield_cap_percent: float = 1.0
 var unlimited_shield: bool = false
@@ -66,6 +69,8 @@ static func from_data(data: Dictionary) -> Skill:
 	skill.tags = _string_array(data.get("tags", []))
 	skill.searchable = bool(data.get("searchable", true))
 	skill.once = bool(data.get("once", false))
+	skill.avenge_count = int(data.get("avenge_count", 0))
+	skill.usable_while_dormant = bool(data.get("usable_while_dormant", false))
 	skill.shield_cap_percent = float(data.get("shield_cap_percent", 1.0))
 	skill.unlimited_shield = bool(data.get("unlimited_shield", false))
 	if skill is CodeSkill:
@@ -147,7 +152,8 @@ func resolve_targets(battle, user: Unit, context: Dictionary) -> Array:
 			targets.append(user)
 		"target":
 			var t = context.get("target")
-			if t != null and (t is Unit) and (t as Unit).alive:
+			if t != null and (t is Unit) and (t as Unit).alive \
+					and (t.camp == user.camp or battle.can_target_enemy(user, t)):
 				targets.append(t)
 		"enemy":
 			targets = units_in_range(battle, user, "enemy", min_range, max_range)
@@ -159,7 +165,8 @@ func resolve_targets(battle, user: Unit, context: Dictionary) -> Array:
 			targets = all_units(battle, user, "ally")
 		_:
 			var t2 = context.get("target")
-			if t2 != null and (t2 is Unit) and (t2 as Unit).alive:
+			if t2 != null and (t2 is Unit) and (t2 as Unit).alive \
+					and (t2.camp == user.camp or battle.can_target_enemy(user, t2)):
 				targets.append(t2)
 	return targets
 
@@ -215,6 +222,8 @@ static func units_in_range(battle, user: Unit, camp: String, min_r: int, max_r: 
 		var is_enemy: bool = unit.camp != user.camp
 		var match: bool = (camp == "enemy" and is_enemy) or (camp == "ally" and not is_enemy)
 		if not match:
+			continue
+		if is_enemy and not battle.can_target_enemy(user, unit):
 			continue
 		var d := Grid.manhattan_distance(user.pos, unit.pos)
 		if d >= min_r and d <= max_r:

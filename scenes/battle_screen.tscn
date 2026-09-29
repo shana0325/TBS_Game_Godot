@@ -132,23 +132,3 @@ script = ExtResource("2_grid")
 
 [node name="UnitsLayer" type="Node2D" parent="BattleView"]
 y_sort_enabled = true
-
-[node name="LogPanel" type="PanelContainer" parent="."]
-layout_mode = 1
-anchors_preset = 0
-anchor_top = 0.0
-anchor_bottom = 0.0
-offset_left = 20.0
-offset_top = 460.0
-offset_right = 380.0
-offset_bottom = 700.0
-grow_vertical = 0
-mouse_filter = 2
-
-[node name="Scroll" type="ScrollContainer" parent="LogPanel"]
-layout_mode = 2
-horizontal_scroll_mode = 0
-
-[node name="LogList" type="VBoxContainer" parent="LogPanel/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3

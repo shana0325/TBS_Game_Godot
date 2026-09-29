@@ -7,14 +7,19 @@ static func get_decision(manager: BattleManager, unit: Unit) -> Dictionary:
 	if manager == null or unit == null:
 		return {"action": "wait"}
 	var targets := manager.get_attack_targets(unit)
-	if targets.size() > 0:
+	var taunter := _find_taunter(manager, unit)
+	if targets.size() > 0 and (taunter == null or targets.has(taunter)):
 		return {"action": "attack", "target": targets[0]}
 	var nearest := _get_move_target(manager, unit)
 	if nearest == null:
+		if not targets.is_empty():
+			return {"action": "attack", "target": targets[0]}
 		return {"action": "wait"}
 	unit.set_current_target(nearest)
 	var move_tiles := manager.get_move_tiles(unit)
 	if move_tiles.is_empty():
+		if not targets.is_empty():
+			return {"action": "attack", "target": targets[0]}
 		return {"action": "wait"}
 	# 以目标为源做障碍感知的 Dijkstra，取真实路径距离最近的可走格；
 	# 绕路第一步虽然曼哈顿距离变远，但真实路径距离是递减的，单位会主动绕行。
@@ -35,6 +40,8 @@ static func get_decision(manager: BattleManager, unit: Unit) -> Dictionary:
 				best = cell
 				break
 	if best == unit.pos:
+		if not targets.is_empty():
+			return {"action": "attack", "target": targets[0]}
 		return {"action": "wait"}
 	return {"action": "move", "to": best}
 
@@ -74,17 +81,22 @@ static func _get_move_target(manager: BattleManager, unit: Unit) -> Unit:
 	if taunt != null:
 		return taunt
 	var current := unit.get_current_target()
-	if current != null and current.alive and current.camp != unit.camp:
+	if current != null and manager.can_target_enemy(unit, current):
 		return current
 	return manager.get_nearest_target(unit)
 
 # 查找嘲讽该单位的敌方单位（向 manager 查询可攻击的挑衅者）。
 static func _find_taunter(manager: BattleManager, unit: Unit) -> Unit:
+	var nearest: Unit = null
+	var best_distance := 999999
 	for other in manager.units:
-		if other is Unit and other.alive and other.camp != unit.camp:
+		if other is Unit and manager.can_target_enemy(unit, other):
 			if _unit_has_taunt(other):
-				return other
-	return null
+				var distance := Grid.manhattan_distance(unit.pos, other.pos)
+				if distance < best_distance:
+					best_distance = distance
+					nearest = other
+	return nearest
 
 static func _unit_has_taunt(u: Unit) -> bool:
 	for buff in u.buffs:

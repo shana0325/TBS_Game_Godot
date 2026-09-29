@@ -5,8 +5,8 @@ extends Node
 func _ready() -> void:
 	GameSession.run_relics = []
 	GameSession.run_relic_stacks = {}
-	var passed := _test_warrior() and _test_tank() and _test_archer() and _test_assassin() \
-		and _test_scaled_summon()
+	var passed := _test_warrior() and _test_tank() and _test_shield_targeting() \
+		and _test_archer() and _test_assassin() and _test_scaled_summon()
 	print("基础角色固有技能：", "通过" if passed else "失败")
 	get_tree().quit(0 if passed else 1)
 
@@ -35,7 +35,7 @@ func _test_warrior() -> bool:
 		push_error("战士固有技能未正确结算：生命=%s，附加伤害=%s" % [warrior.hp, extra])
 	return ok
 
-# 坦克被普攻后为最低当前生命友军生成自身最大生命 5% 的护盾。
+# 坦克被普攻后优先保护最低当前生命友军；其护盾已满时转给仍有容量的队友。
 func _test_tank() -> bool:
 	var battle := _battle(["Tank", "Archer"], [{"type": "Warrior", "pos": [2, 1]}])
 	var tank: Unit = battle.units[0]
@@ -45,8 +45,54 @@ func _test_tank() -> bool:
 	battle.perform_attack(attacker, tank)
 	var expected := roundi(tank.max_hp * 0.05)
 	var ok := ally.get_total_shield() == expected
+	var full_battle := _battle(["Tank", "Archer"], [{"type": "Warrior", "pos": [2, 1]}])
+	var second_tank: Unit = full_battle.units[0]
+	var full_ally: Unit = full_battle.units[1]
+	var second_attacker: Unit = full_battle.units[2]
+	full_ally.hp = 300.0
+	full_ally.gain_shield(full_ally.get_shield_cap(), "预填护盾")
+	full_battle.perform_attack(second_attacker, second_tank)
+	ok = ok and full_ally.get_total_shield() == full_ally.get_shield_cap() \
+		and second_tank.get_total_shield() == roundi(second_tank.max_hp * 0.05)
 	if not ok:
 		push_error("坦克固有技能护盾不符：实际=%d，预期=%d" % [ally.get_total_shield(), expected])
+	return ok
+
+# 共用选盾规则：满盾友军被跳过；指定自身加盾仍固定给自身。
+func _test_shield_targeting() -> bool:
+	var battle := _battle(["Tank", "Archer", "Warrior"], [{"type": "Warrior", "pos": [8, 8]}])
+	var tank: Unit = battle.units[0]
+	var full_ally: Unit = battle.units[1]
+	var available_ally: Unit = battle.units[2]
+	full_ally.hp = 100.0
+	available_ally.hp = 200.0
+	tank.hp = tank.max_hp * 0.8
+	full_ally.gain_shield(full_ally.get_shield_cap(), "预填护盾")
+	var selected := SkillKit.lowest_hp_shield_ally(battle, tank, true)
+	var ratio_selected := SkillKit.lowest_hp_shield_ally(battle, tank, false, true)
+	var ward: CodeSkill = load("res://mods/tower_bosses/code_skills/iron_ward.gd").new()
+	ward.execute(tank, [], null, battle)
+	var expected := roundi(tank.max_hp * 0.08)
+	var ok := selected == available_ally and ratio_selected == available_ally \
+		and tank.get_total_shield() == expected and available_ally.get_total_shield() == expected \
+		and full_ally.get_total_shield() == full_ally.get_shield_cap()
+	# 自身护盾已满时，固定给自身的那一份不会转给其他队友。
+	tank.gain_shield(tank.get_shield_cap(), "预填自身护盾")
+	var before_other := available_ally.get_total_shield()
+	ward.execute(tank, [], null, battle)
+	ok = ok and tank.get_total_shield() == tank.get_shield_cap() \
+		and available_ally.get_total_shield() == before_other + expected
+	var relic_battle := _battle(["Tank", "Archer"], [{"type": "Warrior", "pos": [8, 8]}])
+	var relic_tank: Unit = relic_battle.units[0]
+	var relic_full_ally: Unit = relic_battle.units[1]
+	var enemy: Unit = relic_battle.units[2]
+	relic_full_ally.hp = relic_full_ally.max_hp * 0.1
+	relic_full_ally.gain_shield(relic_full_ally.get_shield_cap(), "预填护盾")
+	RelicSystem._apply_airy_guardian(relic_battle, relic_tank, enemy, null)
+	ok = ok and relic_tank.get_total_shield() > 0 \
+		and relic_full_ally.get_total_shield() == relic_full_ally.get_shield_cap()
+	if not ok:
+		push_error("共用护盾选目标或固定自身护盾结算异常")
 	return ok
 
 # 射手能在原射程外普攻，且每格距离增加 10% 的普攻伤害。

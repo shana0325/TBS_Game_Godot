@@ -1,4 +1,4 @@
-# 技能详情弹窗：在角色资料页上展示图标、触发信息与完整效果。
+# 技能详情弹窗：在角色资料页上展示触发信息与完整效果。
 class_name SkillDetailPopup
 extends Control
 
@@ -8,8 +8,6 @@ var backdrop: ColorRect
 var dialog: PanelContainer
 var title_label: Label
 var subtitle_label: Label
-var icon_rect: TextureRect
-var icon_name_label: Label
 var metadata_grid: GridContainer
 var description_label: Label
 var condition_label: Label
@@ -76,25 +74,6 @@ func _build_popup() -> void:
 	close_button.pressed.connect(hide)
 	header.add_child(close_button)
 
-	var icon_row := HBoxContainer.new()
-	icon_row.custom_minimum_size.y = 130
-	icon_row.add_theme_constant_override("separation", 18)
-	icon_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	content.add_child(icon_row)
-	var icon_frame := PanelContainer.new()
-	icon_frame.custom_minimum_size = Vector2(124, 124)
-	icon_row.add_child(icon_frame)
-	icon_rect = TextureRect.new()
-	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	icon_frame.add_child(icon_rect)
-	icon_name_label = Label.new()
-	icon_name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	icon_name_label.add_theme_font_size_override("font_size", 22)
-	icon_name_label.add_theme_color_override("font_color", Color("#f3d79f"))
-	icon_row.add_child(icon_name_label)
-
 	var body_panel := PanelContainer.new()
 	body_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body_panel.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
@@ -139,8 +118,6 @@ func show_skill(skill_id: String) -> void:
 	var skill_name := str(data.get("name", skill_id))
 	title_label.text = skill_name
 	subtitle_label.text = "技能详情  ·  %s" % ("通用技能" if bool(data.get("common", false)) else "固有技能")
-	icon_name_label.text = skill_name
-	icon_rect.texture = ArtManager.get_skill_icon(skill_id, skill_name)
 	for child in metadata_grid.get_children():
 		metadata_grid.remove_child(child)
 		child.queue_free()
@@ -206,7 +183,7 @@ func _add_metadata(title: String, value: String) -> void:
 func _layout_popup() -> void:
 	if dialog == null:
 		return
-	var dialog_size := Vector2(minf(760.0, size.x - 48.0), minf(760.0, size.y - 48.0))
+	var dialog_size := Vector2(minf(760.0, size.x - 48.0), minf(640.0, size.y - 48.0))
 	dialog.position = (size - dialog_size) / 2.0
 	dialog.size = dialog_size
 

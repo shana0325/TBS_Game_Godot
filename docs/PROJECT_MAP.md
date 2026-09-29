@@ -38,7 +38,7 @@
 | `scripts/screens/` | 主菜单、图鉴、选关、部署、结算和奖励等界面控制器 | 流程/UI 任务时读取 |
 | `scripts/ui/` | 战场显示、单位视图、信息卡、背包弹窗和可复用 UI 组件 | UI 任务时读取 |
 | `assets/fonts/` | 当前运行时字体 | 字体/UI 任务时读取 |
-| `assets/skills/` | 当前运行时技能图标 | 技能图标或美术任务时读取 |
+| `assets/skills/` | 保留的技能图标素材，当前界面不显示 | 仅技能美术任务时读取 |
 | `assets/relics/` | 当前运行时遗物图标 | 遗物图标或遗物界面任务时读取 |
 | `assets/units/` | 当前运行时单位图片和立绘 | 单位表现任务时读取 |
 | `assets/ui/` | 当前运行时界面背景与装饰图片 | UI 美术任务时读取 |
@@ -59,7 +59,7 @@ project.godot
   └─ autoload: GameDatabase / ModLoader / ArtManager / GameSession
        ├─ data/*.json + SkillCodeRegistry/Mod CodeSkill → GameDatabase → Unit / Skill / Buff
        ├─ scenes/main.tscn → 主菜单 → 选关 → 部署 → 战斗 → 奖励/事件 → 下一层
-       ├─ scenes/encyclopedia.tscn → 技能/遗物图鉴 → 复用详情弹窗
+       ├─ scenes/encyclopedia.tscn → 技能/遗物/机制图鉴 → 复用详情弹窗
        └─ BattleManager → 战斗状态/事件 → battle_screen 与复用 UI 组件
 ```
 
@@ -71,6 +71,7 @@ project.godot
 - `scripts/core/relic_system.gd` 统一向战斗单位和部署预览应用 Run 遗物、叠层与跨战斗成长。
 - `RewardGenerator` 只生成遗物候选；固定技能书与金币由 `GameSession` 逐层防重发放。`TowerEventFactory` 按层产生有序事件队列；同层商店与追加事件依次运行，事件可通过 `apply_to_scenario()` 改写当前层场景。第 10、20、30 层的 Boss 事件从 `mods/tower_bosses/` 读取对应单位，并在原有敌军外追加一名。
 - `Unit.get_shield_cap()` 是护盾上限规则入口，默认最大生命 100%，技能可提高或取消上限。
+- `data/mechanics.json` 提供机制图鉴说明；战斗状态由 `Buff` 按秒推进，效果由 `EffectSystem` 接入，目标和事件规则由 `BattleManager` 与 `SkillTriggerSystem` 执行。
 - `scripts/screens/` 负责页面流程和输入协调，通过 `GameSession`、`BattleManager` 等接口驱动显示。
 - `scripts/ui/` 负责表现和交互组件；部署与战斗共用 `UnitDetailPanel` 查看角色及学习、遗忘技能。`MenuStyle` 与默认主题维护简洁的无边框面板及纯色按钮。
 - `GameDatabase` 先载入内置数据，`ModLoader` 再合并 Mod 的单位、素材引用和 CodeSkill，最后才校验玩家存档；Hero 位于 `mods/hero/`。
@@ -87,7 +88,7 @@ project.godot
 | 修改单位信息卡 | `scripts/ui/unit_detail_panel.gd` | 部署/战斗调用处 |
 | 修改遗物奖励或叠层 | `scripts/core/reward_generator.gd`、`relic_system.gd` | `game_session.gd`、`data/relic/relics.json` |
 | 修改背包弹窗 | `scripts/ui/backpack_panel.gd` | 部署界面调用处、`ProgressManager` 背包接口 |
-| 修改技能图标 | `scripts/core/art_manager.gd` | `assets/skills/`、技能数据 |
+| 调整技能文字展示 | `scripts/ui/unit_detail_panel.gd`、`skill_detail_popup.gd` | `scripts/screens/encyclopedia_screen.gd` |
 | 修改单位图片 | `scripts/core/art_manager.gd` | `assets/units/`、单位数据 |
 | 处理未接入 UI 素材 | `assets/reference/ui_material/介绍文档.md` | 仅在确认接入时读取具体图片并修改主题/场景 |
 | 参考 LC2 某项功能 | `docs/LC2参考索引.md` | 仅读取索引指向的少量 LC2 文件 |

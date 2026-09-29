@@ -1,17 +1,18 @@
 ﻿{
   "poison": {
     "name": "中毒",
-    "duration": 3,
+    "duration_seconds": 6.0,
+    "tick_interval_seconds": 2.0,
+    "max_stacks": 5,
     "tick_damage": 5,
-    "tick_phase": "turn_start",
     "modifiers": {},
     "is_beneficial": false
   },
   "burn": {
     "name": "灼烧",
-    "duration": 2,
+    "duration_seconds": 6.0,
+    "tick_interval_seconds": 2.0,
     "tick_damage": 4,
-    "tick_phase": "turn_end",
     "modifiers": {},
     "is_beneficial": false
   },
@@ -73,7 +74,9 @@
   },
   "silence": {
     "name": "沉默",
-    "duration": 2,
+    "status": "silence",
+    "duration_seconds": 6.0,
+    "permanent": true,
     "control": "silence",
     "modifiers": {},
     "is_beneficial": false

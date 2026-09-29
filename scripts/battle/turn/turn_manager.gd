@@ -30,8 +30,9 @@ func tick(delta: float) -> Array:
 		unit.acted = false
 		unit.moved = false
 		unit.turn_timer += delta
-		if unit.turn_timer >= unit.turn_interval:
-			unit.turn_timer -= unit.turn_interval
+		var action_interval: float = unit.get_effective_turn_interval()
+		if unit.turn_timer >= action_interval:
+			unit.turn_timer -= action_interval
 			acted.append(unit)
 	return acted
 
