@@ -17,6 +17,8 @@ static func apply(source: Unit, target: Unit, config: Dictionary, battle = null,
 		"damage_kind": kind, "true_damage": false}
 	if target == null or not target.alive:
 		return report
+	if target.has_status("damage_immunity"):
+		return report
 	var is_true := bool(config.get("true_damage", config.get("ignore_defense", false)))
 	if source != null and source.has_ignore_defense():
 		is_true = true

@@ -4,6 +4,7 @@ extends Control
 
 signal inspect_requested(selectable_index: int)
 signal skill_book_drop_requested(selectable_index: int, skill_id: String)
+signal bench_move_requested(selectable_index: int, target_slot: int)
 
 var selectable_index: int = -1
 var unit_type: String = ""
@@ -12,6 +13,8 @@ var tile_size: int = 64
 var unit_view: UnitView
 var press_position := Vector2.ZERO
 var drag_enabled: bool = true
+var deployed: bool = false
+var bench_slot: int = -1
 
 static func tray_height_for_tile(p_tile_size: int) -> float:
 	# 底部栏高度由卡片尺寸统一计算，部署与战斗界面共用。
@@ -31,6 +34,7 @@ func _ready() -> void:
 
 func _build_content() -> void:
 	custom_minimum_size = Vector2(tile_size + 16, tile_size + 52)
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
 	var config: Dictionary = GameDatabase.get_unit(unit_type)
@@ -45,12 +49,16 @@ func _build_content() -> void:
 	unit_view.setup(preview_unit, tile_size)
 	# 底部栏空间有限，保留血条但隐藏数字，给单位名称留出完整显示空间。
 	unit_view.show_hp_text = false
+	# 阵容卡自身提供唯一外框，避免单位视图再画一层方框。
+	unit_view.battle_style = true
 	add_child(unit_view)
 	_update_unit_position()
 
 func set_deployed(deployed: bool) -> void:
-	# 已进入战场的单位从底部栏移除，撤回后重新出现。
+	# 已上场角色从备战栏消失，只保留未部署角色可供拖放。
+	self.deployed = deployed
 	visible = not deployed
+	queue_redraw()
 
 func set_drag_enabled(enabled: bool) -> void:
 	# 战斗界面保留单位卡，但暂时禁止拖动。
@@ -67,10 +75,10 @@ func set_tile_size(p_tile_size: int) -> void:
 		unit_view.refresh()
 	queue_redraw()
 
-# 在单位预览下方绘制统一的深蓝色卡片与细金边。
+# 绘制与空备战位一致的单层浅金色轮廓。
 func _draw() -> void:
 	var card_rect := Rect2(Vector2.ZERO, size).grow(-2.0)
-	draw_rect(card_rect, Color("#101a2a"))
+	draw_rect(card_rect, Color(0.10, 0.09, 0.15, 0.52))
 	draw_rect(card_rect, Color("#ae915e"), false, 1.5)
 
 func _update_unit_position() -> void:
@@ -87,7 +95,7 @@ func _gui_input(event: InputEvent) -> void:
 			inspect_requested.emit(selectable_index)
 
 func _get_drag_data(_at_position: Vector2) -> Variant:
-	if not drag_enabled:
+	if not drag_enabled or deployed:
 		return null
 	# 预览根节点的原点就是小人中心；Godot 会把拖拽预览原点放到鼠标位置。
 	# 不再复用底部卡片的上边距，避免鼠标落在小人左上角。
@@ -109,12 +117,20 @@ func _get_drag_data(_at_position: Vector2) -> Variant:
 
 # 未部署角色卡也可以作为技能书目标，便于不先上场的角色直接学习技能。
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
-	if typeof(data) != TYPE_DICTIONARY or str(data.get("kind", "")) != "skill_book":
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	if str(data.get("kind", "")) == "deployment_unit":
+		return drag_enabled and not deployed and bench_slot >= 0
+	if str(data.get("kind", "")) != "skill_book":
 		return false
 	if roster_index < 0:
 		return false
 	return ProgressManager.get_skill_book_count(str(data.get("skill_id", ""))) > 0
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
-	if _can_drop_data(_at_position, data):
+	if not _can_drop_data(_at_position, data):
+		return
+	if str(data.get("kind", "")) == "deployment_unit":
+		bench_move_requested.emit(int(data.get("selectable_index", -1)), bench_slot)
+	else:
 		skill_book_drop_requested.emit(selectable_index, str(data.get("skill_id", "")))

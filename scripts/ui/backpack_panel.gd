@@ -7,7 +7,7 @@ const SKILL_DETAIL_FORMATTER = preload("res://scripts/ui/skill_detail_formatter.
 var dimmer: ColorRect
 var popup_panel: PanelContainer
 var items_grid: GridContainer
-var status_label: Label
+var status_label: MechanicDescription
 
 func _ready() -> void:
 	# 面板自身覆盖父节点，透明遮罩负责接收“点击背包外关闭”。
@@ -65,11 +65,12 @@ func _build_popup() -> void:
 	items_grid.add_theme_constant_override("v_separation", 10)
 	root_box.add_child(items_grid)
 
-	status_label = Label.new()
-	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status_label.custom_minimum_size.y = 42
+	status_label = MechanicDescription.new()
+	status_label.custom_minimum_size.y = 135
 	status_label.add_theme_color_override("font_color", Color("#f0c878"))
 	root_box.add_child(status_label)
+	status_label.fit_content = false
+	status_label.scroll_active = true
 
 	var close_button := Button.new()
 	close_button.text = "关闭"
@@ -107,16 +108,15 @@ func refresh() -> void:
 		if skill_data.is_empty():
 			continue
 		var skill_name := str(skill_data.get("name", skill_id))
-		var desc := str(skill_data.get("desc", "暂无简介"))
-		_add_item_cell("skill_book", skill_name, "技能书：%s\n%s" % [skill_name, desc], count, str(skill_id))
+		_add_item_cell("skill_book", skill_name, "技能书：%s" % skill_name, count, str(skill_id))
 
 func _add_item_cell(item_kind: String, title: String, description: String, count: int, item_id: String = "") -> void:
 	var cell := BackpackItemCell.new()
 	cell.setup(item_kind, item_id, title, count, description)
 	if item_kind == "skill_book":
 		var skill_details: String = SKILL_DETAIL_FORMATTER.build(item_id)
-		cell.mouse_entered.connect(_show_skill_details.bind(skill_details))
-		cell.pressed.connect(_show_skill_details.bind(skill_details))
+		cell.mouse_entered.connect(_show_skill_details.bind(skill_details, item_id))
+		cell.pressed.connect(_show_skill_details.bind(skill_details, item_id))
 	else:
 		cell.mouse_entered.connect(_show_item_details.bind(title, description))
 		cell.pressed.connect(_show_item_details.bind(title, description))
@@ -126,9 +126,14 @@ func _show_item_details(title: String, description: String) -> void:
 	if status_label != null:
 		status_label.text = "%s\n%s" % [title, description]
 
-func _show_skill_details(details: String) -> void:
+# 背包说明保留完整技能信息，并把机制名称替换为可悬停链接。
+func _show_skill_details(details: String, skill_id: String) -> void:
 	if status_label != null:
-		status_label.text = details
+		var data: Dictionary = GameDatabase.get_skill(skill_id)
+		status_label.set_skill_description(data)
+		var markup := status_label.text
+		var raw := str(data.get("desc", ""))
+		status_label.text = details.replace("技能详情：%s" % raw, "技能详情：%s" % markup)
 
 func set_status(text: String) -> void:
 	if status_label != null:

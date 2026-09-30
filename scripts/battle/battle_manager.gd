@@ -1,4 +1,4 @@
-# 战斗管理器：纯逻辑战斗状态机，负责战局创建与移动/攻击/技能/回合等操作入口，与 UI 解耦。
+# 战斗管理器：纯逻辑战斗状态机，负责战局创建与独立移动/普攻/技能计时，与 UI 解耦。
 class_name BattleManager
 extends RefCounted
 
@@ -13,12 +13,13 @@ var event_system: EventSystem
 var combat_system: CombatSystem
 var game = null
 var scenario_id: String = ""
+var scenario_name: String = ""
 var scenario_override: Dictionary = {}
 var deployed_units: Array = []
 var winner: String = ""
 var relic_revive_used: bool = false
 var active_damage_chain: Dictionary = {}
-# 遗物战斗运行时状态（由 RelicSystem.begin_battle 初始化，tick/伤害/回合钩子读写）。
+# 遗物战斗运行时状态（由 RelicSystem.begin_battle 初始化，按秒和伤害事件读写）。
 var relic_state: Dictionary = {}
 # 战斗经过秒数：供技能限流/时间窗等取时（tick 累加）。
 var battle_time: float = 0.0
@@ -41,6 +42,7 @@ func _init(p_scenario_id: String = "battle_01", p_game = null, p_deployed_units:
 
 func setup() -> void:
 	var scenario := _load_scenario()
+	scenario_name = str(scenario.get("name", "战斗"))
 	grid = Grid.new(int(scenario.get("width", 10)), int(scenario.get("height", 10)))
 	_spawn_player_units(scenario)
 	_spawn_enemy_units(scenario)
@@ -226,6 +228,7 @@ func perform_attack(attacker: Unit, defender: Unit) -> Dictionary:
 	if not can_attack(attacker, defender):
 		return empty
 	var result := combat_system.perform_attack(attacker, defender, 0, get_final_damage_multiplier())
+	attacker.attack_count += 1
 	var damage: int = result.get("damage", 0)
 	var crit: bool = result.get("crit", false)
 	# 技能反射和遗物反射分别结算，避免遗物伤害被误算成技能伤害。
@@ -264,6 +267,8 @@ func on_damage_resolved(source: Unit, target: Unit, report: Dictionary) -> void:
 	var damage := int(report.get("actual_damage", 0))
 	if damage <= 0:
 		return
+	RelicSystem.on_shield_break(self, source, target, report)
+	RelicSystem.on_critical_hit(self, source, report)
 	if kind != DamageSystem.EFFECT:
 		var previous_chain := active_damage_chain
 		active_damage_chain = previous_chain if not previous_chain.is_empty() else {"used": []}
@@ -379,7 +384,9 @@ func spawn_unit(unit_type: String, camp: String, near_pos: Vector2i, summoner: U
 	unit.is_summoned = true
 	unit.set_battle(self)
 	units.append(unit)
-	unit.turn_timer = 0.0
+	unit.attack_timer = 0.0
+	unit.move_timer = 0.0
+	RelicSystem.on_summon(self, summoner, unit)
 	if battle_started:
 		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ENTER_BATTLE,
 			{"actor": unit, "user": unit})
@@ -417,6 +424,7 @@ func setup_battle() -> void:
 			for skill in unit.skills:
 				if skill is Skill and skill.trigger == SkillTriggerSystem.ON_TIMER:
 					skill.interval_remaining = skill.interval_seconds
+	RelicSystem.prepare_first_active_cast(self)
 	# 战吼与战斗开始技能分别分发；召唤入场只触发战吼。
 	var initial_units := units.duplicate()
 	for unit in initial_units:
@@ -429,7 +437,7 @@ func setup_battle() -> void:
 	for unit in units:
 		if unit is Unit and unit.alive:
 			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.PASSIVE, {"actor": unit, "user": unit})
-	# on_round_start：所有单位各触发一次（战斗首个回合）
+	# on_round_start 保留旧触发标识，但只在战斗开始时各触发一次。
 	for unit in units:
 		if unit is Unit and unit.alive:
 			SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_ROUND_START, {"actor": unit, "user": unit})
@@ -444,6 +452,7 @@ func tick(delta: float) -> Array:
 	var due_units: Array = turn_manager.tick(delta)
 	var events: Array = []
 	_tick_statuses(delta)
+	_tick_seconds_skill_cooldowns(delta)
 	_tick_timed_skills(delta)
 	RelicSystem.tick_battle(self, delta)
 	for unit in due_units:
@@ -451,13 +460,12 @@ func tick(delta: float) -> Array:
 			break
 		if not unit.alive or unit.is_dormant() or awakened_this_tick.has(unit):
 			continue
+		# 冻结期间不能移动；下一次普攻就绪时跳过该次普攻并解除冻结。
 		if unit.has_status("frozen"):
-			unit.remove_status("frozen")
+			if unit.attack_timer >= unit.get_effective_attack_interval():
+				unit.attack_timer = 0.0
+				unit.remove_status("frozen")
 			continue
-		# 行动开始 tick
-		unit.tick_turn_start(game, self)
-		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_START, {"actor": unit, "user": unit})
-		RelicSystem.on_turn_start(self, unit, game)
 		var prev_pos: Vector2i = unit.pos
 		var acted := _auto_act(unit)
 		if acted:
@@ -470,20 +478,24 @@ func tick(delta: float) -> Array:
 				"damage": acted.get("damage", 0),
 				"crit": acted.get("crit", false)
 			})
-		unit.tick_turn_end(game, self)
-		# 行动结束触发 + 冷却推进
-		SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_END, {"actor": unit, "user": unit})
-		_tick_skill_cooldowns(unit)
 		_check_winner()
 		if winner != "":
 			break
 	return events
 
-# 推进单位技能冷却。
+# 每完成一次普攻推进事件技能的普攻计数冷却。
 func _tick_skill_cooldowns(unit: Unit) -> void:
 	for skill in unit.skills:
 		if skill is Skill and skill.trigger != SkillTriggerSystem.ON_TIMER:
 			skill.tick_cooldown()
+
+# 战斗中持续推进事件技能的秒冷却，与普攻次数无关。
+func _tick_seconds_skill_cooldowns(delta: float) -> void:
+	for unit in units:
+		if unit is Unit and unit.alive:
+			for skill in unit.skills:
+				if skill is Skill:
+					skill.tick_seconds_cooldown(delta)
 
 # 每帧检查定时技能；到点立即尝试施放，无合法目标时保持就绪。
 func _tick_timed_skills(delta: float) -> void:
@@ -508,29 +520,41 @@ func _tick_timed_skills(delta: float) -> void:
 				SkillKit.register_timed_cast(unit, skill)
 			_check_winner()
 
-# 单位自动行动：射程内有敌人则攻击；否则移动（可能因嘲讽被引导），移动后再尝试攻击。
+# 普攻与移动各用自己的就绪计时；射程内等待普攻，射程外按移动计时靠近。
 func _auto_act(unit: Unit) -> Dictionary:
 	if not unit.alive:
 		return {}
-	# 射程内是否有敌人
 	var targets := get_attack_targets(unit)
 	if targets.size() > 0:
-		var target: Unit = targets[0]
-		var res := perform_attack(unit, target)
-		return {"action": "attack", "target": target, "damage": res.get("damage", 0), "crit": res.get("crit", false)}
-	# 无目标：移动（含嘲讽引导），移动后再次尝试攻击
+		if unit.attack_timer >= unit.get_effective_attack_interval():
+			var target: Unit = targets[0]
+			var res := _auto_attack(unit, target)
+			return {"action": "attack", "target": target, "damage": res.get("damage", 0), "crit": res.get("crit", false)}
+		return {}
+	if unit.get_move_points() <= 0 or unit.move_timer < unit.move_interval:
+		return {}
 	var decision := EnemyAI.get_decision(self, unit)
 	if decision.action == "move":
 		var to: Vector2i = decision.to
-		move_unit(unit, to)
-		# 移动后再尝试攻击
+		if not move_unit(unit, to):
+			return {}
+		unit.move_timer = 0.0
 		var new_targets := get_attack_targets(unit)
-		if new_targets.size() > 0:
+		if new_targets.size() > 0 and unit.attack_timer >= unit.get_effective_attack_interval():
 			var target2: Unit = new_targets[0]
-			var res2 := perform_attack(unit, target2)
+			var res2 := _auto_attack(unit, target2)
 			return {"action": "move_attack", "target": target2, "to": to, "damage": res2.get("damage", 0), "crit": res2.get("crit", false)}
 		return {"action": "move", "to": to}
-	return {"action": "wait"}
+	return {}
+
+# 自动普攻只推进普攻事件与按普攻次数计算的技能冷却。
+func _auto_attack(unit: Unit, target: Unit) -> Dictionary:
+	unit.attack_timer = 0.0
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_START, {"actor": unit, "user": unit})
+	var result := perform_attack(unit, target)
+	SkillTriggerSystem.dispatch(self, SkillTriggerSystem.ON_TURN_END, {"actor": unit, "user": unit})
+	_tick_skill_cooldowns(unit)
+	return result
 
 func _check_winner() -> void:
 	if winner != "":
@@ -590,7 +614,8 @@ func awaken_unit(unit: Unit) -> void:
 			continue
 		var awaken_effects: Array = buff.raw_data.get("awaken_effects", [])
 		unit.buffs.erase(buff)
-		unit.turn_timer = 0.0
+		unit.attack_timer = 0.0
+		unit.move_timer = 0.0
 		awakened_this_tick.append(unit)
 		EffectSystem.apply_effects(unit, unit, awaken_effects, game, self)
 		return

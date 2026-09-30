@@ -1,0 +1,102 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/battlefield_stage.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/ui/grid_view.gd" id="2_grid"]
+[ext_resource type="Texture2D" path="res://assets/ui/abyss_atmosphere.png" id="3_atmosphere"]
+[ext_resource type="Script" path="res://scripts/ui/bench_scroll.gd" id="4_bench_scroll"]
+
+[node name="Stage" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_stage")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("3_atmosphere")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="ScreenShade" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.015, 0.025, 0.055, 0.55)
+
+[node name="Header" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 86.0
+mouse_filter = 2
+
+[node name="TurnLabel" type="Label" parent="."]
+layout_mode = 0
+text = "准备"
+vertical_alignment = 1
+
+[node name="FloorLabel" type="Label" parent="."]
+layout_mode = 0
+text = "当前关卡"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SubLabel" type="Label" parent="."]
+layout_mode = 0
+visible = false
+vertical_alignment = 1
+
+[node name="TeamLabel" type="Label" parent="."]
+layout_mode = 0
+text = "我方 0/0"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="EnemyLabel" type="Label" parent="."]
+layout_mode = 0
+text = "敌方 0/0"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="BattleView" type="Node2D" parent="."]
+
+[node name="GridView" type="Node2D" parent="BattleView"]
+script = ExtResource("2_grid")
+
+[node name="UnitsLayer" type="Node2D" parent="BattleView"]
+y_sort_enabled = true
+
+[node name="RosterPanel" type="PanelContainer" parent="."]
+layout_mode = 0
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="RosterPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="Scroll" type="ScrollContainer" parent="RosterPanel/Margin"]
+layout_mode = 2
+horizontal_scroll_mode = 1
+vertical_scroll_mode = 3
+script = ExtResource("4_bench_scroll")
+
+[node name="Units" type="HBoxContainer" parent="RosterPanel/Margin/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+alignment = 0

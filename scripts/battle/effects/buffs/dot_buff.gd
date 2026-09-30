@@ -1,7 +1,4 @@
-# DotBuff：行动次数型持续伤害 Buff 基类（灼烧用）。
-# 这是 Buff 家族的一个扩展子类示例：将来的中毒/寒冷/其他持续伤害可各自再建子类，
-# 每个子类覆写自己的按行动结算逻辑，无需改动 Buff 基类与 central dispatch。
-# 本类约定：附着单位每次行动开始时结算一次伤害，至多 hits 次；末次可翻倍。
+# DotBuff：按真实秒数结算的持续伤害 Buff 基类，灼魂焚身使用此类。
 class_name DotBuff
 extends Buff
 
@@ -10,27 +7,28 @@ var atk_percent: float = 0.0     # 每跳伤害 = 施放者攻击力 × 该值
 var hits_remaining: int = 0      # 剩余结算次数
 var final_double: bool = false   # 最后一次是否翻倍
 var base_name: String = "灼烧"
+var tick_interval_seconds: float = 1.0
 
+# 标明这是独立的持续伤害状态。
 func is_dot() -> bool:
 	return true
 
 func is_expired() -> bool:
 	return hits_remaining <= 0
 
-func on_turn_start(unit, game, battle = null) -> void:
-	if hits_remaining <= 0:
+# 每隔指定秒数结算一跳，允许一次大步长推进多跳。
+func tick_seconds(unit: Unit, delta: float, game = null, battle = null) -> void:
+	if hits_remaining <= 0 or unit == null or not unit.alive:
 		return
-	var raw := 0
-	if caster != null:
-		raw = roundi(caster.get_attack() * atk_percent)
-	if hits_remaining == 1 and final_double:
-		raw *= 2
-	hits_remaining -= 1
-	if raw <= 0:
-		return
-	if unit == null or not unit.alive:
-		return
-	DamageSystem.apply(caster, unit, {"damage_kind": DamageSystem.EFFECT,
-		"raw_damage": raw}, battle, game)
-	if game != null and game.has_method("add_log"):
-		game.add_log("%s 因 %s 受到 %d 点持续伤害（剩余 %d 次）" % [unit.get_display_name(), base_name, raw, hits_remaining])
+	tick_elapsed += maxf(delta, 0.0)
+	seconds_left = maxf(0.0, float(hits_remaining) * tick_interval_seconds - tick_elapsed)
+	while tick_elapsed >= tick_interval_seconds and hits_remaining > 0 and unit.alive:
+		tick_elapsed -= tick_interval_seconds
+		var raw := roundi(caster.get_attack() * atk_percent) if caster != null else 0
+		if hits_remaining == 1 and final_double:
+			raw *= 2
+		hits_remaining -= 1
+		if raw > 0:
+			DamageSystem.apply(caster, unit, {"damage_kind": DamageSystem.EFFECT,
+				"raw_damage": raw}, battle, game)
+	seconds_left = maxf(0.0, float(hits_remaining) * tick_interval_seconds - tick_elapsed)

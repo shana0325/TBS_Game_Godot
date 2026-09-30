@@ -1,16 +1,17 @@
 # Mod 加载器：扫描 mods/ 目录（res:// 与 user:// 均可），读取 mod.json 元数据，
-# 把 units/skills/buffs 合并进 GameDatabase，实现"放文件夹即生效"的 mod 扩展。
+# 把 units/skills/buffs/relics 合并进 GameDatabase，实现"放文件夹即生效"的 mod 扩展。
 # mod 目录结构：
 #   mods/<mod_id>/
 #     mod.json          # 必填：id/name/version/author
 #     units/*.json      # 单位数据（key 为 unit_type，与 GameDatabase 合并）
 #     skills/*.json     # 技能数据
 #     buffs/*.json      # Buff 数据
+#     relics/*.json     # 遗物数据，图标放在 art/relics/ 下
 #     code_skills/*.gd  # 代码技能；在 mod.json 的 code_skills 中登记
 #     art/units/<unit_type>/   # 角色素材：idle/attack/hurt/death/skill/portrait.png
 extends Node
 
-const MOD_CATEGORIES := ["units", "skills", "buffs"]
+const MOD_CATEGORIES := ["units", "skills", "buffs", "relics"]
 
 var loaded_mods: Array = []
 
@@ -50,8 +51,25 @@ func _merge_mod(mod_dir: String, manifest: Dictionary) -> void:
 		if not data.is_empty():
 			var target: Dictionary = GameDatabase.get(category)
 			for key in data:
-				target[key] = data[key]
+				var entry = data[key]
+				if category == "relics" and entry is Dictionary:
+					entry = entry.duplicate(true)
+					var icon_path := _resolve_relic_icon_path(mod_dir, str(key), entry)
+					if icon_path != "":
+						entry["_icon_path"] = icon_path
+				target[key] = entry
 	_merge_code_skills(mod_dir, manifest)
+
+# 仅允许读取 Mod 自己的遗物图片；省略 icon 时按遗物 ID 查找同名 PNG。
+func _resolve_relic_icon_path(mod_dir: String, relic_id: String, entry: Dictionary) -> String:
+	var relative_path := str(entry.get("icon", "art/relics/%s.png" % relic_id)).replace("\\", "/")
+	if not relative_path.begins_with("art/relics/") or relative_path.contains("..") or not relative_path.ends_with(".png"):
+		push_error("Mod 遗物图标路径无效：%s" % relative_path)
+		return ""
+	var path := mod_dir + "/" + relative_path
+	if ResourceLoader.exists(path) or FileAccess.file_exists(path):
+		return path
+	return ""
 
 # 按 mod.json 登记的相对路径注册代码技能，防止引用 Mod 目录之外的脚本。
 func _merge_code_skills(mod_dir: String, manifest: Dictionary) -> void:

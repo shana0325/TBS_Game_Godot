@@ -17,6 +17,7 @@
 | 项目导航 | `docs/PROJECT_MAP.md` | 目录职责、模块关系、任务路由 |
 | 系统设计 | `docs/tbs_game_system_design_v2.md` | 总体玩法、系统和架构意图 |
 | 数值技能设计 | `docs/数值与技能设计文档_V1.md` | 职业模板、技能与数值方向 |
+| 当前技能清单 | `docs/当前技能清单.md` | 已注册技能、当前描述、实现位置与逐项调整栏 |
 | 爬塔方向 | `docs/爬塔模式设计方向.md` | 爬塔流程、奖励和局内成长方向 |
 | Boss 初版设计 | `docs/BOSS_DESIGN.md` | 第 10、20、30 层的模板数值、固有技能和事件接入规则 |
 | 遗物与技能映射 | `docs/LoL符文_遗物一一对应表.md` | 当前机制遗物与通用技能的设计清单 |
@@ -39,7 +40,7 @@
 | `scripts/ui/` | 战场显示、单位视图、信息卡、背包弹窗和可复用 UI 组件 | UI 任务时读取 |
 | `assets/fonts/` | 当前运行时字体 | 字体/UI 任务时读取 |
 | `assets/skills/` | 保留的技能图标素材，当前界面不显示 | 仅技能美术任务时读取 |
-| `assets/relics/` | 当前运行时遗物图标 | 遗物图标或遗物界面任务时读取 |
+| `assets/relics/icons/` | 每件内置遗物独立的运行时 PNG 图标 | 遗物图标或遗物界面任务时读取 |
 | `assets/units/` | 当前运行时单位图片和立绘 | 单位表现任务时读取 |
 | `assets/ui/` | 当前运行时界面背景与装饰图片 | UI 美术任务时读取 |
 | `assets/reference/ui_material/` | 原 `material` 目录及未接入 UI 候选素材 | 仅视觉素材任务明确需要时读取 |
@@ -73,8 +74,9 @@ project.godot
 - `Unit.get_shield_cap()` 是护盾上限规则入口，默认最大生命 100%，技能可提高或取消上限。
 - `data/mechanics.json` 提供机制图鉴说明；战斗状态由 `Buff` 按秒推进，效果由 `EffectSystem` 接入，目标和事件规则由 `BattleManager` 与 `SkillTriggerSystem` 执行。
 - `scripts/screens/` 负责页面流程和输入协调，通过 `GameSession`、`BattleManager` 等接口驱动显示。
-- `scripts/ui/` 负责表现和交互组件；部署与战斗共用 `UnitDetailPanel` 查看角色及学习、遗忘技能。`MenuStyle` 与默认主题维护简洁的无边框面板及纯色按钮。
+- `scripts/ui/` 负责表现和交互组件；`scenes/battlefield_stage.tscn` 与 `BattlefieldStage` 统一承载部署/战斗的背景、棋盘、顶部信息和阵容栏。开始战斗时部署控制器把同一个战场节点交给战斗控制器；部署拖拽和战斗行动仍分别由各自控制器负责。两阶段共用 `UnitDetailPanel` 查看角色及学习、遗忘技能。
 - `GameDatabase` 先载入内置数据，`ModLoader` 再合并 Mod 的单位、素材引用和 CodeSkill，最后才校验玩家存档；Hero 位于 `mods/hero/`。
+- Mod 遗物放在 `mods/<id>/relics/*.json`，图标放在同一 Mod 的 `art/relics/`；`ArtManager` 优先读取 Mod 图标，再按 ID 查找内置独立 PNG。
 - `GameDatabase.get_random_pool_unit_ids()` 汇总单位的 `random_pool_enabled` 规则；随机招募、商店和普通敌人生成共用此名单，指定关卡和特殊事件仍可直接引用单位 ID。
 - 数据平衡优先修改 `data/` 与对应设计文档，不把可配置数值硬编码到界面脚本。
 

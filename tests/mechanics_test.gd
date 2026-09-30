@@ -21,17 +21,17 @@ func _battle() -> BattleManager:
 	battle.setup()
 	return battle
 
-# 持续伤害耗掉圣盾，毒层独立到期，燃烧到期后消失。
+# 持续伤害耗掉圣盾，中毒逐秒衰减，灼烧到期后消失。
 func _test_status_damage() -> bool:
 	var battle := _battle()
 	var source: Unit = battle.units[0]
 	var target: Unit = battle.units[2]
 	EffectSystem.apply_effects(source, target, [{"type": "divine_shield", "duration_seconds": 5.0},
-		{"type": "poison", "damage": 7, "duration_seconds": 4.0}], null, battle)
+		{"type": "poison", "damage": 7}, {"type": "poison", "damage": 7}], null, battle)
 	var first_hp := target.hp
-	battle._tick_statuses(2.0)
+	battle._tick_statuses(1.0)
 	var shield_consumed := not target.has_status("divine_shield") and is_equal_approx(target.hp, first_hp)
-	battle._tick_statuses(2.1)
+	battle._tick_statuses(1.0)
 	var poison_expired := not target.has_status("poison") and target.hp < first_hp
 	EffectSystem.apply_effects(source, target, [{"type": "burn", "damage": 4, "duration_seconds": 2.0}], null, battle)
 	battle._tick_statuses(2.1)
@@ -135,7 +135,7 @@ func _test_encyclopedia() -> bool:
 	var page = load("res://scripts/screens/encyclopedia_screen.gd").new()
 	var entries: Dictionary = page._load_mechanics()
 	page.free()
-	var ok := entries.size() == 14 and entries.has("dormant") and entries.has("avenge") \
+	var ok := entries.size() == 15 and entries.has("dormant") and entries.has("avenge") \
 		and str(entries.get("dormant", {}).get("desc", "")).contains("防御型被动")
 	if not ok:
 		push_error("机制图鉴条目缺失或说明未加载")

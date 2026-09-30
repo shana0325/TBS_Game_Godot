@@ -1,10 +1,10 @@
-# 通用技能：回响节点 — 每累计施放 3 次按秒触发技能，使自身其他按秒触发技能的剩余时间减少 30%。
+# 通用技能：回响节点 — 累计主动技能施放次数后缩短其他主动技能的等待时间。
 extends CodeSkill
 
 
 func _init() -> void:
 	name = "回响节点"
-	desc = "每累计施放 3 次按秒触发技能，使自身其他按秒触发技能的剩余时间减少 30%。"
+	desc = "每累计施放 3 次主动技能，使自身其他主动技能的剩余等待时间减少 30%。"
 	trigger = "on_timer"
 	interval_seconds = 5.0
 	condition = {"target_type": "self"}

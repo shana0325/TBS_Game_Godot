@@ -9,6 +9,7 @@ var sprite_texture: Texture2D = null
 var is_moving: bool = false
 var show_hp_text: bool = true
 var show_name: bool = true
+var battle_style: bool = false
 
 # 目标显示尺寸：战斗小人缩放到格子的这个比例。
 const SPRITE_TARGET_RATIO := 0.72
@@ -64,6 +65,11 @@ func animate_move(path: Array, step_time: float) -> Tween:
 func _draw() -> void:
 	if unit == null or not unit.alive:
 		return
+	var camp_color := Color(0.84, 0.67, 0.34, 0.95) if unit.camp == TurnManager.PLAYER_CAMP else Color(0.78, 0.28, 0.25, 0.95)
+	if battle_style:
+		# 战斗中用脚下光晕标明阵营，不用覆盖整格的方框。
+		draw_circle(Vector2(0.0, tile_size * 0.28), tile_size * 0.32, Color(camp_color, 0.24))
+		draw_arc(Vector2(0.0, tile_size * 0.28), tile_size * 0.32, 0.0, TAU, 24, Color(camp_color, 0.72), 2.0)
 	# 单位贴图填满整个格子（无纯色底板）
 	if sprite_texture != null:
 		var draw_rect_size := Vector2(tile_size, tile_size)
@@ -79,9 +85,9 @@ func _draw() -> void:
 		if flip_h:
 			draw_set_transform(Vector2.ZERO)
 	# 阵营边框提供稳定的视觉识别，不依赖单位贴图或颜色滤镜。
-	var camp_color := Color(0.84, 0.67, 0.34, 0.95) if unit.camp == TurnManager.PLAYER_CAMP else Color(0.78, 0.28, 0.25, 0.95)
-	var frame_rect := Rect2(-tile_size / 2.0 + 2.0, -tile_size / 2.0 + 2.0, tile_size - 4.0, tile_size - 4.0)
-	draw_rect(frame_rect, camp_color, false, 2.0)
+	if not battle_style:
+		var frame_rect := Rect2(-tile_size / 2.0 + 2.0, -tile_size / 2.0 + 2.0, tile_size - 4.0, tile_size - 4.0)
+		draw_rect(frame_rect, camp_color, false, 2.0)
 	# 顶部名称：战场视图可关闭，底部单位卡保留名称用于辨认。
 	if show_name:
 		var name_pos := Vector2(-tile_size / 2.0, -tile_size / 2.0 - 4.0)

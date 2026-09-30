@@ -11,15 +11,25 @@ var input_blocker: ColorRect
 # 首次进入场景时构建遮挡层与详情卡片。
 func _ready() -> void:
 	z_index = 600
-	custom_minimum_size = Vector2(560, 520)
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	add_theme_stylebox_override("panel", MenuStyle.frame_panel_style())
+	var scroll := ScrollContainer.new()
+	scroll.name = "ContentScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	add_child(scroll)
 	var margin := MarginContainer.new()
+	# 横向铺满滚动视口，避免内容按最小宽度挤在卡片一侧。
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	margin.add_theme_constant_override("margin_left", 24)
 	margin.add_theme_constant_override("margin_right", 24)
 	margin.add_theme_constant_override("margin_top", 20)
 	margin.add_theme_constant_override("margin_bottom", 20)
-	add_child(margin)
+	scroll.add_child(margin)
 	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 14)
 	margin.add_child(box)
 	var header_frame := PanelContainer.new()
@@ -52,11 +62,7 @@ func _ready() -> void:
 	growth_label.add_theme_color_override("font_color", Color("#a9e6c4"))
 	box.add_child(growth_label)
 	visible = false
-
-# 窗口尺寸变化时同步调整遮罩和详情卡位置。
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_RESIZED and visible:
-		_fit_to_viewport()
+	get_viewport().size_changed.connect(_fit_to_viewport)
 
 # 打开指定遗物，并按视口居中显示。
 func show_relic(relic_id: String) -> void:
@@ -73,21 +79,16 @@ func show_relic(relic_id: String) -> void:
 	growth_label.text = "当前成长\n%s" % "\n".join(growth)
 	var vp := get_viewport_rect().size
 	_ensure_input_blocker(vp)
-	# 首次打开时先隐藏卡片，等待容器完成最小尺寸计算后再限制尺寸和居中。
-	visible = false
-	await get_tree().process_frame
-	if not is_inside_tree():
-		return
 	_fit_to_viewport()
 	visible = true
 	move_to_front()
 
-# 根据当前视口限制详情卡尺寸并居中，避免首次布局使用未稳定的容器尺寸。
+# 根据当前视口限制详情卡尺寸，超出高度的内容交给内部滚动区域。
 func _fit_to_viewport() -> void:
 	var vp := get_viewport_rect().size
-	var target := Vector2(minf(560.0, maxf(320.0, vp.x - 48.0)),
-		minf(520.0, maxf(360.0, vp.y - 48.0)))
-	custom_minimum_size = Vector2(minf(560.0, target.x), minf(520.0, target.y))
+	var target := Vector2(minf(560.0, maxf(1.0, vp.x - 48.0)),
+		minf(520.0, maxf(1.0, vp.y - 48.0)))
+	custom_minimum_size = Vector2.ZERO
 	size = target
 	position = (vp - target) / 2.0
 	if input_blocker != null:

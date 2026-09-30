@@ -1,4 +1,4 @@
-# 技能+遗物机制实战验证：给玩家单位挂上全部 16 个代码通用技能，并启用全部 17 个遗物，
+# 技能+遗物机制实战验证：给玩家单位挂上全部 16 个代码通用技能，并启用全部机制遗物，
 # 按 UI 正规流程走 setup + setup_battle，驱动真实战斗。测试节点实现 add_log / record_skill_damage，
 # 使每次技能/遗物激活都写入日志，据此审计各机制是否真正被触发，并捕获运行时错误。
 extends Node
@@ -16,6 +16,8 @@ const RELIC_IDS: Array = [
 	"last_stand", "harvest_soul", "sixth_sense", "airy_guardian", "manaflow_band",
 	"gathering_storm", "grasp_undying", "guardian_cord", "conditioning_late",
 	"overgrowth", "revitalize_amp", "biscuit_delivery",
+	"war_drum", "shield_breaker", "ember_lens", "fallen_banner", "summon_call",
+	"dawn_hourglass", "plague_censer", "purifying_bell", "critical_talisman",
 ]
 
 var game_log: Array = []
@@ -57,8 +59,10 @@ func run() -> bool:
 
 	# 加速行动节奏，确保战斗持续足够久以覆盖按秒技能计时间隔
 	for u in battle.units:
-		u.turn_interval = 0.5
-		u.turn_timer = 0.5
+		u.attack_interval = 0.5
+		u.attack_timer = 0.5
+		u.move_interval = 0.5
+		u.move_timer = 0.5
 	# 给玩家一个耐久缓冲，避免敌方属性放大后瞬间反杀，让战斗持续到检验按秒技能
 	if battle.units.size() > 0:
 		var p0: Unit = battle.units[0]
@@ -205,7 +209,7 @@ func _verify_biscuit_rounding() -> bool:
 		return false
 	return true
 
-# 验证守护之盾按受击单位自己的行动周期限流。
+# 验证守护之盾按受击单位的独立 2 秒窗口限流。
 func _verify_guardian_per_unit_turn() -> bool:
 	var old_relics := GameSession.run_relics.duplicate()
 	GameSession.run_relics = ["guardian_cord"]
@@ -222,15 +226,14 @@ func _verify_guardian_per_unit_turn() -> bool:
 	RelicSystem.begin_battle(manager)
 	RelicSystem.on_taken_damage(manager, unit, null, 10, self)
 	var first := unit.runtime.stack_get("shield_credit")
-	RelicSystem.on_turn_start(manager, other, self)
 	RelicSystem.on_taken_damage(manager, unit, null, 10, self)
-	var after_other_turn := unit.runtime.stack_get("shield_credit")
-	RelicSystem.on_turn_start(manager, unit, self)
+	var before_ready := unit.runtime.stack_get("shield_credit")
+	manager.battle_time = 2.0
 	RelicSystem.on_taken_damage(manager, unit, null, 10, self)
-	var after_own_turn := unit.runtime.stack_get("shield_credit")
+	var after_ready := unit.runtime.stack_get("shield_credit")
 	GameSession.run_relics = old_relics
-	if first <= 0 or after_other_turn != first or after_own_turn <= first:
-		push_error("守护之盾没有按受击单位自己的行动周期限流")
+	if first <= 0 or before_ready != first or after_ready <= first:
+		push_error("守护之盾没有按受击单位自己的 2 秒窗口限流")
 		return false
 	return true
 
@@ -268,7 +271,7 @@ func _verify_effect_damage_uses_armor() -> bool:
 	dot.caster = source
 	dot.atk_percent = 0.08
 	dot.hits_remaining = 1
-	dot.on_turn_start(dot_target, self, manager)
+	dot.tick_seconds(dot_target, 1.0, self, manager)
 	var dot_loss := 100 - dot_target.hp
 	GameSession.run_relics = old_relics
 	GameSession.run_relic_state = old_state

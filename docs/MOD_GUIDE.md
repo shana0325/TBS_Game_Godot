@@ -1,6 +1,6 @@
 # MOD 开发指南（新建角色）
 
-> 当前 Mod 接口以数据和素材扩展为主。Mod 可以添加单位、技能、Buff 和角色图片；不建议直接替换核心战斗脚本或界面控制器。
+> 当前 Mod 接口以数据和素材扩展为主。Mod 可以添加单位、技能、Buff、遗物及对应图片；不建议直接替换核心战斗脚本或界面控制器。
 
 > 目标：任何人无需 Godot 编辑器，只要**放文件夹 + 图片 + JSON**，就能为游戏添加新角色。
 
@@ -15,6 +15,8 @@ mods/
     units/<角色名>.json        # 可选：单位数据
     skills/<技能名>.json       # 可选：技能数据
     buffs/<buff名>.json        # 可选：Buff 数据
+    relics/<遗物名>.json       # 可选：遗物数据
+    art/relics/<遗物ID>.png    # 遗物图标，建议 64×64 透明 PNG
     art/units/<角色名>/        # 角色素材
       stand.png                # 必填：战场站立图
       move.png                 # 可选：移动动作（缺省回退 stand）
@@ -24,7 +26,7 @@ mods/
       portrait.png             # 可选：立绘（信息面板/成长界面显示）
 ```
 
-游戏启动时自动扫描并合并，无需任何手动配置。同名的单位/技能/Buff 会**覆盖原版数据**。
+游戏启动时自动扫描并合并，无需任何手动配置。同名的单位/技能/Buff/遗物会**覆盖原版数据**。
 
 ## 2. mod.json（元数据）
 
@@ -48,6 +50,8 @@ mods/
     "atk": 100,
     "defense": 25,
     "move": 1,
+    "attack_interval": 2.0,
+    "move_interval": 1.0,
     "range_min": 1,
     "range_max": 1,
     "random_pool_enabled": true,
@@ -63,6 +67,8 @@ mods/
 |---|---|
 | `display_name` | 中文显示名（缺省显示键名） |
 | `hp` / `atk` / `defense` / `move` | 基础属性 |
+| `attack_interval` | 基础普攻间隔，现有角色统一为 2.0 秒；实际间隔受 `attack_speed` 百分比加成影响 |
+| `move_interval` | 基础移动间隔，默认 1.0 秒；每次最多移动 `move` 格，初版现有单位均为 1.0 秒 |
 | `range_min` / `range_max` | 攻击射程 |
 | `innate_skill` | 固有技能 ID，可为空 |
 | `random_pool_enabled` | 是否进入随机招募、商店和普通敌人池；默认 `true`。设为 `false` 后仍可由开局编成、指定关卡或特殊事件直接获得/生成 |
@@ -88,11 +94,29 @@ mods/
 ```
 
 效果类型和字段以 [技能体系设计文档](skills/SKILL_SYSTEM.md) 为准。复杂技能可使用 `CodeSkill`，但需要同时完成脚本注册和运行验证。
+普攻计数条件可在 `condition` 中使用 `"attack_count_multiple": 6`，表示完成前 5 次普攻后，第 6 次普攻触发；`cooldown` 则表示触发后需再完成的普攻次数。移动与定时主动技能均不计入。
 
 ## 5. 图片规格
 
+遗物 Mod 可在 `relics/*.json` 中加入：
+
+```json
+{
+  "my_relic": {
+    "name": "练习徽记",
+    "desc": "全队攻击力 +10%",
+    "icon": "art/relics/my_relic.png",
+    "effects": [{ "type": "stat_percent", "stat": "attack", "percent": 0.10 }],
+    "triggers": []
+  }
+}
+```
+
+`icon` 是相对于本 Mod 根目录、位于 `art/relics/` 下的 PNG 路径；省略时自动查找 `art/relics/<遗物ID>.png`。玩家安装到 `user://mods/` 的 PNG 也会在运行时加载。遗物进入与内置遗物相同的等概率奖励池，不需要稀有度字段。上例的属性效果由现有数据接口实现；特殊战斗机制目前仍需游戏本体支持。
+
 - **stand/move/attack/death/skill**：战斗小人，建议正方形透明 PNG（32 或 64 像素均可，游戏中会自动缩放）。只需一张 `stand.png` 即可运行。
 - **portrait**：立绘，建议 256×256 以上，透明背景，信息面板与成长界面会居中显示。
+- **遗物图标**：建议 64×64 透明 PNG；每件遗物一张，图鉴、奖励和详情共用同一文件。
 
 ## 6. 安装方式
 
@@ -138,3 +162,5 @@ mods/
 代码技能与 JSON 技能统一并入技能表，编成界面、战斗触发、单位创建均自动生效。
 
 `mods/hero/` 展示了固有代码技能“属性汲取”：它通过 `on_attack_hit_before` 在普攻扣血前按目标记录偷取次数，战斗结束信号触发时将存活角色偷取总量的 20% 写入编成永久属性。生命、攻击、护甲与暴击属性支持小数存储，最终伤害仍按现有伤害结算规则取整。
+
+代码技能保存永久成长时，应给 `ProgressManager.add_permanent_stats(unit_id, amounts, skill_id)` 传入技能 ID；`permanent_stat` 效果可填 `source_skill_id`。编成中的 `permanent_mods` 仍保存总加成，新增的 `permanent_mod_sources` 按技能 ID 记录各自贡献，供角色的技能详情展示。旧存档没有来源记录的加成会标为“历史强化（来源未记录）”，不会猜测归属。

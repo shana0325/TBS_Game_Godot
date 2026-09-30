@@ -49,7 +49,7 @@ func _build_ui() -> void:
 
 	# 爬塔模式入口（进行中的局可继续）
 	var tower_btn := Button.new()
-	tower_btn.text = "◆ %s" % GameSession.get_tower_entry_label()
+	tower_btn.text = "%s" % GameSession.get_tower_entry_label()
 	tower_btn.custom_minimum_size = Vector2(520, 56)
 	tower_btn.position = Vector2(130, 210)
 	MenuStyle.apply_primary(tower_btn)
@@ -57,7 +57,7 @@ func _build_ui() -> void:
 	add_child(tower_btn)
 
 	var divider := Label.new()
-	divider.text = "—— 快速对战关卡 ——"
+	divider.text = "额外战关卡"
 	divider.add_theme_font_size_override("font_size", 20)
 	divider.position = Vector2(130, 292)
 	add_child(divider)

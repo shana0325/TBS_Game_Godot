@@ -7,20 +7,12 @@ extends Node
 const BUILTIN_DIR := "res://assets/units/"
 const SKILL_ICON_DIR := "res://assets/skills/"
 const DEFAULT_SKILL_ICON := "res://assets/skills/23_atom.png"
-const RELIC_ICON_DIR := "res://assets/relics/"
-const RELIC_SHEET_PATH := "res://assets/relics/relic_sheet.svg"
-const RELIC_ICON_ORDER := [
-	"triumph_horn", "haste_legacy", "cd_legacy", "coup_grace", "cut_down",
-	"last_stand", "harvest_soul", "sixth_sense", "airy_guardian", "manaflow_band",
-	"gathering_storm", "grasp_undying", "guardian_cord", "conditioning_late", "overgrowth",
-	"revitalize_amp", "biscuit_delivery", "power_blessing", "guard_blessing", "vitality_blessing"
-]
+const RELIC_ICON_DIR := "res://assets/relics/icons/"
 var _skill_icon_files: Array[String] = []
 var _relic_icon_cache: Dictionary = {}
 
 # 技能名到图标文件名关键词的映射。关键词直接对应素材文件名，不依赖图片内容检查。
 const SKILL_ICON_HINTS := {
-	"Power Strike": ["staff_strike", "club_attack", "axe"],
 	"Cleave": ["shadow_swords", "swords", "sword", "axe"],
 	"Execute": ["gutt", "death", "dead", "sword"],
 	"Lifesteal": ["heal", "healing", "blood", "life"],
@@ -31,7 +23,6 @@ const SKILL_ICON_HINTS := {
 	"Lethal": ["death", "gutt", "sword", "blade"],
 	"Thorns": ["venom", "poison", "thorn"],
 	"Fear": ["shadow", "dark", "fear", "moon"],
-	"强力打击": ["staff_strike", "club_attack", "axe"],
 	"连斩": ["shadow_swords", "swords", "sword", "axe"],
 	"斩杀": ["gutt", "death", "dead", "sword"],
 	"吸血": ["heal", "healing", "blood", "life"],
@@ -66,21 +57,26 @@ func get_skill_icon(skill_id: String, skill_name: String = "") -> Texture2D:
 		return load(path)
 	return null
 
-# 内置遗物从简化图集中裁切；Mod 遗物仍可使用同名 PNG 图标。
+# 按遗物 ID 加载独立图标；Mod 自带图片优先于内置资源。
 func get_relic_icon(relic_id: String) -> Texture2D:
 	if _relic_icon_cache.has(relic_id):
 		return _relic_icon_cache[relic_id]
-	var index := RELIC_ICON_ORDER.find(relic_id)
-	if index >= 0:
-		var sheet := load(RELIC_SHEET_PATH) as Texture2D
-		if sheet != null:
-			var icon := AtlasTexture.new()
-			icon.atlas = sheet
-			icon.region = Rect2((index % 5) * 64, (index / 5) * 64, 64, 64)
-			_relic_icon_cache[relic_id] = icon
-			return icon
-	var path := RELIC_ICON_DIR + relic_id + ".png"
-	return load(path) if _res_exists(path) else null
+	var relic: Dictionary = GameDatabase.get_relic(relic_id)
+	var path := str(relic.get("_icon_path", ""))
+	if path == "":
+		path = RELIC_ICON_DIR + relic_id + ".png"
+	if not _res_exists(path):
+		return null
+	var icon: Texture2D = null
+	if path.begins_with("user://"):
+		var image := Image.new()
+		if image.load(path) == OK:
+			icon = ImageTexture.create_from_image(image)
+	else:
+		icon = load(path) as Texture2D
+	if icon != null:
+		_relic_icon_cache[relic_id] = icon
+	return icon
 
 func _find_skill_icon_path(skill_id: String, skill_name: String) -> String:
 	var files := _get_skill_icon_files()

@@ -55,7 +55,7 @@ static func apply_effects(user: Unit, target: Unit, effects: Array, game = null,
 				_apply_summon(user, effect, battle if battle != null else game)
 			"taunt":
 				_apply_status_buff(target, effect, game, "taunt")
-			"stealth", "divine_shield", "silence":
+			"stealth", "divine_shield", "silence", "damage_immunity":
 				_apply_timed_status(target, effect, effect_type)
 			"dormant":
 				_apply_dormant(target, effect)
@@ -101,6 +101,9 @@ static func _apply_damage(user: Unit, target: Unit, config: Dictionary, game, ba
 	# JSON 技能的 damage 效果默认是主动技能直伤，未显式指定时归为技能伤害；
 	# 想要特效/普攻语义由配置里的 damage_kind 显式覆盖。
 	var damage_config := config.duplicate()
+	# 属性倍率伤害使用施加者当前属性，供护甲反击等数据技能复用。
+	if config.has("source_stat"):
+		damage_config["raw_damage"] = roundi(user.get_stat(str(config["source_stat"])) * float(config.get("stat_percent", 1.0)))
 	if not damage_config.has("damage_kind"):
 		damage_config["damage_kind"] = DamageSystem.SKILL
 	var resolved := DamageSystem.apply(user, target, damage_config, battle, game)
@@ -146,15 +149,23 @@ static func _apply_max_hp_shield(target: Unit, config: Dictionary, game) -> int:
 	var amount := maxi(1, roundi(float(target.max_hp) * float(config.get("percent", 0.1))))
 	return _apply_shield(target, {"amount": amount, "duration": int(config.get("duration", -1)), "permanent": bool(config.get("permanent", true))}, game)
 
+# 将固定值或基础属性百分比变化登记为可查询状态。
 static func _apply_stat_mod(target: Unit, config: Dictionary, game) -> void:
 	if target == null:
 		return
+	var beneficial := false
+	for amount in (config.get("stats", {}) as Dictionary).values():
+		beneficial = beneficial or float(amount) > 0.0
+	for amount in (config.get("stats_percent", {}) as Dictionary).values():
+		beneficial = beneficial or float(amount) > 0.0
 	var data := {
 		"name": str(config.get("name", "属性变化")),
 		"duration": int(config.get("duration", 2)),
 		"modifiers": config.get("stats", {}),
+		"percent_modifiers": config.get("stats_percent", {}),
 		"conditional_hp_percent": config.get("conditional_hp_percent", {}),
 		"permanent": bool(config.get("permanent", false)),
+		"is_beneficial": bool(config.get("is_beneficial", beneficial)),
 	}
 	var buff := Buff.from_data(data)
 	target.add_buff(buff)
@@ -209,7 +220,7 @@ static func _apply_dormant(target: Unit, config: Dictionary) -> void:
 		"awaken_effects": config.get("awaken_effects", []), "permanent": true,
 		"uncleansable": true, "is_beneficial": true}))
 
-# 中毒只创建一个状态，内部每层独立记持续时间与伤害来源。
+# 中毒只创建一个状态；每层记录来源，每秒结算后按总层数衰减。
 static func _apply_poison(user: Unit, target: Unit, config: Dictionary) -> void:
 	if target == null or not target.alive or target.is_immune("poison"):
 		return
@@ -222,12 +233,10 @@ static func _apply_poison(user: Unit, target: Unit, config: Dictionary) -> void:
 		poison = Buff.from_data({"name": "中毒", "status": "poison", "permanent": true,
 			"is_beneficial": false})
 		target.add_buff(poison)
-	var interval := maxf(0.1, float(config.get("tick_interval_seconds", 2.0)))
-	var layer := {"remaining": maxf(0.1, float(config.get("duration_seconds", 6.0))),
-		"until_tick": interval, "interval": interval, "damage": maxi(1, int(config.get("damage", 5))),
+	var layer := {"damage": maxi(1, int(config.get("damage", 5))),
+		"source_attack_percent": float(config.get("source_attack_percent", 0.0 if config.has("damage") else GameDatabase.get_buff("poison").get("source_attack_percent", 0.05))),
+		"fallback_attack": user.get_attack() if user != null else 0.0,
 		"source_ref": weakref(user) if user != null else null}
-	if poison.stacks.size() >= maxi(1, int(config.get("max_stacks", 5))):
-		poison.stacks.pop_front()
 	poison.stacks.append(layer)
 
 # 灼烧不叠层：重复施加刷新时间并保留较高的每跳伤害。
@@ -237,17 +246,20 @@ static func _apply_burn(user: Unit, target: Unit, config: Dictionary) -> void:
 	for buff in target.buffs:
 		if buff.status == "burn":
 			buff.seconds_left = maxf(0.1, float(config.get("duration_seconds", 6.0)))
-			if int(config.get("damage", 5)) > buff.tick_damage:
-				buff.tick_damage = int(config.get("damage", 5))
+			buff.raw_data["target_current_hp_percent"] = maxf(float(buff.raw_data.get("target_current_hp_percent", 0.0)), float(config.get("target_current_hp_percent", 0.0)))
+			buff.raw_data["tick_interval_seconds"] = minf(float(buff.raw_data.get("tick_interval_seconds", 2.0)), float(config.get("tick_interval_seconds", 2.0)))
+			if int(config.get("damage", 0)) > buff.tick_damage:
+				buff.tick_damage = int(config.get("damage", 0))
 				buff.source_ref = weakref(user) if user != null else null
 			return
 	target.add_buff(Buff.from_data({"name": "灼烧", "status": "burn",
 		"duration_seconds": maxf(0.1, float(config.get("duration_seconds", 6.0))),
 		"tick_interval_seconds": maxf(0.1, float(config.get("tick_interval_seconds", 2.0))),
-		"tick_damage": maxi(1, int(config.get("damage", 5))), "source": user,
+		"target_current_hp_percent": float(config.get("target_current_hp_percent", 0.0)),
+		"tick_damage": maxi(0, int(config.get("damage", 0))), "source": user,
 		"permanent": true, "is_beneficial": false}))
 
-# 霜冻每层减移动并延长行动间隔；第三层冻结下一次行动并短暂防止连锁冻结。
+# 霜冻每层降低移动频率并延长攻击间隔；第三层跳过下一次普攻机会。
 static func _apply_frost(target: Unit, config: Dictionary) -> void:
 	if target == null or not target.alive or target.is_immune("frost") or target.has_status("frost_resist"):
 		return
@@ -276,6 +288,7 @@ static func _apply_aura(target: Unit, config: Dictionary) -> void:
 	target.add_buff(Buff.from_data({"name": str(config.get("name", "光环")),
 		"aura_range": maxi(1, int(config.get("range", 2))),
 		"modifiers": config.get("stats", {}),
+		"percent_modifiers": config.get("stats_percent", {}),
 		"duration_seconds": float(config.get("duration_seconds", -1.0)),
 		"permanent": true, "is_beneficial": true}))
 
@@ -568,13 +581,18 @@ static func _apply_permanent_stat(user: Unit, target: Unit, config: Dictionary, 
 	if amount == 0:
 		return
 	owner.permanent_mods[stat] = float(owner.permanent_mods.get(stat, 0.0)) + amount
+	var source_skill_id := str(config.get("source_skill_id", ""))
+	if not source_skill_id.is_empty():
+		var source_mods: Dictionary = owner.permanent_mod_sources.get(source_skill_id, {})
+		source_mods[stat] = float(source_mods.get(stat, 0.0)) + amount
+		owner.permanent_mod_sources[source_skill_id] = source_mods
 	if stat == "hp":
 		# 生命上限永久 +amount，当前生命同步跟随（不超过新的上限）
 		owner.max_hp += amount
 		owner.hp = minf(owner.hp + amount, owner.max_hp)
 	if bool(config.get("persist", false)):
 		# 全局永久：写回编成存档；无编成 id（如敌方单位）时仅本局生效
-		ProgressManager.add_permanent_stat(owner.unit_id, stat, amount)
+		ProgressManager.add_permanent_stat(owner.unit_id, stat, amount, source_skill_id)
 	if game != null and game.has_method("add_log"):
 		var stat_label: String = str({"hp": "生命上限", "attack": "攻击", "defense": "防御", "move": "移动"}.get(stat, stat))
 		game.add_log("%s 的%s永久 +%d" % [owner.get_display_name(), stat_label, amount])

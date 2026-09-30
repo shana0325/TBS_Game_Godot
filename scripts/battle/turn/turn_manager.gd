@@ -1,5 +1,4 @@
-# 回合管理（自走棋·时间驱动）：每个单位有独立的行动计时器。
-# tick(delta) 统一推进：达到该单位 turn_interval 时触发其行动，返回该单位，否则返回 null。
+# 战斗计时器：每个单位分别累计普攻和移动时间，向战斗管理器报告已就绪单位。
 # 同一时刻多个单位到点则按顺序逐个返回（由 BattleManager 逐个结算）。
 class_name TurnManager
 extends RefCounted
@@ -20,27 +19,31 @@ const FRENZY_STEP_PERCENT := 50.0
 func _init(all_units: Array = []) -> void:
 	units = all_units
 
-# 每帧推进，返回本次应行动的单位列表（可能为多个）。
+# 每帧推进两种计时器；就绪状态最多保留一次，不积攒连续攻击或移动。
 func tick(delta: float) -> Array:
 	battle_time += delta
-	var acted: Array = []
+	var ready: Array = []
 	for unit in units:
 		if not (unit is Unit) or not unit.alive:
 			continue
 		unit.acted = false
 		unit.moved = false
-		unit.turn_timer += delta
-		var action_interval: float = unit.get_effective_turn_interval()
-		if unit.turn_timer >= action_interval:
-			unit.turn_timer -= action_interval
-			acted.append(unit)
-	return acted
+		var attack_interval: float = unit.get_effective_attack_interval()
+		unit.attack_timer = minf(unit.attack_timer + delta, attack_interval)
+		var move_interval: float = unit.move_interval
+		unit.move_timer = minf(unit.move_timer + delta, move_interval)
+		if unit.attack_timer >= attack_interval or (unit.get_move_points() > 0 and unit.move_timer >= move_interval):
+			ready.append(unit)
+	return ready
 
-# 初始化所有单位的计时器（行动顺序由速度/随机决定：初始计时器按 turn_interval 随机偏移避免齐射）。
+# 随机错开初次普攻和移动，避免全场单位同时起步。
 func setup() -> void:
 	for unit in units:
 		if unit is Unit:
-			unit.turn_timer = randf() * unit.turn_interval
+			var attack_interval: float = unit.get_effective_attack_interval()
+			var move_interval: float = unit.move_interval
+			unit.attack_timer = randf() * attack_interval if is_finite(attack_interval) else 0.0
+			unit.move_timer = randf() * move_interval if is_finite(move_interval) else 0.0
 
 func reset_acted() -> void:
 	for unit in units:

@@ -10,7 +10,7 @@
 
 - **游戏类型**：2D 自走棋（auto-battler）式战棋，单机 PVE，PC（Windows）优先
 - **引擎**：Godot 4.7 + GDScript（GL Compatibility 渲染）
-- **核心玩法**：时间驱动独立回合 + 事件触发技能，全自动战斗
+- **核心玩法**：独立普攻与移动计时 + 事件触发技能，全自动战斗
 - **完整流程**：主菜单（继续游戏/开始新游戏）→ 选关 → 部署 → 自动战斗 → 结算/爬塔奖励
 - **成长**：升星、技能书、Run 遗物与跨战斗永久强化
 - **内容**：12×6 单战场、单位动作图、中文字体、可扩展 mod
@@ -51,8 +51,8 @@ docs/       设计/交接/技能规范/mod 指南
 - 属性：`hp/max_hp`、`atk/defense/move`（经 `get_base_stat` → `get_stat` 聚合基础、永久强化和 Buff）。角色拥有 `star` 星级；1 星为模板初始值，每升一星使初始生命、攻击和护甲提高 50%。
 - 单位模板可通过 `tags` 配置 0 个或多个标签，角色信息面板展示这些标签。
 - 当前数值模板：`Warrior` 战士（1400/100/25/1格）、`Tank` 坦克（2000/80/50/1格）、`Archer` 射手（1000/130/10/2格）、`Assassin` 刺客（800/160/5/1格）；另保留 Hero 作为固有技能测试单位。
-- 运行时：`pos / camp / acted / moved / alive / turn_interval / turn_timer`、`buffs`、`skills`、`permanent_mods`、`star`、`tags`。
-- 关键方法：`take_damage`、`heal`、`gain_shield`、`get_shield_cap`、回合 tick、状态查询和 `apply_skills`。护盾默认上限为最大生命，技能可提高或取消上限。
+- 运行时：`pos / camp / acted / moved / alive / attack_interval / attack_timer / move_interval / move_timer / attack_count`、`buffs`、`skills`、`permanent_mods`、`star`、`tags`。
+- 关键方法：`take_damage`、`heal`、`gain_shield`、`get_shield_cap`、独立计时、状态查询和 `apply_skills`。护盾默认上限为最大生命，技能可提高或取消上限。
 
 ### Skill（技能基类，双轨）
 - 数据字段：`name / desc / trigger / condition / cooldown / interval_seconds / priority / min_range / max_range / effects / common / once / shield_cap_percent / unlimited_shield`。
@@ -64,19 +64,19 @@ docs/       设计/交接/技能规范/mod 指南
 
 ### Buff
 - 字段：`duration / modifiers / tick_damage / tick_heal / tick_phase / control / shield / trigger / counter / aura_range / heal_percent / immunity / reflect_percent / reduce_percent / ignore_defense / is_mark`。
-- 生命周期：回合 tick 递减，`duration <= 0` 移除；触发型（吸血）、护盾吸收、反击、光环等按语义生效。
+- 生命周期：按秒状态独立到期；旧 `duration` 次数型状态在单位普攻周期结束时递减；触发型（吸血）、护盾吸收、反击、光环等按语义生效。
 
 ## 5. 战斗系统（自走棋）
 
 ### 5.1 BattleManager（状态机）
-- `tick(delta)` 推进时间与行动，产出行动事件（attack / move / move_attack / wait）供 UI 播放。
-- `_auto_act`：射程内有敌人→攻击；否则移动（当前 1 移动力）再尝试攻击；其余待机。
+- `tick(delta)` 分别推进攻击与移动时间，产出行动事件（attack / move / move_attack）供 UI 播放。
+- `_auto_act`：射程内有敌人且攻击就绪则普攻；射程外且移动就绪则移动，进入射程后仅当攻击也就绪时立即普攻。
 - `perform_attack`：伤害结算 + 技能触发时机分发 + 反射/减伤/护盾处理 + 胜负检查。
 - 供技能调用的接口：`spawn_unit` / `move_unit_to`（位移家族使用）/ `add_log` / `record_skill_damage`。
 
-### 5.2 回合（TurnManager）
-- 时间驱动独立回合：每单位 `turn_interval`（秒）+ 各自 `turn_timer`，到点自动行动，非阵营轮流。
-- 新职业模板的行动间隔统一为 4 秒；Hero 也使用 4 秒行动间隔。
+### 5.2 独立计时（TurnManager）
+- 所有现有单位的基础攻击间隔统一为 2.0 秒；`attack_speed` 以百分比加成缩短实际间隔，初版不设最小间隔。
+- 所有单位基础移动间隔为 1.0 秒；每次移动最多跨越当前移动力对应的格数。两个计时器各最多保留一次就绪机会。
 
 ### 5.3 敌人 AI（EnemyAI）
 - 射程内有敌人 → 攻击（含嘲讽引导目标）；否则朝最近目标移动；无法移动则待机。
@@ -115,7 +115,7 @@ docs/       设计/交接/技能规范/mod 指南
 | trigger | 含义 |
 |---|---|
 | on_battle_start | 战斗开始时 |
-| on_turn_start | 行动开始时 |
+| on_turn_start | 普攻周期开始时（保留旧触发标识） |
 | on_attack_start | 攻击前 |
 | on_attack | 攻击时 |
 | on_attack_end | 攻击结束后 |
@@ -125,14 +125,14 @@ docs/       设计/交接/技能规范/mod 指南
 | on_kill | 击杀敌人后 |
 | on_death | 阵亡时 |
 | on_ally_death | 友军阵亡时 |
-| on_turn_end | 行动结束时 |
-| on_round_start | 首回合开始时 |
+| on_turn_end | 普攻周期结束时（保留旧触发标识） |
+| on_round_start | 战斗开始时，仅触发一次 |
 | passive | 常驻被动 |
 
 规则：同一单位同一时机按 `priority` 排序依次触发；冷却中的不触发；条件不满足不触发。
 
 ### 6.3 触发条件
-当前支持：`hp_percent`（lt/lte/gt/gte/eq）、`target_hp_percent`、`has_buff`、`target_has_buff`、`crit`。扩展方向见第 12 节。
+当前支持：`hp_percent`（lt/lte/gt/gte/eq）、`target_hp_percent`、`has_buff`、`target_has_buff`、`crit`、`attack_count_multiple`（第 N 次普攻触发）。扩展方向见第 12 节。
 
 ### 6.4 目标解析
 `self / target（当前目标）/ enemy / ally / all_enemies / all_allies`（按射程或全体）。
@@ -186,7 +186,7 @@ docs/       设计/交接/技能规范/mod 指南
 - GridView：棋盘格深浅交替 + 边框（自动战斗下移动/攻击高亮已不用，保留选中/悬停）。
 - UnitView：动作图填满格子、底部血条和蓝色护盾条；护盾条按总护盾/最大生命显示，超过 100% 后保持满条。
 - 动画：移动逐格补间；"移动后攻击"链条化（移动结束接攻击冲刺），攻击动画不被吞。
-- 信息面板：点击单位显示属性/射程/行动间隔/护盾/永久强化/技能/Buff；战斗中仅对当前打开的信息卡约每 0.1 秒刷新一次，未打开单位不持续创建 UI。
+- 信息面板：点击单位显示属性、射程、每秒普攻次数与攻速加成、移动力、护盾、永久强化、技能与 Buff；战斗中仅对当前打开的信息卡约每 0.1 秒刷新一次。
 - 布局：BattleLayout 按视口自适应格子大小并居中；日志面板最多 100 条。
 
 ## 10. mod 系统

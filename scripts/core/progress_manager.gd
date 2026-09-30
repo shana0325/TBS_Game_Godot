@@ -71,8 +71,15 @@ static func recruit_unit(unit_type: String, price: int = 0) -> bool:
 	var old_gold := get_gold()
 	inventory["gold"] = old_gold - price
 	GameDatabase.player_roster["next_unit_serial"] = serial + 1
+	var occupied_slots: Dictionary = {}
+	for i in roster.size():
+		occupied_slots[int(roster[i].get("bench_slot", i))] = true
+	var bench_slot := 0
+	while occupied_slots.has(bench_slot):
+		bench_slot += 1
 	var recruit := {"id": unit_id, "type": unit_type, "star": 1, "level": 1,
-		"permanent_mods": {}, "learned_skills": [], "equipped_skills": [], "extra_skills": []}
+		"permanent_mods": {}, "permanent_mod_sources": {}, "learned_skills": [], "equipped_skills": [], "extra_skills": [],
+		"bench_slot": bench_slot}
 	roster.append(recruit)
 	if save_roster():
 		return true
@@ -332,22 +339,29 @@ static func grant_skill_free(unit: Dictionary, skill_id: String) -> bool:
 	return true
 
 # 给编成角色的永久强化累加小数数值并写回存档。
-static func add_permanent_stat(unit_id: String, stat: String, amount: float) -> bool:
-	return add_permanent_stats(unit_id, {stat: amount})
+static func add_permanent_stat(unit_id: String, stat: String, amount: float, source_skill_id: String = "") -> bool:
+	return add_permanent_stats(unit_id, {stat: amount}, source_skill_id)
 
-# 一次写入多个属性，避免技能在战后为每个属性分别保存存档。
-static func add_permanent_stats(unit_id: String, amounts: Dictionary) -> bool:
+# 一次写入多个属性，并按技能来源记录成长以供详情界面区分。
+static func add_permanent_stats(unit_id: String, amounts: Dictionary, source_skill_id: String = "") -> bool:
 	if unit_id.strip_edges().is_empty() or amounts.is_empty():
 		return false
 	for unit in GameDatabase.player_roster.get("units", []):
 		if str(unit.get("id", "")) != unit_id:
 			continue
 		var mods: Dictionary = unit.get("permanent_mods", {})
+		var sources: Dictionary = unit.get("permanent_mod_sources", {})
+		var source_mods: Dictionary = sources.get(source_skill_id, {}) if not source_skill_id.is_empty() else {}
 		for stat in amounts:
 			var amount := float(amounts[stat])
 			if not is_zero_approx(amount):
 				mods[stat] = float(mods.get(stat, 0.0)) + amount
+				if not source_skill_id.is_empty():
+					source_mods[stat] = float(source_mods.get(stat, 0.0)) + amount
 		unit["permanent_mods"] = mods
+		if not source_skill_id.is_empty():
+			sources[source_skill_id] = source_mods
+			unit["permanent_mod_sources"] = sources
 		return save_roster()
 	return false
 

@@ -86,6 +86,12 @@ func _sanitize_user_roster() -> void:
 		if not inventory.has("skill_books") or not (inventory["skill_books"] is Dictionary):
 			inventory["skill_books"] = {}
 			changed = true
+		var books: Dictionary = inventory["skill_books"]
+		# 强力打击已删除；旧技能书等量转成同系的连斩，避免存档道具隐形丢失。
+		if books.has("Power Strike"):
+			books["Cleave"] = int(books.get("Cleave", 0)) + int(books["Power Strike"])
+			books.erase("Power Strike")
+			changed = true
 		if not inventory.has("gold"):
 			inventory["gold"] = 0
 			changed = true
@@ -123,10 +129,13 @@ func _sanitize_user_roster() -> void:
 			var old_list: Array = unit.get(list_key, [])
 			var clean_list: Array = []
 			for skill_id in old_list:
-				var skill_data: Dictionary = skills.get(str(skill_id), {})
-				var valid_skill := skills.has(str(skill_id)) and bool(skill_data.get("common", false))
-				if valid_skill:
-					clean_list.append(skill_id)
+				# 已学习与已装备的旧技能一并迁移，且不重复占用技能槽。
+				var normalized_id := "Cleave" if str(skill_id) == "Power Strike" else str(skill_id)
+				var skill_data: Dictionary = skills.get(normalized_id, {})
+				var valid_skill := skills.has(normalized_id) and bool(skill_data.get("common", false))
+				if valid_skill and not clean_list.has(normalized_id):
+					clean_list.append(normalized_id)
+					changed = changed or normalized_id != str(skill_id)
 				else:
 					changed = true
 			unit[list_key] = clean_list

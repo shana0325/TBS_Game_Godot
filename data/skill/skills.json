@@ -1,25 +1,4 @@
 {
-  "Power Strike": {
-    "name": "强力打击",
-    "desc": "攻击后额外造成100%攻击力伤害",
-    "tags": ["通用", "攻击"],
-    "trigger": "on_attack",
-    "common": true,
-    "searchable": true,
-    "cooldown": 0,
-    "condition": {
-      "target_type": "target"
-    },
-    "min_range": 1,
-    "max_range": 1,
-    "effects": [
-      {
-        "type": "damage",
-        "damage_kind": "skill",
-        "power": 1.0
-      }
-    ]
-  },
   "Cleave": {
     "name": "连斩",
     "desc": "攻击后追加一次50%攻击力伤害",
@@ -67,7 +46,7 @@
   },
   "Lifesteal": {
     "name": "吸血",
-    "desc": "攻击后恢复相当于本次伤害100%的生命",
+    "desc": "普攻造成伤害后，恢复本次伤害10%的生命",
     "tags": ["通用", "生存", "回复"],
     "trigger": "on_battle_start",
     "common": true,
@@ -81,15 +60,16 @@
     "effects": [
       {
         "type": "buff",
-        "buff": "lifesteal_full"
+        "buff": "lifesteal_tenth"
       }
     ]
   },
   "Iron Wall": {
     "name": "铁壁",
-    "desc": "战斗开始时获得相当于最大生命10%的护盾",
+    "desc": "每6秒获得自身最大生命10%的护盾",
     "tags": ["通用", "防御", "护盾"],
-    "trigger": "on_battle_start",
+    "trigger": "on_timer",
+    "interval_seconds": 6.0,
     "common": true,
     "searchable": true,
     "cooldown": 0,
@@ -109,7 +89,7 @@
   },
   "Toughness": {
     "name": "坚韧",
-    "desc": "生命低于50%时，护甲提高20",
+    "desc": "生命不高于50%时，护甲提高20%",
     "tags": ["通用", "防御", "低生命"],
     "trigger": "passive",
     "common": true,
@@ -129,15 +109,15 @@
         "conditional_hp_percent": {
           "lte": 0.5
         },
-        "stats": {
-          "defense": 20
+        "stats_percent": {
+          "defense": 0.2
         }
       }
     ]
   },
   "Revive": {
     "name": "复苏",
-    "desc": "首次死亡时恢复20%生命，每场战斗限一次",
+    "desc": "首次死亡时恢复20%生命，同时仍会触发亡语；每场战斗限一次",
     "tags": ["通用", "生存", "复活"],
     "trigger": "on_death",
     "common": true,
@@ -158,7 +138,7 @@
   },
   "Sharp": {
     "name": "锐利",
-    "desc": "暴击率提高10个百分点",
+    "desc": "暴击率提高20%",
     "tags": ["通用", "暴击"],
     "trigger": "passive",
     "common": true,
@@ -176,14 +156,14 @@
         "duration": -1,
         "permanent": true,
         "stats": {
-          "crit_rate": 10
+          "crit_rate": 20
         }
       }
     ]
   },
   "Lethal": {
     "name": "致命",
-    "desc": "暴击伤害从150%提高至200%",
+    "desc": "暴击伤害提高50%",
     "tags": ["通用", "暴击"],
     "trigger": "passive",
     "common": true,
@@ -208,30 +188,29 @@
   },
   "Thorns": {
     "name": "荆棘",
-    "desc": "受到攻击时反弹25%的最终伤害",
+    "desc": "受到普攻时反弹100%护甲值的伤害",
     "tags": ["通用", "防御", "反伤"],
-    "trigger": "passive",
+    "trigger": "on_be_attacked",
     "common": true,
     "searchable": true,
     "cooldown": 0,
     "condition": {
-      "target_type": "self"
+      "target_type": "target"
     },
     "min_range": 1,
     "max_range": 1,
     "effects": [
       {
-        "type": "reflect",
+        "type": "damage",
         "damage_kind": "skill",
-        "percent": 0.25,
-        "duration": -1,
-        "permanent": true
+        "source_stat": "defense",
+        "stat_percent": 1.0
       }
     ]
   },
   "Fear": {
     "name": "破胆",
-    "desc": "攻击后使目标护甲降低20，持续2次行动",
+    "desc": "普攻后使目标护甲降低25%，持续2秒",
     "tags": ["通用", "减益", "破甲"],
     "trigger": "on_attack",
     "common": true,
@@ -247,10 +226,135 @@
         "type": "stat_mod",
         "name": "破胆",
         "duration": 2,
-        "stats": {
-          "defense": -20
+        "stats_percent": {
+          "defense": -0.25
         }
       }
     ]
+  },
+  "Vanguard Challenge": {
+    "name": "先锋挑衅", "desc": "获得8秒嘲讽。", "tags": ["通用", "防御", "嘲讽"],
+    "trigger": "on_enter_battle", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "taunt", "name": "先锋挑衅", "duration_seconds": 8.0}]
+  },
+  "Venom Edge": {
+    "name": "淬毒之刃", "desc": "普攻后使目标中毒层数+1；每层每秒造成施加者攻击力5%的特效伤害。", "tags": ["通用", "攻击", "中毒"],
+    "trigger": "on_attack", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "target"}, "effects": [{"type": "poison", "source_attack_percent": 0.05}]
+  },
+  "Ember Blade": {
+    "name": "余烬之刃", "desc": "普攻后使目标灼烧6秒，每秒受到当前生命5%的特效伤害。", "tags": ["通用", "攻击", "灼烧"],
+    "trigger": "on_attack", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "target"}, "effects": [{"type": "burn", "target_current_hp_percent": 0.05, "duration_seconds": 6.0, "tick_interval_seconds": 1.0}]
+  },
+  "Winter Mark": {
+    "name": "寒霜印记", "desc": "普攻后施加1层霜冻，持续5秒。", "tags": ["通用", "控制", "霜冻"],
+    "trigger": "on_attack", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "target"}, "effects": [{"type": "frost", "stacks": 1, "duration_seconds": 5.0}]
+  },
+  "Crippling Order": {
+    "name": "禁言打击", "desc": "每8秒对目标造成200%攻击力的技能伤害，并使其沉默2秒。", "tags": ["通用", "主动", "控制", "沉默"],
+    "trigger": "on_timer", "interval_seconds": 8.0, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "target"}, "effects": [{"type": "damage", "damage_kind": "skill", "power": 2.0}, {"type": "silence", "name": "禁言", "duration_seconds": 2.0}]
+  },
+  "Emergency Veil": {
+    "name": "烟幕撤离", "desc": "受到伤害后生命低于40%时，获得5秒潜行；触发后冷却25秒。", "tags": ["通用", "生存", "潜行"],
+    "trigger": "on_taken_damage", "common": true, "searchable": true, "cooldown_seconds": 25.0,
+    "condition": {"target_type": "self", "hp_percent": {"lt": 0.4}}, "effects": [{"type": "stealth", "name": "烟幕撤离", "duration_seconds": 5.0}]
+  },
+  "Last Ward": {
+    "name": "临危免伤", "desc": "受到伤害后生命低于30%时，获得持续6秒的免伤；每场战斗限一次。", "tags": ["通用", "防御", "免伤"],
+    "trigger": "on_taken_damage", "common": true, "searchable": true, "once": true, "cooldown": 0,
+    "condition": {"target_type": "self", "hp_percent": {"lt": 0.3}}, "effects": [{"type": "damage_immunity", "name": "临危免伤", "duration_seconds": 6.0}]
+  },
+  "Guardian Aura": {
+    "name": "守望战令", "desc": "使2格内友军护甲提高12%，持续整场战斗。", "tags": ["通用", "防御", "战吼"],
+    "trigger": "on_enter_battle", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "nearby_allies", "range": 2}, "effects": [{"type": "stat_mod", "name": "守望战令", "duration": -1, "permanent": true, "stats_percent": {"defense": 0.12}}]
+  },
+  "Battle Standard": {
+    "name": "战旗鼓舞", "desc": "使2格内友军攻击力提高12%，持续整场战斗。", "tags": ["通用", "辅助", "战吼"],
+    "trigger": "on_enter_battle", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "nearby_allies", "range": 2}, "effects": [{"type": "stat_mod", "name": "战旗鼓舞", "duration": -1, "permanent": true, "stats_percent": {"attack": 0.12}}]
+  },
+  "Dormant Resolve": {
+    "name": "蛰伏之力", "desc": "本场战斗攻击提高30、护甲提高15。", "tags": ["通用", "成长", "休眠"],
+    "trigger": "on_enter_battle", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "dormant", "name": "蛰伏之力", "duration_seconds": 8.0, "awaken_effects": [{"type": "stat_mod", "name": "蛰伏苏醒", "duration": -1, "permanent": true, "stats": {"attack": 30, "defense": 15}}]}]
+  },
+  "Vengeful Heart": {
+    "name": "复仇誓约", "desc": "本场战斗攻击提高15。", "tags": ["通用", "成长", "复仇"],
+    "trigger": "on_avenge", "avenge_count": 2, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "stat_mod", "name": "复仇誓约", "duration": -1, "permanent": true, "stats": {"attack": 15}}]
+  },
+  "Deathrattle Backup": {
+    "name": "遗愿援军", "desc": "在自身附近召唤一名战士。", "tags": ["通用", "召唤", "亡语"],
+    "trigger": "on_death", "common": true, "searchable": true, "once": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "summon", "unit_type": "Warrior"}]
+  },
+  "Timed Bulwark": {
+    "name": "坚壁号令", "desc": "每10秒为自身获得最大生命12%的护盾。", "tags": ["通用", "防御", "护盾"],
+    "trigger": "on_timer", "interval_seconds": 10.0, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "shield_max_hp_percent", "percent": 0.12, "duration": -1, "permanent": true}]
+  },
+  "Purifying Rhythm": {
+    "name": "净化律动", "desc": "每12秒净化自身，并恢复80点生命。", "tags": ["通用", "辅助", "净化", "回复"],
+    "trigger": "on_timer", "interval_seconds": 12.0, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "cleanse"}, {"type": "heal", "amount": 80}]
+  },
+  "War Cry Guard": {
+    "name": "战吼护阵", "desc": "入场时为其他所有友军提供其自身最大生命10%的护盾。", "tags": ["通用", "防御", "护盾", "战吼"],
+    "trigger": "on_enter_battle", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "all_allies"}, "effects": [{"type": "shield_max_hp_percent", "percent": 0.1, "duration": -1, "permanent": true}]
+  },
+  "Runebreak Strike": {
+    "name": "破法重击", "desc": "每完成3次普攻，第4次普攻后驱散当前目标身上的可驱散增益。", "tags": ["通用", "攻击", "驱散"],
+    "trigger": "on_attack", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "target", "attack_count_multiple": 4}, "effects": [{"type": "dispel", "friendly": false}]
+  },
+  "Triage Aegis": {
+    "name": "急救结界", "desc": "每7秒净化护盾未满且生命比例最低的其他友军，并为其添加最大生命10%的护盾；所有其他友军护盾已满时等待可用目标。", "tags": ["通用", "辅助", "净化", "护盾"],
+    "trigger": "on_timer", "interval_seconds": 7.0, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "lowest_hp_ally_with_shield_room"}, "effects": [{"type": "cleanse"}, {"type": "shield_max_hp_percent", "percent": 0.1, "duration": -1, "permanent": true}]
+  },
+  "Last Smoke": {
+    "name": "断后烟幕", "desc": "每场战斗首次有其他友军阵亡时，自身获得5秒潜行。", "tags": ["通用", "生存", "潜行"],
+    "trigger": "on_ally_death", "common": true, "searchable": true, "once": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "stealth", "name": "断后烟幕", "duration_seconds": 5.0}]
+  },
+  "Final Benediction": {
+    "name": "遗愿祈福", "desc": "阵亡时净化其他所有存活友军，并为其各添加自身最大生命10%的护盾。", "tags": ["通用", "亡语", "净化", "护盾"],
+    "trigger": "on_death", "common": true, "searchable": true, "once": true, "cooldown": 0,
+    "condition": {"target_type": "all_allies"}, "effects": [{"type": "cleanse"}, {"type": "shield_max_hp_percent", "percent": 0.1, "duration": -1, "permanent": true}]
+  },
+  "Miasma Wave": {
+    "name": "瘴气波", "desc": "每11秒使所有存活敌人中毒层数+1。", "tags": ["通用", "主动", "中毒", "群体"],
+    "trigger": "on_timer", "interval_seconds": 11.0, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "all_enemies"}, "effects": [{"type": "poison"}]
+  },
+  "Winter Pulse": {
+    "name": "寒潮脉冲", "desc": "每9秒对所有存活敌人施加1层持续5秒的霜冻。", "tags": ["通用", "主动", "霜冻", "群体"],
+    "trigger": "on_timer", "interval_seconds": 9.0, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "all_enemies"}, "effects": [{"type": "frost", "stacks": 1, "duration_seconds": 5.0}]
+  },
+  "Purity Oath": {
+    "name": "清净誓约", "desc": "入场时使其他所有友军在8秒内免疫中毒与灼烧。", "tags": ["通用", "战吼", "防御", "免疫"],
+    "trigger": "on_enter_battle", "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "all_allies"}, "effects": [{"type": "immunity", "name": "清净誓约", "duration": 8, "states": ["poison", "burn"]}]
+  },
+  "Shadow Contract": {
+    "name": "影卫契约", "desc": "每15秒在自身附近召唤一名刺客。", "tags": ["通用", "主动", "召唤"],
+    "trigger": "on_timer", "interval_seconds": 15.0, "common": true, "searchable": true, "cooldown": 0,
+    "condition": {"target_type": "self"}, "effects": [{"type": "summon", "unit_type": "Assassin"}]
+  },
+  "Venom Lock": {
+    "name": "毒蚀禁言", "desc": "普攻带有中毒状态的敌人后，使其沉默2秒；触发后需再完成4次普攻。", "tags": ["通用", "攻击", "中毒", "沉默"],
+    "trigger": "on_attack", "common": true, "searchable": true, "cooldown": 4,
+    "condition": {"target_type": "target", "target_has_buff": "中毒"}, "effects": [{"type": "silence", "name": "毒蚀禁言", "duration_seconds": 2.0}]
+  },
+  "Counterspell Shell": {
+    "name": "破咒反震", "desc": "每场战斗首次受到普攻时，驱散攻击者身上的可驱散增益，并为其施加1层霜冻。", "tags": ["通用", "防御", "驱散", "霜冻"],
+    "trigger": "on_be_attacked", "common": true, "searchable": true, "once": true, "cooldown": 0,
+    "condition": {"target_type": "target"}, "effects": [{"type": "dispel", "friendly": false}, {"type": "frost", "stacks": 1, "duration_seconds": 5.0}]
   }
 }

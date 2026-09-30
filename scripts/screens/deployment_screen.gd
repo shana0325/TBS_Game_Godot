@@ -26,7 +26,7 @@ var roster_popup: PopupPanel
 var sale_confirmation: ConfirmationDialog
 var pending_sale_id: String = ""
 var relic_summary_bar: HBoxContainer
-var relic_detail_popup: RelicDetailPopup
+var relic_scroll: ScrollContainer
 var action_buttons: Array[Control] = []
 var info_panel: UnitDetailPanel
 var backpack_panel: BackpackPanel
@@ -41,15 +41,16 @@ var dragging_slot: int = -1
 var drag_start_position := Vector2.ZERO
 var drag_moved := false
 
+@onready var stage: BattlefieldStage = $Stage
+
 func _ready() -> void:
 	# 根节点接收底部单位拖入战场的放置事件；具体按钮和卡片仍由子控件处理点击。
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	scenario_id = GameSession.current_scenario
 	var scenario := _load_scenario()
 	grid = Grid.new(int(scenario.get("width", 12)), int(scenario.get("height", 6)))
-	# 部署阶段同样保证战场是主区域，右侧编成栏只作为辅助面板。
-	var initial_vp := get_viewport_rect().size
-	tile_size = BattleLayout.compute_tile_size(grid.width, grid.height, _board_available_size(initial_vp), 0.86)
+	stage.configure(grid)
+	tile_size = stage.tile_size
 	deployment_zone = _parse_cells(scenario.get("deployment_zone", []))
 	roster_units = GameDatabase.player_roster.get("units", [])
 	_build_selectable_units()
@@ -61,10 +62,26 @@ func _ready() -> void:
 # 只展示已拥有的角色；Mod 单位也需要先通过招募加入编成。
 func _build_selectable_units() -> void:
 	selectable_units.clear()
+	var occupied_slots: Dictionary = {}
+	var owners: Dictionary = {}
 	for i in roster_units.size():
+		var saved_slot := int(roster_units[i].get("bench_slot", -1))
+		if saved_slot >= 0 and saved_slot < ProgressManager.MAX_ROSTER_SIZE and not owners.has(saved_slot):
+			owners[saved_slot] = i
+			occupied_slots[saved_slot] = true
+	for i in roster_units.size():
+		var roster_entry: Dictionary = roster_units[i]
+		var bench_slot := int(roster_entry.get("bench_slot", -1))
+		if owners.get(bench_slot, -1) != i:
+			bench_slot = 0
+			while occupied_slots.has(bench_slot):
+				bench_slot += 1
+			roster_entry["bench_slot"] = bench_slot
+			occupied_slots[bench_slot] = true
 		selectable_units.append({
-			"type": str(roster_units[i].get("type", "Hero")),
-			"roster_index": i
+			"type": str(roster_entry.get("type", "Hero")),
+			"roster_index": i,
+			"bench_slot": bench_slot
 		})
 
 func _load_scenario() -> Dictionary:
@@ -110,42 +127,28 @@ func _parse_cells(raw: Array) -> Array:
 	return result
 
 func _build_ui(scenario: Dictionary) -> void:
-	var title := Label.new()
-	title.text = "部署 - %s" % str(scenario.get("name", scenario_id))
-	title.add_theme_font_size_override("font_size", 34)
-	title.add_theme_color_override("font_color", Color("#f3d99d"))
-	title.position = Vector2(20, 12)
-	add_child(title)
-	population_label = Label.new()
-	population_label.position = Vector2(480, 23)
-	population_label.add_theme_font_size_override("font_size", 17)
-	population_label.add_theme_color_override("font_color", Color("#e5d5ad"))
-	add_child(population_label)
+	stage.floor_label.text = GameSession.get_floor_label() if GameSession.mode == GameSession.MODE_TOWER \
+		else str(scenario.get("name", scenario_id))
+	stage.sub_label.visible = false
+	population_label = stage.turn_label
 
-	# 顶部遗物栏用图标展示持有物，悬停提示名称、效果和当前成长。
+	# 标题按钮与滚动图标由部署/战斗共用的战场节点提供。
+	relic_scroll = stage.relic_scroll
 	relic_summary_bar = HBoxContainer.new()
-	relic_summary_bar.position = Vector2(20, 58)
 	relic_summary_bar.add_theme_constant_override("separation", 7)
-	add_child(relic_summary_bar)
+	relic_scroll.add_child(relic_summary_bar)
 	_refresh_relic_summary()
 
 	back_button = Button.new()
 	back_button.text = "返回选关"
-	back_button.custom_minimum_size = Vector2(220, 48)
+	back_button.custom_minimum_size = Vector2(104, 42)
+	BattlefieldStage.style_action_button(back_button)
 	back_button.pressed.connect(_go_back)
 	add_child(back_button)
 
-	# 战场视图：与战斗场景共用坐标和格子尺寸，进入战斗时不产生放大跳变。
-	grid_view = Node2D.new()
-	var vp := get_viewport_rect().size
-	grid_view.position = _board_position(vp)
-	var gv := preload("res://scripts/ui/grid_view.gd").new()
-	grid_view.add_child(gv)
-	grid_view.get_child(0).setup(grid, tile_size)
-	add_child(grid_view)
-
-	units_layer = Node2D.new()
-	grid_view.add_child(units_layer)
+	# 共用场景已经创建棋盘与单位层；部署阶段只额外显示可落子范围。
+	grid_view = stage.battle_view
+	units_layer = stage.units_layer
 	grid_view.get_child(0).set_highlights(deployment_zone, [])
 
 	# 预览敌方单位
@@ -158,51 +161,40 @@ func _build_ui(scenario: Dictionary) -> void:
 		var unit := Unit.create_from_config(unit_type, TurnManager.ENEMY_CAMP, pos, config)
 		_create_unit_view(unit)
 
-	# 底部横向单位栏：单位卡片可直接拖到战场部署，名称由 UnitView 绘制。
-	roster_panel = PanelContainer.new()
-	roster_panel.custom_minimum_size = Vector2(0, 176)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	roster_scroll = ScrollContainer.new()
-	roster_scroll.name = "DeploymentUnitScroll"
-	roster_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	roster_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	roster_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	roster_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	roster_container = HBoxContainer.new()
-	roster_container.add_theme_constant_override("separation", 10)
-	roster_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	roster_scroll.add_child(roster_container)
-	margin.add_child(roster_scroll)
-	roster_panel.add_child(margin)
-	add_child(roster_panel)
+	# 底部单位栏复用同一个节点，进入战斗后只关闭拖拽。
+	roster_panel = stage.roster_panel
+	roster_scroll = stage.roster_scroll
+	roster_container = stage.roster_container
+	stage.bench_move_requested.connect(_on_bench_move_requested)
 	for i in selectable_units.size():
 		var card := DeploymentUnitCard.new()
-		card.setup(i, str(selectable_units[i].get("type", "Unit")), int(selectable_units[i].get("roster_index", -1)), tile_size)
+		card.setup(i, str(selectable_units[i].get("type", "Unit")), int(selectable_units[i].get("roster_index", -1)), mini(tile_size, 74))
+		card.bench_slot = int(selectable_units[i].get("bench_slot", i))
 		card.inspect_requested.connect(_on_unit_card_inspect)
 		card.skill_book_drop_requested.connect(_on_unit_card_skill_book_drop)
+		card.bench_move_requested.connect(_on_bench_move_requested)
 		roster_container.add_child(card)
 		unit_cards.append(card)
+	stage.arrange_bench_cards(unit_cards)
 
 	start_button = Button.new()
 	start_button.text = "开始战斗"
-	MenuStyle.apply_primary(start_button)
-	start_button.custom_minimum_size = Vector2(220, 48)
+	BattlefieldStage.style_action_button(start_button)
+	start_button.custom_minimum_size = Vector2(104, 42)
 	start_button.position = Vector2(20, 150)
 	start_button.disabled = true
 	start_button.pressed.connect(_on_start_pressed)
 	add_child(start_button)
 	backpack_button = Button.new()
 	backpack_button.text = "背包"
-	backpack_button.custom_minimum_size = Vector2(220, 48)
+	backpack_button.custom_minimum_size = Vector2(104, 42)
+	BattlefieldStage.style_action_button(backpack_button)
 	backpack_button.pressed.connect(_on_backpack_pressed)
 	add_child(backpack_button)
 	roster_button = Button.new()
 	roster_button.text = "管理队伍"
-	roster_button.custom_minimum_size = Vector2(220, 48)
+	roster_button.custom_minimum_size = Vector2(104, 42)
+	BattlefieldStage.style_action_button(roster_button)
 	roster_button.pressed.connect(_show_roster_management)
 	add_child(roster_button)
 	# 操作区按“从下往上”维护，后续新增按钮直接追加到数组即可。
@@ -210,39 +202,25 @@ func _build_ui(scenario: Dictionary) -> void:
 	_build_roster_management()
 	_build_info_panel()
 	_build_backpack_panel()
-	relic_detail_popup = RelicDetailPopup.new()
-	relic_detail_popup.name = "RelicDetailPopup"
-	add_child(relic_detail_popup)
-
 	_refresh_state()
 	_layout_ui()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and grid != null:
-		var vp := get_viewport_rect().size
-		tile_size = BattleLayout.compute_tile_size(grid.width, grid.height, _board_available_size(vp), 0.86)
-		grid_view.position = _board_position(vp)
-		grid_view.get_child(0).setup(grid, tile_size)
+		stage.resize_board()
+		tile_size = stage.tile_size
 		for child in units_layer.get_children():
 			if child is UnitView:
 				child.tile_size = tile_size
 				child.refresh()
 		for card in unit_cards:
-			card.set_tile_size(tile_size)
+			card.set_tile_size(mini(tile_size, 74))
 		_layout_ui()
 		_refresh_units()
 
 # 窗口尺寸变化时重排部署辅助控件，保证主战场、按钮和底部单位栏都留在可视区域。
 func _layout_ui() -> void:
 	var vp := get_viewport_rect().size
-	if relic_summary_bar != null:
-		relic_summary_bar.size = Vector2(maxf(240.0, vp.x - 300.0), 48.0)
-	if roster_panel != null:
-		# 底部保留 24px 安全边距，保证面板和横向滚动条完整可见。
-		var tray_height := _tray_height()
-		# 额外保留 36px 客户区底部安全边距，避免窗口边框/任务栏裁掉面板下沿。
-		roster_panel.position = Vector2(24.0, maxf(250.0, vp.y - tray_height - 36.0))
-		roster_panel.size = Vector2(maxf(320.0, vp.x - 48.0), tray_height)
 	_layout_action_buttons(vp)
 	if info_panel != null:
 		info_panel.fit_to_viewport()
@@ -251,30 +229,19 @@ func _layout_ui() -> void:
 		skill_replace_panel.position = (vp - replace_size) / 2.0
 		skill_replace_panel.size = replace_size
 
-# 为右侧操作区和底部单位栏预留空间，避免地图与文字互相覆盖。
-func _board_position(_vp: Vector2) -> Vector2:
-	return Vector2(24.0, 104.0)
-
-func _board_available_size(vp: Vector2) -> Vector2:
-	return Vector2(maxf(320.0, vp.x - 48.0), maxf(260.0, vp.y - 300.0))
-
 # 右侧操作区与战场同高，按钮从区域底部向上排列，不会落到战场下方。
 func _layout_action_buttons(vp: Vector2) -> void:
 	if grid == null:
 		return
-	var board_right := _board_position(vp).x + grid.width * tile_size
-	var board_bottom := _board_position(vp).y + grid.height * tile_size
-	var action_x := minf(board_right + 24.0, vp.x - 244.0)
-	var button_y := board_bottom - 48.0
+	var board := stage.board_rect()
+	var action_x := minf(board.end.x + 22.0, vp.x - 132.0)
+	var button_y := board.end.y - 44.0
 	for button in action_buttons:
 		if button == null:
 			continue
 		button.position = Vector2(maxf(20.0, action_x), button_y)
-		button.size = Vector2(220.0, 48.0)
-		button_y -= 60.0
-
-func _tray_height() -> float:
-	return DeploymentUnitCard.tray_height_for_tile(tile_size)
+		button.size = Vector2(104.0, 42.0)
+		button_y -= 50.0
 
 # 构建占据视口大部分空间的角色资料页。
 func _build_info_panel() -> void:
@@ -389,19 +356,12 @@ func _unit_for_slot(slot: int) -> Unit:
 	RelicSystem.apply_run_bonuses_to_unit(unit)
 	return unit
 
-# 刷新部署页顶部遗物图标，悬停提示包含名称、效果和数据驱动的当前成长。
+# 刷新部署页顶部遗物图标，悬停提示包含名称、效果和当前成长。
 func _refresh_relic_summary() -> void:
 	if relic_summary_bar == null:
 		return
 	for child in relic_summary_bar.get_children():
 		child.queue_free()
-	var title := Label.new()
-	title.text = "已有遗物"
-	title.custom_minimum_size = Vector2(76, 44)
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 16)
-	title.add_theme_color_override("font_color", Color("#d9c6a0"))
-	relic_summary_bar.add_child(title)
 	if GameSession.run_relics.is_empty():
 		var empty := Label.new()
 		empty.text = "暂无"
@@ -414,7 +374,7 @@ func _refresh_relic_summary() -> void:
 		if relic.is_empty():
 			continue
 		var icon := TextureButton.new()
-		icon.custom_minimum_size = Vector2(44, 44)
+		icon.custom_minimum_size = Vector2(36, 36)
 		icon.ignore_texture_size = true
 		icon.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture_normal = ArtManager.get_relic_icon(str(relic_id))
@@ -424,7 +384,7 @@ func _refresh_relic_summary() -> void:
 		if not growth_lines.is_empty():
 			tooltip += "\n\n当前成长\n" + "\n".join(growth_lines)
 		icon.tooltip_text = tooltip
-		icon.pressed.connect(_show_relic_details.bind(str(relic_id)))
+		icon.pressed.connect(stage.show_relic_details.bind(str(relic_id)))
 		relic_summary_bar.add_child(icon)
 		var stacks := GameSession.get_relic_stack(str(relic_id))
 		if stacks > 1:
@@ -434,13 +394,37 @@ func _refresh_relic_summary() -> void:
 			stack_label.add_theme_color_override("font_color", Color("#f2d08b"))
 			relic_summary_bar.add_child(stack_label)
 
-# 点击顶部遗物图标时打开详情弹窗。
-func _show_relic_details(relic_id: String) -> void:
-	if relic_detail_popup != null:
-		relic_detail_popup.show_relic(relic_id)
-
 func _on_unit_card_inspect(slot: int) -> void:
 	_open_unit_info(_unit_for_slot(slot))
+
+# 把拖动后的备战格写回阵容；若目标格属于已上场单位，则交换两人的格号。
+func _on_bench_move_requested(selectable_index: int, target_slot: int) -> void:
+	if selectable_index < 0 or selectable_index >= unit_cards.size() or target_slot < 0 \
+			or target_slot >= ProgressManager.MAX_ROSTER_SIZE or placements.has(selectable_index):
+		return
+	var source_slot := unit_cards[selectable_index].bench_slot
+	if source_slot == target_slot:
+		return
+	var displaced_index := -1
+	for i in selectable_units.size():
+		if int(selectable_units[i].get("bench_slot", -1)) == target_slot:
+			displaced_index = i
+			_set_bench_slot(i, source_slot)
+			break
+	_set_bench_slot(selectable_index, target_slot)
+	if not ProgressManager.save_roster():
+		_set_bench_slot(selectable_index, source_slot)
+		if displaced_index >= 0:
+			_set_bench_slot(displaced_index, target_slot)
+	stage.arrange_bench_cards(unit_cards)
+
+# 同步内存阵容、部署快照和显示卡的备战格号。
+func _set_bench_slot(selectable_index: int, target_slot: int) -> void:
+	selectable_units[selectable_index]["bench_slot"] = target_slot
+	unit_cards[selectable_index].bench_slot = target_slot
+	var roster_index := int(selectable_units[selectable_index].get("roster_index", -1))
+	if roster_index >= 0 and roster_index < roster_units.size():
+		roster_units[roster_index]["bench_slot"] = target_slot
 
 func _on_unit_card_skill_book_drop(slot: int, skill_id: String) -> void:
 	_attempt_skill_book_drop(_unit_for_slot(slot), skill_id)
@@ -507,6 +491,7 @@ func _create_unit_view(unit: Unit) -> void:
 	# 战场区域只保留小人、阵营框和血条，避免文字干扰格子阅读。
 	uv.show_name = false
 	uv.show_hp_text = false
+	uv.battle_style = true
 	units_layer.add_child(uv)
 	unit_views[unit] = uv
 
@@ -522,6 +507,9 @@ func _unit_at_cell(cell: Vector2i) -> Unit:
 	return null
 
 func _input(event: InputEvent) -> void:
+	# 遗物总览或详情打开时，棋盘不响应同一次鼠标点击。
+	if stage != null and stage.blocks_board_input():
+		return
 	if (roster_popup != null and roster_popup.visible) or (sale_confirmation != null and sale_confirmation.visible):
 		return
 	# 背包打开时由其遮罩独占鼠标，避免点击弹窗内容误触发战场拖动。
@@ -566,7 +554,7 @@ func _input(event: InputEvent) -> void:
 				_open_unit_info(_unit_for_slot(clicked_slot))
 				_refresh_state()
 			else:
-				_finish_battlefield_drag(_screen_to_cell(event.position))
+				_finish_battlefield_drag(_screen_to_cell(event.position), event.position)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion and dragging_slot >= 0:
 		if event.position.distance_to(drag_start_position) >= 8.0:
@@ -709,7 +697,8 @@ func _close_skill_replace_popup() -> void:
 	pending_skill_unit = {}
 	pending_skill_book_id = ""
 
-func _finish_battlefield_drag(cell: Vector2i) -> void:
+# 战场拖拽松开时优先识别鼠标所在的备战格，撤下后保留玩家选择的位置。
+func _finish_battlefield_drag(cell: Vector2i, screen_position: Vector2) -> void:
 	var slot := dragging_slot
 	dragging_slot = -1
 	grid_view.get_child(0).set_hover(Vector2i(-1, -1))
@@ -721,7 +710,10 @@ func _finish_battlefield_drag(cell: Vector2i) -> void:
 		return
 	var occupied = cell_to_slot.get(cell, null)
 	if not grid.in_bounds(cell.x, cell.y) or not deployment_zone.has(cell):
+		var bench_slot := stage.bench_slot_at(screen_position)
 		_withdraw_slot(slot)
+		if bench_slot >= 0:
+			_on_bench_move_requested(slot, bench_slot)
 		selected_slot = -1
 		_refresh_state()
 		return
@@ -775,12 +767,13 @@ func _refresh_units() -> void:
 func _refresh_state() -> void:
 	var placed := placements.size()
 	if population_label != null:
-		population_label.text = "上阵 %d/%d  ·  后备 %d/%d  ·  金币 %d" % [
-			placed, ProgressManager.get_deployment_limit(), roster_units.size(),
-			ProgressManager.MAX_ROSTER_SIZE, ProgressManager.get_gold()]
+		population_label.text = "部署  %d/%d" % [placed, ProgressManager.get_deployment_limit()]
+		stage.team_label.text = "后备 %d/%d" % [roster_units.size(), ProgressManager.MAX_ROSTER_SIZE]
+		stage.enemy_label.text = "金币 %d" % ProgressManager.get_gold()
 	for i in unit_cards.size():
 		unit_cards[i].set_deployed(placements.has(i))
 		unit_cards[i].modulate = Color(1.15, 1.15, 0.85) if i == selected_slot else Color.WHITE
+	stage.arrange_bench_cards(unit_cards)
 	start_button.disabled = placed == 0 or placed > ProgressManager.get_deployment_limit()
 
 func _on_start_pressed() -> void:
@@ -799,7 +792,18 @@ func _on_start_pressed() -> void:
 		GameSession.start_tower_battle(deployed)
 	else:
 		GameSession.set_deployed_units(deployed)
-	get_tree().change_scene_to_file("res://scenes/battle_screen.tscn")
+	# 保留当前战场实例；战斗控制器接管同一棋盘、背景和阵容栏。
+	var battle_screen := preload("res://scenes/battle_screen.tscn").instantiate() as Control
+	if battle_screen == null:
+		return
+	var unused_stage := battle_screen.get_node("Stage")
+	battle_screen.remove_child(unused_stage)
+	unused_stage.free()
+	stage.reparent(battle_screen, false)
+	battle_screen.move_child(stage, 0)
+	get_tree().root.add_child(battle_screen)
+	get_tree().current_scene = battle_screen
+	queue_free()
 
 func _go_back() -> void:
 	get_tree().change_scene_to_file("res://scenes/level_select.tscn")

@@ -5,7 +5,7 @@ extends RefCounted
 # 奖励选项数量：布局支持横向滚动，未来可直接改为 4 或 5。
 const REWARD_OPTION_COUNT := 3
 
-# 生成指定数量的互不重复遗物选项。
+# 从符合条件的遗物中等概率抽取互不重复的选项。
 static func generate_options() -> Array:
 	var candidates: Array = []
 	# 普通遗物仅出现一次；可重复遗物在达到层数上限前都可再次出现。

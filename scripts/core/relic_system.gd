@@ -184,6 +184,9 @@ static func get_damage_bonus_percent(source: Unit, target: Unit, kind: String, s
 			"gathering_storm":  # 层积风暴：每层普攻/技能伤害 +1%
 				if GameSession.mode == GameSession.MODE_TOWER:
 					bonus += 0.01 * float(maxi(GameSession.tower_floor - 1, 0))
+			"ember_lens":
+				if kind == DamageSystem.SKILL and (target.has_status("poison") or target.has_status("burn")):
+					bonus += 0.15
 	# 猎魔嗅探：战斗中被标记（攻击力最高的敌人）8 秒内，我方对其伤害 +20%
 	if not state.is_empty() and int(state.get("sixth_mark", -1)) != -1:
 		if target.get_instance_id() == int(state.get("sixth_mark", -1)) \
@@ -242,6 +245,13 @@ static func _apply_overgrowth(manager: BattleManager, game) -> void:
 static func on_death(manager: BattleManager, unit: Unit, game) -> void:
 	if unit == null or unit.camp != TurnManager.PLAYER_CAMP:
 		return
+	if GameSession.run_relics.has("fallen_banner") and not unit.is_summoned:
+		var stacks := int(manager.relic_state.get("fallen_banner_stacks", 0))
+		if stacks < 3:
+			manager.relic_state["fallen_banner_stacks"] = stacks + 1
+			for ally in manager.units:
+				if ally is Unit and ally.alive and ally.camp == TurnManager.PLAYER_CAMP:
+					ally.add_battle_stat("attack_speed", 10.0)
 	if manager.relic_revive_used:
 		return
 	for relic_id in GameSession.run_relics:
@@ -271,10 +281,15 @@ static func begin_battle(manager: BattleManager) -> void:
 		"harvest_hits": {},
 		"manaflow_counts": {},
 		"grasp_grant": {},
-		"guardian_turn": {},
-		"unit_turns": {},
+		"guardian_ready_at": {},
 		"airy_last": {},
 		"biscuit_next_tick": 1.0,
+		"shield_breaker_ready": {},
+		"critical_talisman_used": {},
+		"fallen_banner_stacks": 0,
+		"summon_call_used": false,
+		"plague_next_tick": 8.0,
+		"purifying_next_tick": 10.0,
 	}
 	var relics = GameSession.run_relics
 	for unit in manager.units:
@@ -284,6 +299,21 @@ static func begin_battle(manager: BattleManager) -> void:
 			manager.relic_state["grasp_grant"][unit.get_instance_id()] = {"next": 4.0, "empowered": false}
 	if relics.has("sixth_sense"):
 		_apply_sixth_sense_start(manager)
+	if relics.has("war_drum"):
+		for unit in manager.units:
+			if unit is Unit and unit.alive and unit.camp == TurnManager.PLAYER_CAMP:
+				unit.add_buff(Buff.from_data({"name": "先阵战鼓", "modifiers": {"attack_speed": 25},
+					"duration_seconds": 8.0, "is_beneficial": true}))
+
+# 在首次主动技能计时初始化之后缩短本场首次施放准备时间。
+static func prepare_first_active_cast(manager: BattleManager) -> void:
+	if not GameSession.run_relics.has("dawn_hourglass"):
+		return
+	for unit in manager.units:
+		if unit is Unit and unit.alive and unit.camp == TurnManager.PLAYER_CAMP:
+			for skill in unit.skills:
+				if skill is Skill and skill.trigger == SkillTriggerSystem.ON_TIMER:
+					skill.interval_remaining *= 0.7
 
 # 猎魔嗅探：战斗开始时标记敌方攻击力最高者 8 秒（真实时限按 state 时间判断）。
 static func _apply_sixth_sense_start(manager: BattleManager) -> void:
@@ -300,8 +330,8 @@ static func _apply_sixth_sense_start(manager: BattleManager) -> void:
 	var st: Dictionary = manager.relic_state
 	st["sixth_mark"] = mark.get_instance_id()
 	st["sixth_mark_expiry"] = 8.0
-	# 视觉标记（约 2 次行动后消失，真实失效以 state 时间为准）
-	var data := {"name": "猎魔标记", "duration": 2, "is_mark": true, "is_beneficial": false}
+	# 视觉标记与运行时规则都按秒失效。
+	var data := {"name": "猎魔标记", "duration_seconds": 8.0, "is_mark": true, "is_beneficial": false}
 	mark.add_buff(Buff.from_data(data))
 	if manager.game != null and manager.game.has_method("add_log"):
 		manager.game.add_log("%s 被猎魔嗅探标记（攻击力最高的敌人）" % mark.get_display_name())
@@ -323,6 +353,14 @@ static func tick_battle(manager: BattleManager, delta: float) -> void:
 					unit.heal(roundi(unit.max_hp * 0.05), unit)
 			next_tick += 1.0
 		st["biscuit_next_tick"] = next_tick
+	if relics.has("plague_censer"):
+		while float(st["time"]) >= float(st.get("plague_next_tick", 8.0)):
+			st["plague_next_tick"] = float(st.get("plague_next_tick", 8.0)) + 8.0
+			_apply_plague_censer(manager, game)
+	if relics.has("purifying_bell"):
+		while float(st["time"]) >= float(st.get("purifying_next_tick", 10.0)):
+			st["purifying_next_tick"] = float(st.get("purifying_next_tick", 10.0)) + 10.0
+			_apply_purifying_bell(manager, game)
 	# 不朽血契：每 4 秒给有该遗物的我方单位发放一次"下次普攻强化"
 	if relics.has("grasp_undying"):
 		var grasp: Dictionary = st.get("grasp_grant", {})
@@ -338,15 +376,75 @@ static func tick_battle(manager: BattleManager, delta: float) -> void:
 				if game != null and game.has_method("add_log"):
 					game.add_log("%s 获得下一次普攻强化（不朽血契）" % unit.get_display_name())
 
-# 敌方单位每回合判定点：为守护之盾提供"每回合至多一次"的回合计数。
-static func on_turn_start(manager: BattleManager, unit: Unit, game) -> void:
-	var st: Dictionary = manager.relic_state
-	if st.is_empty() or unit == null:
+# 瘴疫香炉每八秒给当前生命最高的敌人施加独立计时的中毒层。
+static func _apply_plague_censer(manager: BattleManager, game) -> void:
+	var target: Unit = null
+	var source: Unit = null
+	for unit in manager.units:
+		if not (unit is Unit) or not unit.alive:
+			continue
+		if unit.camp == TurnManager.ENEMY_CAMP and (target == null or unit.hp > target.hp):
+			target = unit
+		elif unit.camp == TurnManager.PLAYER_CAMP and source == null:
+			source = unit
+	if source != null and target != null:
+		EffectSystem.apply_effects(source, target, [{"type": "poison", "damage": 12}], game, manager)
+
+# 净心钟按当前生命比例选择友军，每十秒净化并回复一次。
+static func _apply_purifying_bell(manager: BattleManager, game) -> void:
+	var target: Unit = null
+	for unit in manager.units:
+		if unit is Unit and unit.alive and unit.camp == TurnManager.PLAYER_CAMP:
+			if target == null or unit.hp / maxf(unit.max_hp, 1.0) < target.hp / maxf(target.max_hp, 1.0):
+				target = unit
+	if target != null:
+		EffectSystem.apply_effects(target, target, [{"type": "cleanse"}], game, manager)
+		target.heal(roundi(target.max_hp * 0.05), target)
+
+# 首名我方召唤物登场时，以召唤者生命上限为基准给全队护盾。
+static func on_summon(manager: BattleManager, summoner: Unit, summoned: Unit) -> void:
+	if summoner == null or summoned == null or summoner.camp != TurnManager.PLAYER_CAMP \
+			or not GameSession.run_relics.has("summon_call") or bool(manager.relic_state.get("summon_call_used", false)):
 		return
-	var turns: Dictionary = st.get("unit_turns", {})
-	var uid := unit.get_instance_id()
-	turns[uid] = int(turns.get(uid, 0)) + 1
-	st["unit_turns"] = turns
+	manager.relic_state["summon_call_used"] = true
+	var amount := roundi(summoner.max_hp * 0.08)
+	for unit in manager.units:
+		if unit is Unit and unit.alive and unit.camp == TurnManager.PLAYER_CAMP:
+			_apply_shield_to(unit, amount, manager.game)
+
+# 击破护盾时追加特效伤害；每名攻击者有独立三秒冷却。
+static func on_shield_break(manager: BattleManager, source: Unit, target: Unit, report: Dictionary) -> void:
+	if source == null or target == null or not target.alive or source.camp != TurnManager.PLAYER_CAMP \
+			or not GameSession.run_relics.has("shield_breaker") \
+			or str(report.get("damage_kind", "")) != DamageSystem.ATTACK:
+		return
+	var absorbed := int(report.get("result", {}).get("shield_absorbed", 0))
+	if absorbed <= 0 or target.get_total_shield() > 0:
+		return
+	var ready: Dictionary = manager.relic_state.get("shield_breaker_ready", {})
+	var sid := source.get_instance_id()
+	var now := manager.get_battle_time()
+	if now < float(ready.get(sid, -1.0)):
+		return
+	ready[sid] = now + 3.0
+	var damage := roundi(float(absorbed) * 0.30)
+	if damage > 0:
+		DamageSystem.apply(source, target, {"damage_kind": DamageSystem.EFFECT,
+			"raw_damage": damage}, manager, manager.game)
+
+# 每名友军首次造成暴击伤害后获得本场战斗攻速加成。
+static func on_critical_hit(manager: BattleManager, source: Unit, report: Dictionary) -> void:
+	if source == null or not source.alive or source.camp != TurnManager.PLAYER_CAMP \
+			or not GameSession.run_relics.has("critical_talisman") \
+			or not bool(report.get("crit", false)) \
+			or str(report.get("damage_kind", "")) == DamageSystem.EFFECT:
+		return
+	var used: Dictionary = manager.relic_state.get("critical_talisman_used", {})
+	var sid := source.get_instance_id()
+	if used.has(sid):
+		return
+	used[sid] = true
+	source.add_battle_stat("attack_speed", 15.0)
 
 # 我方造成普攻/技能伤害时触发：收割之魂、守护精灵、灵能循环、不朽血契强化普攻。
 static func on_hit(manager: BattleManager, source: Unit, target: Unit, kind: String, game) -> void:
@@ -470,7 +568,7 @@ static func _apply_manaflow(manager: BattleManager, source: Unit, game) -> void:
 			game.add_log("灵能循环满溢：%s 回复 %d 点生命" % [source.get_display_name(), healed])
 	st["manaflow_counts"] = counts
 
-# 我方单位受到普攻/技能伤害后：守护之盾，单次损失>=10%最大生命 -> 8%最大生命护盾，每回合至多一次。
+# 我方单位受到较大伤害后：守护之盾每个受击单位至少间隔 2 秒触发一次。
 static func on_taken_damage(manager: BattleManager, unit: Unit, attacker: Unit, damage: int, game) -> void:
 	if unit == null or not unit.alive or unit.camp != TurnManager.PLAYER_CAMP:
 		return
@@ -479,14 +577,13 @@ static func on_taken_damage(manager: BattleManager, unit: Unit, attacker: Unit, 
 	if damage < roundi(float(unit.max_hp) * 0.10):
 		return
 	var st: Dictionary = manager.relic_state
-	var used: Dictionary = st.get("guardian_turn", {})
+	var ready_at: Dictionary = st.get("guardian_ready_at", {})
 	var uid := unit.get_instance_id()
-	var turns: Dictionary = st.get("unit_turns", {})
-	var own_turn := int(turns.get(uid, 0))
-	if int(used.get(uid, -1)) >= own_turn:
+	var now := manager.get_battle_time()
+	if now < float(ready_at.get(uid, -1.0)):
 		return
-	used[uid] = own_turn
-	st["guardian_turn"] = used
+	ready_at[uid] = now + 2.0
+	st["guardian_ready_at"] = ready_at
 	_apply_shield_to(unit, roundi(float(unit.max_hp) * 0.08), game)
 
 # 给单位施加无固定时长的护盾（守护精灵/守护之盾共用）；统一走 unit.gain_shield 以便愈心祭司放大与记录护盾信用。

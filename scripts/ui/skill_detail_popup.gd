@@ -9,8 +9,9 @@ var dialog: PanelContainer
 var title_label: Label
 var subtitle_label: Label
 var metadata_grid: GridContainer
-var description_label: Label
+var description_label: MechanicDescription
 var condition_label: Label
+var growth_label: Label
 
 # 首次加入场景时构建遮罩和弹窗，后续仅更新技能数据。
 func _ready() -> void:
@@ -99,8 +100,8 @@ func _build_popup() -> void:
 	body.add_child(metadata_grid)
 	var divider := HSeparator.new()
 	body.add_child(divider)
-	description_label = Label.new()
-	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	description_label = MechanicDescription.new()
+	description_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	description_label.add_theme_font_size_override("font_size", 19)
 	description_label.add_theme_color_override("font_color", Color("#f0e8e7"))
 	body.add_child(description_label)
@@ -109,42 +110,59 @@ func _build_popup() -> void:
 	condition_label.add_theme_font_size_override("font_size", 17)
 	condition_label.add_theme_color_override("font_color", Color("#c5c2d7"))
 	body.add_child(condition_label)
+	growth_label = Label.new()
+	growth_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	growth_label.add_theme_font_size_override("font_size", 18)
+	growth_label.add_theme_color_override("font_color", Color("#a9e6c4"))
+	body.add_child(growth_label)
 
 # 依据真实技能数据更新弹窗，不在界面中写死技能数值。
-func show_skill(skill_id: String) -> void:
+func show_skill(skill_id: String, p_unit: Unit = null) -> void:
 	if dialog == null:
 		_build_popup()
 	var data: Dictionary = GameDatabase.get_skill(skill_id)
 	var skill_name := str(data.get("name", skill_id))
 	title_label.text = skill_name
-	subtitle_label.text = "技能详情  ·  %s" % ("通用技能" if bool(data.get("common", false)) else "固有技能")
+	var trigger := str(data.get("trigger", ""))
+	subtitle_label.text = "技能详情  ·  %s  ·  %s" % ["通用技能" if bool(data.get("common", false)) else "固有技能", SKILL_DETAIL_FORMATTER.mode_text(trigger)]
 	for child in metadata_grid.get_children():
 		metadata_grid.remove_child(child)
 		child.queue_free()
 	var condition: Dictionary = data.get("condition", {})
 	var target_type := str(condition.get("target_type", condition.get("target", "target")))
-	var trigger := str(data.get("trigger", ""))
 	var trigger_text := str(SKILL_DETAIL_FORMATTER.TRIGGER_LABELS.get(trigger, trigger if not trigger.is_empty() else "未配置"))
 	var cooldown := int(data.get("cooldown", 0))
 	_add_metadata("触发时机", trigger_text)
 	_add_metadata("作用目标", SKILL_DETAIL_FORMATTER._target_text(target_type))
 	if trigger == "on_timer":
-		_add_metadata("触发间隔", "每 %.1f 秒 · 受技能急速影响" % float(data.get("interval_seconds", 0.0)))
+		_add_metadata("施放间隔", "每 %.1f 秒 · 受技能急速影响" % float(data.get("interval_seconds", 0.0)))
 	else:
-		_add_metadata("触发间隔", "无冷却" if cooldown <= 0 else "%d 次行动" % cooldown)
+		if float(data.get("cooldown_seconds", 0.0)) > 0.0:
+			_add_metadata("触发间隔", "冷却 %.1f 秒" % float(data["cooldown_seconds"]))
+		else:
+			_add_metadata("触发间隔", "无冷却" if cooldown <= 0 else "等待 %d 次普攻" % cooldown)
 	_add_metadata("技能标签", "、".join(data.get("tags", [])) if not data.get("tags", []).is_empty() else "无")
 	var damage_kinds := _collect_damage_kinds(data)
 	if not damage_kinds.is_empty():
 		_add_metadata("伤害类型", "、".join(damage_kinds))
-	description_label.text = str(data.get("desc", "暂无技能说明"))
+	description_label.set_skill_description(data)
 	var extra_condition := SKILL_DETAIL_FORMATTER.extra_condition_text(condition)
 	condition_label.visible = not extra_condition.is_empty()
 	condition_label.text = "触发条件：%s" % extra_condition if not extra_condition.is_empty() else ""
+	var source_mods: Dictionary = p_unit.permanent_mod_sources.get(skill_id, {}) if p_unit != null else {}
+	growth_label.visible = not source_mods.is_empty()
+	if not source_mods.is_empty():
+		var lines: Array[String] = []
+		for stat in source_mods:
+			var stat_name := str({"hp": "生命上限", "attack": "攻击", "defense": "护甲",
+				"attack_speed": "攻速加成", "crit_rate": "暴击率", "crit_damage": "暴击伤害"}.get(stat, stat))
+			lines.append("%s +%.2f" % [stat_name, float(source_mods[stat])])
+		growth_label.text = "本技能累计永久获得：\n%s" % "\n".join(lines)
 	show()
 	move_to_front()
 	_layout_popup()
 
-# 汇总代码技能声明及数据效果的伤害类型；无直接伤害的技能返回空数组。
+# 汇总代码技能声明及数据效果的伤害类型，包含中毒和灼烧的持续特效伤害。
 func _collect_damage_kinds(data: Dictionary) -> Array:
 	var kinds: Array = []
 	for kind in data.get("damage_kinds", []):
@@ -154,9 +172,9 @@ func _collect_damage_kinds(data: Dictionary) -> Array:
 	for effect in data.get("effects", []):
 		if not (effect is Dictionary):
 			continue
-		if not str(effect.get("type", "")) in ["damage", "percentage_damage", "chain_damage", "reflect"]:
+		if not str(effect.get("type", "")) in ["damage", "percentage_damage", "chain_damage", "reflect", "poison", "burn"]:
 			continue
-		var label := SKILL_DETAIL_FORMATTER._damage_kind_text(effect)
+		var label := "特效伤害" if str(effect.get("type", "")) in ["poison", "burn"] else SKILL_DETAIL_FORMATTER._damage_kind_text(effect)
 		if kinds.has(label):
 			continue
 		kinds.append(label)

@@ -1,0 +1,8 @@
+{
+  "custom_relic": {
+    "name": "测试徽记",
+    "desc": "全队攻击力 +10%",
+    "effects": [{ "type": "stat_percent", "stat": "attack", "percent": 0.10 }],
+    "triggers": []
+  }
+}

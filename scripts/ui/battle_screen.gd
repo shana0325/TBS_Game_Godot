@@ -10,14 +10,14 @@ var manager: BattleManager
 var unit_views: Dictionary = {}
 var _tween_running: int = 0
 
-@onready var turn_label: Label = $TurnLabel
-@onready var frenzy_label: Label = $FrenzyLabel
-@onready var floor_label: Label = $FloorLabel
-@onready var team_status_label: Label = $TeamStatusLabel
-@onready var enemy_status_label: Label = $EnemyStatusLabel
-@onready var grid_view: Node2D = $BattleView/GridView
-@onready var units_layer: Node2D = $BattleView/UnitsLayer
-@onready var victory_label: Label = $VictoryLabel
+@onready var stage: BattlefieldStage = $Stage
+@onready var turn_label: Label = $Stage/TurnLabel
+@onready var frenzy_label: Label = $Stage/SubLabel
+@onready var floor_label: Label = $Stage/FloorLabel
+@onready var team_status_label: Label = $Stage/TeamLabel
+@onready var enemy_status_label: Label = $Stage/EnemyLabel
+@onready var grid_view: Node2D = $Stage/BattleView/GridView
+@onready var units_layer: Node2D = $Stage/BattleView/UnitsLayer
 
 var info_panel: UnitDetailPanel
 var settings_panel: PanelContainer
@@ -45,10 +45,10 @@ func _ready() -> void:
 	manager.setup_battle()
 	battle_speed = clampi(GameSession.battle_speed, 1, SPEED_OPTIONS.size())
 	Engine.time_scale = float(SPEED_OPTIONS[battle_speed - 1])
-	# 与部署场景使用同一块战场安全区，切入战斗时保持格子大小和位置不变。
-	tile_size = BattleLayout.compute_tile_size(manager.grid.width, manager.grid.height, _battle_board_available_size(get_viewport_rect().size), 0.86)
-	_position_battle_view()
-	grid_view.setup(manager.grid, tile_size)
+	# 部署与战斗复用同一个战场节点，只替换棋子与阶段操作。
+	stage.clear_contents()
+	stage.configure(manager.grid)
+	tile_size = stage.tile_size
 	for unit in manager.units:
 		_create_unit_view(unit)
 	_flush_skill_damage_queue()
@@ -61,15 +61,14 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and manager != null:
-		tile_size = BattleLayout.compute_tile_size(manager.grid.width, manager.grid.height, _battle_board_available_size(get_viewport_rect().size), 0.86)
-		grid_view.tile_size = tile_size
+		stage.resize_board()
+		tile_size = stage.tile_size
 		for unit_view in units_layer.get_children():
 			if unit_view is UnitView:
 				unit_view.tile_size = tile_size
 				unit_view.refresh()
 		for card in battle_unit_cards:
-			card.set_tile_size(tile_size)
-		_position_battle_view()
+			card.set_tile_size(mini(tile_size, 74))
 		_layout_overlay_controls()
 
 # 统一放置战斗中的浮层控件，避免窗口尺寸变化后遮挡战场或跑出屏幕。
@@ -80,60 +79,54 @@ func _layout_overlay_controls() -> void:
 		settings_panel.position = Vector2(maxf(20.0, vp.x - 320.0), 52.0)
 	var settings_button := get_node_or_null("SettingsButton") as Button
 	if settings_button != null:
-		settings_button.position = Vector2(maxf(20.0, vp.x - 108.0), 12.0)
-	_layout_roster_panel(vp)
+		settings_button.position = Vector2(maxf(20.0, vp.x - 108.0), 27.0)
 	if info_panel != null:
 		info_panel.fit_to_viewport()
 	if reward_toggle_button != null:
 		reward_toggle_button.position = Vector2((vp.x - reward_toggle_button.size.x) / 2.0, 12.0)
 
 func _build_battle_roster() -> void:
-	# 战斗中保留底部单位栏作为阵容确认区，但卡片只读、不可拖动。
-	roster_panel = PanelContainer.new()
-	roster_panel.name = "BattleRosterPanel"
-	roster_panel.custom_minimum_size = Vector2(0, 176)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	roster_scroll = ScrollContainer.new()
-	roster_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	roster_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	roster_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	roster_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	roster_container = HBoxContainer.new()
-	roster_container.add_theme_constant_override("separation", 10)
-	roster_scroll.add_child(roster_container)
-	margin.add_child(roster_scroll)
-	roster_panel.add_child(margin)
-	add_child(roster_panel)
+	# 战斗阶段只显示未上场角色，已在棋盘上的单位不占备战卡位。
+	roster_panel = stage.roster_panel
+	roster_scroll = stage.roster_scroll
+	roster_container = stage.roster_container
 	var roster_source: Array = GameSession.deployment_units
 	if roster_source.is_empty():
 		roster_source = GameSession.deployed_units
-	for i in roster_source.size():
-		var entry: Dictionary = roster_source[i]
-		if _is_deployed_entry(entry):
+	if roster_source.is_empty():
+		# 直接运行战斗场景时，也让底栏展示当前上场队伍。
+		for i in manager.units.size():
+			var battle_unit := manager.units[i] as Unit
+			if battle_unit != null and battle_unit.camp == TurnManager.PLAYER_CAMP:
+				roster_source.append({"type": battle_unit.unit_type, "roster_index": -1,
+					"battle_unit_index": i})
+	var reserve_entries: Array[Dictionary] = []
+	for item in roster_source:
+		var entry: Dictionary = item
+		if int(entry.get("battle_unit_index", -1)) >= 0 or _deployed_unit_for_entry(entry) != null:
 			continue
+		reserve_entries.append(entry)
+	for i in reserve_entries.size():
+		var entry: Dictionary = reserve_entries[i]
 		var card := DeploymentUnitCard.new()
-		card.setup(i, str(entry.get("type", "Unit")), int(entry.get("roster_index", -1)), tile_size)
+		card.setup(i, str(entry.get("type", "Unit")), int(entry.get("roster_index", -1)), mini(tile_size, 74))
+		card.bench_slot = int(entry.get("bench_slot", i))
 		card.set_drag_enabled(false)
 		card.inspect_requested.connect(_on_battle_roster_inspect.bind(entry))
 		roster_container.add_child(card)
 		battle_unit_cards.append(card)
-	_layout_roster_panel(get_viewport_rect().size)
-
-func _is_deployed_entry(entry: Dictionary) -> bool:
-	for deployed in GameSession.deployed_units:
-		if typeof(deployed) != TYPE_DICTIONARY:
-			continue
-		if int(deployed.get("roster_index", -1)) == int(entry.get("roster_index", -1)) \
-				and str(deployed.get("type", "")) == str(entry.get("type", "")):
-			return true
-	return false
+	stage.arrange_bench_cards(battle_unit_cards)
 
 func _on_battle_roster_inspect(_selectable_index: int, entry: Dictionary) -> void:
-	# 未上场单位没有战斗实例，用同一份编成数据生成只读信息卡。
+	var battle_index := int(entry.get("battle_unit_index", -1))
+	if battle_index >= 0 and battle_index < manager.units.size():
+		_show_unit_info(manager.units[battle_index] as Unit)
+		return
+	var deployed_unit := _deployed_unit_for_entry(entry)
+	if deployed_unit != null:
+		_show_unit_info(deployed_unit)
+		return
+	# 未上场单位用编成数据生成只读信息卡。
 	var unit_type := str(entry.get("type", "Unit"))
 	var config: Dictionary = GameDatabase.get_unit(unit_type)
 	if config.is_empty():
@@ -146,19 +139,17 @@ func _on_battle_roster_inspect(_selectable_index: int, entry: Dictionary) -> voi
 	var unit := Unit.create_from_config(unit_type, TurnManager.PLAYER_CAMP, Vector2i.ZERO, config, roster_data, GameDatabase)
 	_show_unit_info(unit)
 
-func _roster_panel_y(vp: Vector2) -> float:
-	return maxf(250.0, vp.y - _roster_panel_height() - 36.0)
+# 将底部编成项映射到开局部署的实时单位，避免资料页显示静态属性。
+func _deployed_unit_for_entry(entry: Dictionary) -> Unit:
+	for i in GameSession.deployed_units.size():
+		var deployed: Dictionary = GameSession.deployed_units[i]
+		if int(deployed.get("roster_index", -1)) == int(entry.get("roster_index", -1)) \
+				and str(deployed.get("type", "")) == str(entry.get("type", "")) \
+				and i < manager.units.size():
+			return manager.units[i] as Unit
+	return null
 
-func _roster_panel_height() -> float:
-	return DeploymentUnitCard.tray_height_for_tile(tile_size)
-
-func _layout_roster_panel(vp: Vector2) -> void:
-	if roster_panel == null:
-		return
-	roster_panel.position = Vector2(24.0, _roster_panel_y(vp))
-	roster_panel.size = Vector2(maxf(320.0, vp.x - 48.0), _roster_panel_height())
-
-# 暂停与倍速按钮（右侧操作区，位置与部署界面操作按钮一致）。
+# 暂停与倍速作为棋盘右侧的紧凑战斗控件。
 func _build_speed_controls() -> void:
 	var vp := get_viewport_rect().size
 	var action_x := maxf(20.0, vp.x - 244.0)
@@ -167,12 +158,14 @@ func _build_speed_controls() -> void:
 	pause_btn.custom_minimum_size = Vector2(110, 40)
 	pause_btn.position = Vector2(action_x, vp.y - 64.0)
 	pause_btn.pressed.connect(_on_pause_pressed)
+	_style_battle_button(pause_btn)
 	add_child(pause_btn)
 	speed_btn = Button.new()
 	speed_btn.text = "倍速 x%d" % battle_speed
 	speed_btn.custom_minimum_size = Vector2(110, 40)
 	speed_btn.position = Vector2(action_x, vp.y - 116.0)
 	speed_btn.pressed.connect(_on_speed_pressed)
+	_style_battle_button(speed_btn)
 	add_child(speed_btn)
 	# 操作区按“从下往上”维护，后续新增按钮追加到数组即可。
 	action_buttons = [speed_btn, pause_btn]
@@ -181,16 +174,21 @@ func _build_speed_controls() -> void:
 func _layout_action_buttons(vp: Vector2) -> void:
 	if manager == null:
 		return
-	var board_right := 24.0 + manager.grid.width * tile_size
-	var board_bottom := 104.0 + manager.grid.height * tile_size
-	var action_x := minf(board_right + 24.0, vp.x - 244.0)
-	var button_y := board_bottom - 40.0
+	var board_origin := stage.battle_view.position
+	var board_right := board_origin.x + manager.grid.width * tile_size
+	var board_bottom := board_origin.y + manager.grid.height * tile_size
+	var action_x := minf(board_right + 22.0, vp.x - 132.0)
+	var button_y := board_bottom - 44.0
 	for button in action_buttons:
 		if button == null:
 			continue
 		button.position = Vector2(maxf(20.0, action_x), button_y)
-		button.size = Vector2(110.0, 40.0)
-		button_y -= 52.0
+		button.size = Vector2(104.0, 42.0)
+		button_y -= 50.0
+
+# 为战斗操作提供统一的深色实体按钮和轻金色悬停反馈。
+func _style_battle_button(button: Button) -> void:
+	BattlefieldStage.style_action_button(button)
 
 func _on_pause_pressed() -> void:
 	var paused := not get_tree().paused
@@ -219,8 +217,9 @@ func _build_settings_ui() -> void:
 	btn.name = "SettingsButton"
 	btn.text = "设置"
 	btn.custom_minimum_size = Vector2(88, 32)
-	btn.position = Vector2(maxf(20.0, vp.x - 108.0), 12.0)
+	btn.position = Vector2(maxf(20.0, vp.x - 108.0), 27.0)
 	btn.pressed.connect(_toggle_settings_panel)
+	_style_battle_button(btn)
 	add_child(btn)
 
 	settings_panel = PanelContainer.new()
@@ -281,19 +280,13 @@ func get_database() -> Node:
 	return GameDatabase
 
 # --- 界面搭建 ---
-func _position_battle_view() -> void:
-	var view: Node2D = $BattleView
-	view.position = Vector2(24.0, 104.0)
-
-func _battle_board_available_size(vp: Vector2) -> Vector2:
-	return Vector2(maxf(320.0, vp.x - 48.0), maxf(260.0, vp.y - 300.0))
-
 func _create_unit_view(unit: Unit) -> void:
 	var uv := UnitView.new()
 	uv.setup(unit, tile_size)
 	# 战场区域只保留小人、阵营框和血条，单位详情通过点击查看。
 	uv.show_name = false
 	uv.show_hp_text = false
+	uv.battle_style = true
 	units_layer.add_child(uv)
 	unit_views[unit] = uv
 
@@ -317,7 +310,7 @@ func _hide_unit_info() -> void:
 
 # --- 输入：点击单位查看信息 ---
 func _unhandled_input(event: InputEvent) -> void:
-	if manager == null:
+	if manager == null or (stage != null and stage.blocks_board_input()):
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if info_panel != null and info_panel.visible and info_panel.get_global_rect().has_point(event.position):
@@ -347,7 +340,7 @@ func _unit_at_screen_position(screen_pos: Vector2) -> Unit:
 	return manager.get_unit_at(_screen_to_cell(screen_pos))
 
 func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
-	var local := ($BattleView as Node2D).to_local(screen_pos)
+	var local := stage.battle_view.to_local(screen_pos)
 	return Vector2i(floori(local.x / tile_size), floori(local.y / tile_size))
 
 func _cell_to_local(cell: Vector2i) -> Vector2:
@@ -525,6 +518,7 @@ func _collect_battle_stats() -> Array:
 		})
 	return stats
 
+# 战斗结束后立即进入结算或展开遗物奖励，不再插入通关横幅和等待。
 func _check_battle_end() -> void:
 	if manager.winner == "":
 		return
@@ -537,10 +531,6 @@ func _check_battle_end() -> void:
 	if GameSession.mode == GameSession.MODE_TOWER and not is_tower_win:
 		# 塔模式失败：结束本局
 		GameSession.end_tower_run()
-	victory_label.visible = true
-	victory_label.text = ("%s 通关！" % GameSession.get_floor_label()) if is_tower_win \
-		else ("胜利！" if manager.winner == TurnManager.PLAYER_CAMP else "失败…")
-	await get_tree().create_timer(1.5).timeout
 	if is_tower_win:
 		_show_reward_overlay()
 	else:
@@ -583,13 +573,17 @@ func _on_reward_toggle_pressed() -> void:
 func _update_turn_label() -> void:
 	if manager == null or manager.turn_manager == null:
 		return
-	var text: String = manager.turn_manager.get_turn_label()
-	turn_label.text = text
+	var seconds := floori(manager.turn_manager.battle_time)
+	turn_label.text = "交战  %02d:%02d" % [seconds / 60, seconds % 60]
 	var frenzy_percent := manager.get_final_damage_bonus_percent()
 	frenzy_label.visible = frenzy_percent > 0.0
+	if stage.relic_scroll != null:
+		stage.relic_scroll.visible = true
+		stage.relic_button.visible = true
 	if frenzy_percent > 0.0:
-		frenzy_label.text = "双方受到最终伤害增加%d%%" % int(frenzy_percent)
-	floor_label.text = GameSession.get_floor_label() if GameSession.mode == GameSession.MODE_TOWER else GameSession.current_scenario
+		frenzy_label.position.x = stage.relic_scroll.position.x + stage.relic_scroll.size.x + 16.0
+		frenzy_label.text = "狂暴 · 双方伤害 +%d%%" % int(frenzy_percent)
+	floor_label.text = GameSession.get_floor_label() if GameSession.mode == GameSession.MODE_TOWER else manager.scenario_name
 	team_status_label.text = "我方 %d/%d" % [_count_alive(TurnManager.PLAYER_CAMP), _count_camp(TurnManager.PLAYER_CAMP)]
 	enemy_status_label.text = "敌方 %d/%d" % [_count_alive(TurnManager.ENEMY_CAMP), _count_camp(TurnManager.ENEMY_CAMP)]
 

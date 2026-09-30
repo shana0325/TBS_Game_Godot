@@ -23,9 +23,13 @@ var moved: bool = false
 var alive: bool = true
 var is_summoned: bool = false
 var battle_ref: WeakRef = null
-var turn_interval: float = 1.0
-var turn_timer: float = 0.0
+var attack_interval: float = 2.0
+var attack_timer: float = 0.0
+var move_interval: float = 1.0
+var move_timer: float = 0.0
+var attack_count: int = 0
 var permanent_mods: Dictionary = {}
+var permanent_mod_sources: Dictionary = {}
 var battle_stat_mods: Dictionary = {}
 var percent_mods: Dictionary = {}
 var stat_multiplier: float = 1.0
@@ -55,8 +59,10 @@ static func create_from_config(
 	unit.config = config_data
 	unit.level = int(roster_data.get("level", 1))
 	unit.star = clampi(int(roster_data.get("star", 1)), 1, MAX_STARS)
-	unit.turn_interval = float(config_data.get("turn_interval", 1.0))
-	unit.permanent_mods = roster_data.get("permanent_mods", {})
+	unit.attack_interval = float(config_data.get("attack_interval", config_data.get("turn_interval", 2.0)))
+	unit.move_interval = float(config_data.get("move_interval", 1.0))
+	unit.permanent_mods = roster_data.get("permanent_mods", {}).duplicate(true)
+	unit.permanent_mod_sources = roster_data.get("permanent_mod_sources", {}).duplicate(true)
 	# 敌方属性倍率（爬塔敌人按层成长用，玩家为 1.0）
 	unit.stat_multiplier = float(roster_data.get("stat_multiplier", 1.0))
 	unit.learned_skill_names = roster_data.get("learned_skills", [])
@@ -76,12 +82,14 @@ func get_base_stat(stat: String) -> int:
 		base_value = roundi(float(base_value) * stat_multiplier)
 	return base_value
 
+# 汇总基础、永久、状态、光环和本场战斗的属性变化。
 func get_stat(stat: String) -> float:
 	var value := float(get_base_stat(stat))
 	value += float(permanent_mods.get(stat, 0.0))
 	for buff in buffs:
 		if buff.aura_range <= 0:
 			value += buff.get_stat_modifier_for_unit(self, stat)
+			value += float(get_base_stat(stat)) * buff.get_percent_modifier_for_unit(self, stat)
 	var battle = battle_ref.get_ref() if battle_ref != null else null
 	if battle != null:
 		value += battle.get_aura_stat_bonus(self, stat)
@@ -100,9 +108,16 @@ func get_defense() -> float:
 func get_move_points() -> int:
 	return maxi(0, roundi(get_stat("move")) - get_frost_stacks())
 
-# 霜冻每层使行动间隔增加 10%，不改写单位模板的基础间隔。
-func get_effective_turn_interval() -> float:
-	return turn_interval * (1.0 + 0.1 * float(get_frost_stacks()))
+# 攻速以百分比加成表示；-100% 时停止普攻，不对正攻速设置间隔下限。
+func get_attack_speed_bonus() -> float:
+	return get_stat("attack_speed")
+
+# 实际普攻间隔随攻速缩短，霜冻每层使其延长 10%。
+func get_effective_attack_interval() -> float:
+	var speed_factor := 1.0 + get_attack_speed_bonus() / 100.0
+	if speed_factor <= 0.0:
+		return INF
+	return attack_interval / speed_factor * (1.0 + 0.1 * float(get_frost_stacks()))
 
 func get_crit_rate() -> float:
 	return get_stat("crit_rate")
@@ -310,12 +325,12 @@ func gain_shield(amount: int, shield_name: String = "护盾", duration: int = -1
 	runtime.bump("shield_credit", gained)
 	return gained
 
-# 推进回合开始状态，并把战斗上下文传给持续伤害结算。
+# 普攻周期开始时推进状态，并把战斗上下文传给持续伤害结算。
 func tick_turn_start(game = null, battle = null) -> void:
 	for buff in buffs.duplicate():
 		buff.on_turn_start(self, game, battle)
 
-# 推进回合结束状态，并把战斗上下文传给持续伤害结算。
+# 普攻周期结束时推进按次数计算的状态。
 func tick_turn_end(game = null, battle = null) -> void:
 	for buff in buffs.duplicate():
 		buff.on_turn_end(self, game, battle)

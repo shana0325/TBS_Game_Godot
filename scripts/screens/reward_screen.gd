@@ -53,8 +53,13 @@ func _layout_screen() -> void:
 				summary.position = popup_pos + Vector2(28.0, 74.0)
 				summary.custom_minimum_size = Vector2(popup_size.x - 56.0, 42.0)
 			if options_scroll != null:
-				options_scroll.position = popup_pos + Vector2(28.0, 128.0)
-				options_scroll.size = Vector2(maxf(420.0, popup_size.x - 56.0), maxf(240.0, popup_size.y - 190.0))
+				var card_width := 250.0
+				var card_height := 350.0
+				var desired_width := options.size() * card_width + maxi(options.size() - 1, 0) * 16.0
+				var area_height := maxf(220.0, popup_size.y - 174.0)
+				options_scroll.size = Vector2(minf(desired_width, popup_size.x - 56.0), minf(card_height, area_height))
+				options_scroll.position = popup_pos + Vector2((popup_size.x - options_scroll.size.x) * 0.5,
+					128.0 + maxf(0.0, (area_height - options_scroll.size.y) * 0.5))
 			if stats_button != null:
 				stats_button.position = popup_pos + Vector2(popup_size.x - 180.0, 22.0)
 			if stats_panel != null:
@@ -65,8 +70,10 @@ func _layout_screen() -> void:
 	if stats_button != null:
 		stats_button.position = Vector2(maxf(20.0, vp.x - 180.0), 30.0)
 	if options_scroll != null:
-		options_scroll.position = Vector2(48.0, 190.0)
-		options_scroll.size = Vector2(maxf(480.0, vp.x - 96.0), maxf(300.0, vp.y - 280.0))
+		var desired_width := options.size() * 250.0 + maxi(options.size() - 1, 0) * 16.0
+		options_scroll.size = Vector2(minf(desired_width, vp.x - 96.0), minf(350.0, vp.y - 280.0))
+		options_scroll.position = Vector2((vp.x - options_scroll.size.x) * 0.5,
+			190.0 + maxf(0.0, (vp.y - 280.0 - options_scroll.size.y) * 0.5))
 	if stats_panel != null:
 		stats_panel.position = Vector2(maxf(20.0, vp.x - 420.0), 88.0)
 		stats_panel.size = Vector2(minf(390.0, vp.x - 40.0), maxf(300.0, vp.y - 150.0))
@@ -210,10 +217,9 @@ func _build_title() -> void:
 func _build_summary() -> void:
 	var summary := Label.new()
 	summary.name = "RunSummary"
-	var text := RewardGenerator.run_summary()
 	var skill_id := str(fixed_supplies.get("skill_id", ""))
 	var book_name := str(GameDatabase.get_skill(skill_id).get("name", skill_id)) if not skill_id.is_empty() else "无可用技能书"
-	summary.text = "已获得：技能书·%s、金币 +%d\n%s" % [book_name, int(fixed_supplies.get("gold", 0)), text if text != "" else "尚未获得遗物"]
+	summary.text = "已获得：技能书·%s、金币 +%d" % [book_name, int(fixed_supplies.get("gold", 0))]
 	summary.add_theme_font_size_override("font_size", 18)
 	summary.position = Vector2(60, 96)
 	summary.custom_minimum_size = Vector2(900, 54)
@@ -232,7 +238,7 @@ func _build_options() -> void:
 	options_scroll.add_child(options_box)
 	for i in options.size():
 		var panel := PanelContainer.new()
-		panel.custom_minimum_size = Vector2(210, 300)
+		panel.custom_minimum_size = Vector2(250, 350)
 		panel.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
 		var margin := MarginContainer.new()
 		margin.add_theme_constant_override("margin_left", 12)
@@ -240,13 +246,22 @@ func _build_options() -> void:
 		margin.add_theme_constant_override("margin_top", 10)
 		margin.add_theme_constant_override("margin_bottom", 10)
 		var box := VBoxContainer.new()
-		box.add_theme_constant_override("separation", 10)
+		box.add_theme_constant_override("separation", 8)
 		var name_label := Label.new()
 		name_label.text = str(options[i].get("label", "?"))
 		name_label.add_theme_font_size_override("font_size", 22)
 		name_label.add_theme_color_override("font_color", Color("#f3d79f"))
 		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(name_label)
+		var relic_id := str(options[i].get("id", ""))
+		if str(options[i].get("type", "")) == "relic":
+			var icon := TextureRect.new()
+			icon.custom_minimum_size = Vector2(76, 76)
+			icon.texture = ArtManager.get_relic_icon(relic_id)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			box.add_child(icon)
 		var type_label := Label.new()
 		type_label.text = _type_text(str(options[i].get("type", "")))
 		type_label.add_theme_font_size_override("font_size", 14)
@@ -275,7 +290,7 @@ func _type_text(t: String) -> String:
 		"skill_book":
 			return "◆ 技能书"
 		"relic":
-			return "★ 遗物"
+			return "遗物"
 	return t
 
 func _build_quit_button() -> void:

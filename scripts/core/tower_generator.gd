@@ -3,7 +3,7 @@
 class_name TowerGenerator
 extends RefCounted
 
-const FALLBACK_SKILL_POOL := ["Power Strike", "Cleave", "Execute", "Lifesteal", "Iron Wall", "Thorns", "Fear"]
+const FALLBACK_SKILL_POOL := ["Cleave", "Execute", "Lifesteal", "Iron Wall", "Thorns", "Fear"]
 const ENEMY_SPOTS := [Vector2i(10, 1), Vector2i(10, 4), Vector2i(9, 2), Vector2i(9, 3),
 	Vector2i(11, 2), Vector2i(11, 3)]
 const PLAYER_SPOTS := [Vector2i(1, 2), Vector2i(2, 3), Vector2i(3, 2), Vector2i(3, 4)]

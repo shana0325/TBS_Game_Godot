@@ -13,7 +13,8 @@
     "crit_damage": 150,
     "range_min": 1,
     "range_max": 1,
-    "turn_interval": 1.0,
+    "attack_interval": 2.0,
+    "move_interval": 1.0,
     "innate_skill": "Warrior Resolve"
   },
   "Tank": {
@@ -29,7 +30,8 @@
     "crit_damage": 150,
     "range_min": 1,
     "range_max": 1,
-    "turn_interval": 1.0,
+    "attack_interval": 2.0,
+    "move_interval": 1.0,
     "innate_skill": "Tank Shelter"
   },
   "Archer": {
@@ -45,7 +47,8 @@
     "crit_damage": 150,
     "range_min": 1,
     "range_max": 2,
-    "turn_interval": 1.0,
+    "attack_interval": 2.0,
+    "move_interval": 1.0,
     "innate_skill": "Archer Distance"
   },
   "Assassin": {
@@ -61,7 +64,8 @@
     "crit_damage": 150,
     "range_min": 1,
     "range_max": 1,
-    "turn_interval": 1.0,
+    "attack_interval": 2.0,
+    "move_interval": 1.0,
     "innate_skill": "Assassin Pursuit"
   }
 }

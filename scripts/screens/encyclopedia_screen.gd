@@ -145,14 +145,36 @@ func _add_entry(category_id: String, entry_id: String, data: Dictionary) -> void
 	var description := str(data.get("desc", "暂无说明")).replace("\n", " ")
 	if description.length() > 110:
 		description = description.substr(0, 110) + "…"
-	entry.text = "%s\n%s" % [entry_name, description]
+	if category_id == "skills":
+		entry.text = ""
+		var margin := MarginContainer.new()
+		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		margin.add_theme_constant_override("margin_left", 12)
+		margin.add_theme_constant_override("margin_right", 12)
+		margin.add_theme_constant_override("margin_top", 8)
+		margin.add_theme_constant_override("margin_bottom", 8)
+		margin.mouse_filter = Control.MOUSE_FILTER_PASS
+		entry.add_child(margin)
+		var box := VBoxContainer.new()
+		box.mouse_filter = Control.MOUSE_FILTER_PASS
+		margin.add_child(box)
+		var name_label := Label.new()
+		name_label.text = entry_name
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(name_label)
+		var mechanic_text := MechanicDescription.new()
+		mechanic_text.set_skill_description(data)
+		mechanic_text.add_theme_font_size_override("font_size", 15)
+		box.add_child(mechanic_text)
+	else:
+		entry.text = "%s\n%s" % [entry_name, description]
 	if category_id == "relics":
 		entry.icon = ArtManager.get_relic_icon(entry_id)
 		entry.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		entry.add_theme_constant_override("icon_max_width", 64)
 	entry.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	entry.custom_minimum_size.y = 78 if category_id == "skills" else 90
+	entry.custom_minimum_size.y = 104 if category_id == "skills" else 90
 	MenuStyle.apply_primary(entry)
 	entry.pressed.connect(_open_entry.bind(category_id, entry_id))
 	entry_list.add_child(entry)

@@ -16,8 +16,7 @@ static func apply(target: Unit, buff_id: String, game = null, source: Unit = nul
 		EffectSystem.apply_effects(source, target, [{"type": buff_id,
 			"duration_seconds": data.get("duration_seconds", 6.0),
 			"tick_interval_seconds": data.get("tick_interval_seconds", 2.0),
-			"damage": data.get("tick_damage", 5),
-			"max_stacks": data.get("max_stacks", 5)}], game, battle)
+			"damage": data.get("tick_damage", 5)}], game, battle)
 		for active in target.buffs:
 			if active.status == buff_id:
 				return active

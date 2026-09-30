@@ -64,4 +64,4 @@ func _on_battle_finished(_winner_camp: String, user: Unit) -> void:
 	var gains := {}
 	for stat in _stolen_totals:
 		gains[stat] = float(_stolen_totals[stat]) * KEEP_RATE
-	ProgressManager.add_permanent_stats(user.unit_id, gains)
+	ProgressManager.add_permanent_stats(user.unit_id, gains, "Attribute Siphon")

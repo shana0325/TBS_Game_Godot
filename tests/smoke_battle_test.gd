@@ -26,10 +26,12 @@ func run() -> bool:
 		{"type": "Warrior", "pos": Vector2i(1, 1), "name": "P1", "roster_index": -1},
 	], scenario)
 	battle.setup()
-	# 加速测试：把行动间隔压小，单位应能频繁行动
+	# 加速测试：分别缩短攻击和移动间隔，单位应能频繁行动。
 	for u in battle.units:
-		u.turn_interval = 0.3
-		u.turn_timer = 0.3
+		u.attack_interval = 0.3
+		u.attack_timer = 0.3
+		u.move_interval = 0.3
+		u.move_timer = 0.3
 
 	var total_actions := 0
 	var moved_frames := 0
@@ -101,11 +103,15 @@ func _verify_repeatable_relics_and_shields() -> bool:
 	if first != 80 or second != 20 or preview.get_total_shield() != 100 or preview.buffs.size() != 2:
 		push_error("护盾没有按最大生命封顶并独立保存：first=%d second=%d total=%d" % [first, second, preview.get_total_shield()])
 		return false
-	preview.tick_turn_end()
+	for buff in preview.buffs.duplicate():
+		buff.tick_seconds(preview, 1.0)
+	preview.remove_expired_buffs()
 	if preview.buffs.size() != 2:
 		push_error("限时护盾过早消失")
 		return false
-	preview.tick_turn_end()
+	for buff in preview.buffs.duplicate():
+		buff.tick_seconds(preview, 1.0)
+	preview.remove_expired_buffs()
 	if preview.buffs.size() != 1 or preview.get_total_shield() != 80:
 		push_error("限时护盾没有按自身持续时间独立消失")
 		return false

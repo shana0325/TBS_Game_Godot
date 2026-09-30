@@ -55,7 +55,7 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _build_panel() -> void:
-	custom_minimum_size = Vector2(980.0, 600.0)
+	custom_minimum_size = Vector2.ZERO
 	add_theme_stylebox_override("panel", MenuStyle.frame_panel_style())
 
 	var margin := MarginContainer.new()
@@ -93,7 +93,7 @@ func _build_panel() -> void:
 	root_box.add_child(columns)
 
 	var nav := VBoxContainer.new()
-	nav.custom_minimum_size.x = 190
+	nav.custom_minimum_size.x = 152
 	nav.add_theme_constant_override("separation", 10)
 	columns.add_child(nav)
 	for section in SECTIONS:
@@ -120,7 +120,7 @@ func _build_panel() -> void:
 	_build_skill_manage_overlay()
 
 	right_panel = PanelContainer.new()
-	right_panel.custom_minimum_size.x = 600
+	right_panel.custom_minimum_size.x = 480
 	right_panel.size_flags_horizontal = Control.SIZE_FILL
 	var right_style := MenuStyle.frame_panel_style()
 	# 右侧滚动区与立绘区从同一高度开始，章节自身负责留白。
@@ -168,15 +168,16 @@ func show_unit(p_unit: Unit) -> void:
 	content_scroll.scroll_vertical = 0
 	_set_active_section("overview")
 
-# 每次显示前让资料页占用视口大部分空间，留出安全边距。
+# 每次显示前将资料页调整到原有视口占用尺寸的约八成。
 func fit_to_viewport() -> void:
 	var vp := get_viewport_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return
-	var target := Vector2(maxf(320.0, vp.x - 48.0), maxf(400.0, vp.y - 48.0))
+	var target := Vector2(minf(vp.x - 48.0, maxf(640.0, (vp.x - 48.0) * 0.8)),
+		minf(vp.y - 48.0, maxf(480.0, (vp.y - 48.0) * 0.8)))
 	if right_panel != null:
-		right_panel.custom_minimum_size.x = minf(600.0, maxf(360.0, vp.x * 0.38))
-	custom_minimum_size = target
+		right_panel.custom_minimum_size.x = minf(480.0, maxf(320.0, target.x * 0.39))
+	custom_minimum_size = Vector2.ZERO
 	size = target
 	position = (vp - target) / 2.0
 
@@ -239,7 +240,7 @@ func _render_all_sections() -> void:
 	_render_skills()
 	# 为最后一节保留滚动空间，使目录点击后也能把它对齐到顶部。
 	var trailing_space := Control.new()
-	trailing_space.custom_minimum_size.y = 740.0
+	trailing_space.custom_minimum_size.y = 590.0
 	content_box.add_child(trailing_space)
 	_set_active_section("overview")
 
@@ -310,10 +311,6 @@ func _render_stats() -> void:
 		grid.add_child(value)
 		stat_value_labels[str(item[0])] = value
 	section_box.add_child(grid)
-	if not unit.permanent_mods.is_empty():
-		_add_section_title("永久强化")
-		for stat in unit.permanent_mods:
-			_add_body_label("%s  +%.2f" % [_stat_text(str(stat)), float(unit.permanent_mods[stat])])
 
 # 汇总当前单位的动态属性，供首次渲染与战斗中刷新共用。
 func _stat_rows() -> Array:
@@ -327,9 +324,9 @@ func _stat_rows() -> Array:
 		["攻击", "%.2f" % unit.get_attack()],
 		["护甲", "%.2f（%.1f%%减伤）" % [unit.get_defense(), armor_percent]],
 		["射程", "%d - %d" % [unit.get_range_min(), unit.get_range_max()]],
-		["移动", "%d 格" % unit.get_move_points()],
-		["行动间隔", "%.1f 秒" % unit.turn_interval],
-		["暴击", "%.2f%% / %.2f%%" % [unit.get_crit_rate(), unit.get_crit_damage()]],
+		["移动力", "%d" % unit.get_move_points()],
+		["攻速", UnitInfoText.attack_speed_text(unit)],
+		["暴击/暴击伤害", "%.2f%% / %.2f%%" % [unit.get_crit_rate(), unit.get_crit_damage()]],
 		["通用技能槽", "%d / %d" % [unit.equipped_skill_names.size(), Unit.get_skill_slot_limit(unit.star)]]
 	]
 
@@ -343,39 +340,76 @@ func _refresh_stat_values() -> void:
 func _render_skills() -> void:
 	if unit.skills.is_empty():
 		_add_body_label("暂无技能")
+		_render_unattributed_growth()
 		return
 	for skill in unit.skills:
 		var skill_id := str(skill.skill_id) if not str(skill.skill_id).is_empty() else str(skill.name)
-		var row := Button.new()
-		row.add_theme_stylebox_override("normal", MenuStyle.section_panel_style())
-		row.add_theme_stylebox_override("hover", MenuStyle.header_style())
-		row.custom_minimum_size = Vector2(0, 76)
+		var row := PanelContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.custom_minimum_size.y = 112.0
+		row.add_theme_stylebox_override("panel", MenuStyle.section_panel_style())
 		row.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		row.pressed.connect(_show_skill_details.bind(skill_id))
-		var row_box := HBoxContainer.new()
-		row_box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		row_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(row_box)
+		row.mouse_filter = Control.MOUSE_FILTER_STOP
+		row.gui_input.connect(_on_skill_row_input.bind(skill_id))
+		row.mouse_entered.connect(_set_skill_row_hover.bind(row, true))
+		row.mouse_exited.connect(_set_skill_row_hover.bind(row, false))
+		var margin := MarginContainer.new()
+		margin.mouse_filter = Control.MOUSE_FILTER_PASS
+		margin.add_theme_constant_override("margin_left", 14)
+		margin.add_theme_constant_override("margin_right", 14)
+		margin.add_theme_constant_override("margin_top", 12)
+		margin.add_theme_constant_override("margin_bottom", 12)
+		row.add_child(margin)
 		var text_box := VBoxContainer.new()
 		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		text_box.add_theme_constant_override("separation", 6)
+		text_box.mouse_filter = Control.MOUSE_FILTER_PASS
+		margin.add_child(text_box)
 		var title := Label.new()
 		var skill_type := "通用" if skill.common else "固有"
-		var skill_tags := "、".join(skill.tags) if not skill.tags.is_empty() else "无"
-		title.text = "%s  ·  %s  ·  标签：%s" % [str(skill.name), skill_type, skill_tags]
+		title.text = "%s  ·  %s  ·  %s" % [str(skill.name), skill_type,
+			"主动" if skill.trigger == SkillTriggerSystem.ON_TIMER else "被动"]
 		title.add_theme_color_override("font_color", Color("#f2d08b"))
 		title.add_theme_font_size_override("font_size", 17)
 		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		text_box.add_child(title)
-		var desc := Label.new()
-		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var desc := MechanicDescription.new()
+		desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		desc.add_theme_font_size_override("font_size", 17)
 		desc.add_theme_color_override("font_color", Color("#d8d2e5"))
-		desc.text = "%s\n点击查看完整技能详情" % str(skill.desc)
-		desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		desc.set_skill_description(GameDatabase.get_skill(skill_id))
 		text_box.add_child(desc)
-		row_box.add_child(text_box)
 		section_box.add_child(row)
+	_render_unattributed_growth()
+
+# 旧存档只有永久加成总数时保留可见性，但不错误归到某个技能名下。
+func _render_unattributed_growth() -> void:
+	var attributed := {}
+	for source in unit.permanent_mod_sources.values():
+		if not (source is Dictionary):
+			continue
+		for stat in source:
+			attributed[stat] = float(attributed.get(stat, 0.0)) + float(source[stat])
+	var legacy := {}
+	for stat in unit.permanent_mods:
+		var amount := float(unit.permanent_mods[stat]) - float(attributed.get(stat, 0.0))
+		if not is_zero_approx(amount):
+			legacy[stat] = amount
+	if legacy.is_empty():
+		return
+	_add_section_title("历史强化（来源未记录）")
+	for stat in legacy:
+		_add_body_label("%s  +%.2f" % [_stat_text(str(stat)), float(legacy[stat])])
+
+# 技能摘要整卡可点击，详情弹窗继续展示完整标签与触发信息。
+func _on_skill_row_input(event: InputEvent, skill_id: String) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_show_skill_details(skill_id)
+		get_viewport().set_input_as_handled()
+
+# 鼠标悬停时只替换卡片背景，卡片高度由描述内容决定。
+func _set_skill_row_hover(row: PanelContainer, hovered: bool) -> void:
+	row.add_theme_stylebox_override("panel", MenuStyle.header_style() if hovered else MenuStyle.section_panel_style())
 
 # 在立绘区域上方构建技能学习/遗忘列表，内容可独立滚动。
 func _build_skill_manage_overlay() -> void:
@@ -456,9 +490,16 @@ func _add_skill_manage_row(skill_id: String, mode: String) -> void:
 	row.custom_minimum_size = Vector2(0, 76)
 	row.pressed.connect(_apply_skill_manage.bind(skill_id, mode))
 	var line := HBoxContainer.new()
-	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(line)
+	var padding := MarginContainer.new()
+	padding.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	padding.add_theme_constant_override("margin_left", 16)
+	padding.add_theme_constant_override("margin_right", 16)
+	padding.add_theme_constant_override("margin_top", 8)
+	padding.add_theme_constant_override("margin_bottom", 8)
+	padding.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(padding)
+	padding.add_child(line)
 	var text_box := VBoxContainer.new()
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -469,11 +510,11 @@ func _add_skill_manage_row(skill_id: String, mode: String) -> void:
 	title.add_theme_color_override("font_color", Color("#f2d08b"))
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(title)
-	var desc := Label.new()
-	desc.text = str(data.get("desc", "暂无说明"))
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var desc := MechanicDescription.new()
+	desc.set_skill_description(data)
 	text_box.add_child(desc)
+	# 管理列表的文字链接只展示规则，不把点击透传给“学习/遗忘”按钮。
+	desc.mouse_filter = Control.MOUSE_FILTER_STOP
 	line.add_child(text_box)
 	skill_manage_list.add_child(row)
 
@@ -513,7 +554,7 @@ func _show_skill_details(skill_id: String) -> void:
 		skill_detail_dialog = SkillDetailPopup.new()
 		skill_detail_dialog.name = "SkillDetailDialog"
 		add_child(skill_detail_dialog)
-	skill_detail_dialog.show_skill(skill_id)
+	skill_detail_dialog.show_skill(skill_id, unit)
 
 func _add_section_title(text: String) -> void:
 	var heading := PanelContainer.new()
